@@ -1,0 +1,21 @@
+{
+  "name": "@covenant/agent",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "eslint src && tsc --noEmit",
+    "test": "vitest run",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "eslint": "^10.14.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.72.1",
+    "vitest": "^5.0.5"
+  }
+}

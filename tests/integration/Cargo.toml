@@ -1,0 +1,13 @@
+[package]
+name = "covenant-integration-tests"
+description = "near-workspaces sandbox tests. Run `make wasm` first."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dev-dependencies]
+near-workspaces = { version = "0.24.0", features = ["unstable"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+anyhow = "1"
+base64 = "0.22"
+serde_json = "1"

@@ -1,0 +1,20 @@
+[package]
+name = "covenant-vault"
+description = "Policy-enforced vault for AI agents, signing across chains with NEAR Chain Signatures."
+repository = "https://github.com/Len3hq/convenant"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk.workspace = true
+hex.workspace = true
+covenant-policy.workspace = true
+covenant-adapter-bitcoin.workspace = true
+covenant-adapter-evm.workspace = true
+
+[dev-dependencies]
+near-sdk = { workspace = true, features = ["unit-testing"] }

@@ -1,0 +1,29 @@
+[workspace]
+resolver = "2"
+members = [
+    "contracts/covenant-vault",
+    "contracts/policy",
+    "contracts/adapters/bitcoin",
+    "contracts/adapters/evm",
+    "tests/integration",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace.dependencies]
+near-sdk = "5.30.0"
+hex = "0.4"
+covenant-policy = { path = "contracts/policy" }
+covenant-adapter-bitcoin = { path = "contracts/adapters/bitcoin" }
+covenant-adapter-evm = { path = "contracts/adapters/evm" }
+
+[profile.release]
+codegen-units = 1
+opt-level = "z"
+lto = true
+debug = false
+panic = "abort"
+overflow-checks = true

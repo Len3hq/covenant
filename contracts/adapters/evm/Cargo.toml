@@ -1,0 +1,12 @@
+[package]
+name = "covenant-adapter-evm"
+description = "Covenant evm transaction parser and signing-hash builder."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+covenant-policy.workspace = true
+
+[dev-dependencies]
+near-sdk = { workspace = true, features = ["unit-testing"] }

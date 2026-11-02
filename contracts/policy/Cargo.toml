@@ -1,0 +1,12 @@
+[package]
+name = "covenant-policy"
+description = "Covenant core types and the pure policy checks."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+near-sdk.workspace = true
+
+[dev-dependencies]
+near-sdk = { workspace = true, features = ["unit-testing"] }
