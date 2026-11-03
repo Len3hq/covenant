@@ -2,6 +2,7 @@
 //! See docs/SPEC.md, "EVM adapter spec".
 
 use covenant_policy::{AssetId, ChainKind, CovenantError, ParsedTx, Payment, Policy};
+use near_sdk::env;
 use near_sdk::json_types::U128;
 
 const TYPE_EIP1559: u8 = 0x02;
@@ -109,11 +110,11 @@ fn fields(tx: &[u8]) -> Result<[Item<'_>; FIELD_COUNT], CovenantError> {
     Ok(items)
 }
 
-/// Parses an unsigned type-2 transaction into its payment and maximum gas cost, enforcing spec
-/// rules 1 to 7.
+/// Parses an unsigned type-2 transaction into its payment, maximum gas cost and signing hash,
+/// enforcing spec rules 1 to 7.
 ///
-/// `signing_hashes` stays empty until the keccak256 hash lands in M2. The vault doesn't call this
-/// yet, and `propose_spend` still fails closed.
+/// Rule 1 makes `tx` the only encoding of its fields, so `0x02 ‖ rlp(fields)` is `tx` itself and
+/// the hash covers exactly the bytes that were checked.
 pub fn parse(tx: &[u8], policy: &Policy) -> Result<ParsedTx, CovenantError> {
     // Rule 1.
     let [chain_id, nonce, max_priority_fee, max_fee, gas_limit, to, value, data, access_list] =
@@ -172,7 +173,7 @@ pub fn parse(tx: &[u8], policy: &Policy) -> Result<ParsedTx, CovenantError> {
     Ok(ParsedTx {
         payments: vec![payment],
         fee: gas_cost,
-        signing_hashes: Vec::new(),
+        signing_hashes: vec![env::keccak256_array(tx)],
     })
 }
 
@@ -216,12 +217,14 @@ fn token_transfer(
 mod tests {
     use super::*;
     use covenant_policy::{AssetCap, Payee};
+    use near_sdk::serde_json::{self, Value};
 
     const CHAIN: u64 = 84532;
     const USDC: [u8; 20] = [0x03; 20];
     const PAYEE: [u8; 20] = [0xaa; 20];
     const STRANGER: [u8; 20] = [0xbb; 20];
     const MAX_GAS_COST: u128 = 1_000_000_000_000_000;
+    const VECTORS: &str = include_str!("../../../../tests/vectors/evm_hash.json");
 
     fn policy() -> Policy {
         Policy {
@@ -614,6 +617,52 @@ mod tests {
                 Err(CovenantError::MalformedTx),
                 "{name}"
             );
+        }
+    }
+
+    fn hex_field(value: &Value) -> Vec<u8> {
+        hex::decode(value.as_str().unwrap()).unwrap()
+    }
+
+    /// Every vector goes through the whole of `parse`, which also proves it reads viem's encoding.
+    #[test]
+    fn evm_hash_matches_viem() {
+        let generated: Value = serde_json::from_str(VECTORS).unwrap();
+        let vectors = generated["vectors"].as_array().unwrap();
+        assert_eq!(vectors.len(), 5);
+        for vector in vectors {
+            let name = vector["name"].as_str().unwrap();
+            let chain_id = vector["chain_id"].as_u64().unwrap();
+            let payee = hex_field(&vector["payee"]);
+            let amount: u128 = vector["amount"].as_str().unwrap().parse().unwrap();
+            let asset = if vector["token"].is_null() {
+                AssetId::EvmNative { chain_id }
+            } else {
+                AssetId::Erc20 {
+                    chain_id,
+                    token: hex_field(&vector["token"]).try_into().unwrap(),
+                }
+            };
+            let mut policy = policy();
+            policy.evm_chain_ids = vec![chain_id];
+            policy.evm_max_gas_cost = U128(u128::MAX);
+            policy.payees[0].to = payee.clone();
+            policy.caps[0].asset = asset.clone();
+
+            let parsed = parse(&hex_field(&vector["serialized"]), &policy).unwrap();
+            let hash: [u8; 32] = hex_field(&vector["hash"]).try_into().unwrap();
+            assert_eq!(parsed.signing_hashes, vec![hash], "{name}");
+            assert_eq!(
+                parsed.payments,
+                vec![Payment {
+                    asset,
+                    to: payee,
+                    amount: U128(amount),
+                }],
+                "{name}"
+            );
+            let gas_cost: u128 = vector["gas_cost"].as_str().unwrap().parse().unwrap();
+            assert_eq!(parsed.fee, gas_cost, "{name}");
         }
     }
 }

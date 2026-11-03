@@ -22,9 +22,10 @@ lint: ## Lint Rust and TypeScript
 	cargo clippy --workspace --all-targets -- -D warnings
 	pnpm -r lint
 
-wasm: ## Build the vault and mock signer to target/near/
+wasm: ## Build the vault, mock signer and gas bench to target/near/
 	cargo near build non-reproducible-wasm --manifest-path $(VAULT_MANIFEST)
 	cargo near build non-reproducible-wasm --manifest-path $(MOCK_SIGNER_MANIFEST)
+	cargo near build non-reproducible-wasm --manifest-path tests/gas-bench/Cargo.toml
 
 test: wasm ## Run all Rust, sandbox and TypeScript tests
 	cargo test --workspace

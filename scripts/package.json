@@ -5,7 +5,8 @@
   "scripts": {
     "lint": "eslint src && tsc --noEmit",
     "test": "vitest run",
-    "build": "tsc --noEmit"
+    "build": "tsc --noEmit",
+    "vectors": "node src/generate-vectors.ts"
   },
   "dependencies": {
     "@noble/curves": "^2.4.0",
@@ -14,9 +15,11 @@
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
+    "bitcoinjs-lib": "^7.0.5",
     "eslint": "^10.14.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.72.1",
+    "viem": "^2.57.14",
     "vitest": "^5.0.5"
   }
 }

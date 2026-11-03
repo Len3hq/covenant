@@ -6,9 +6,9 @@ transaction itself and checking it against one policy. The agent can ask for any
 decides what gets signed.
 
 > **Status: early build.** A skeleton of the vault is on NEAR testnet, and a separate spike has
-> proved contract-initiated MPC signing ([docs/SPIKE.md](docs/SPIKE.md)). The adapters and
-> `propose_spend` refuse every transaction until they're implemented. Progress is tracked in
-> [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md).
+> proved contract-initiated MPC signing ([docs/SPIKE.md](docs/SPIKE.md)). The adapters parse
+> transactions and compute signing hashes, but the vault doesn't call them yet, so `propose_spend`
+> still refuses every transaction. Progress is tracked in [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md).
 
 ## How a spend works
 
@@ -30,6 +30,31 @@ make help    # list every target
 
 The `demo-*`, `veto`, `freeze` and `testnet-smoke` targets exit with an error naming the
 milestone that delivers them.
+
+## Gas
+
+NEAR limits a transaction to 300 Tgas. A proposal must prepay its own execution, 30 Tgas for each
+`sign` call and 20 Tgas for the callback, so the number of Bitcoin inputs is what sets the limit.
+
+| Spend | Prev tx size | Proposal receipt (Tgas) | Must prepay (Tgas) | Total burnt (Tgas) |
+| --- | --- | --- | --- | --- |
+| Bitcoin, 1 input | 219 bytes | 2.3 | 52.3 | 5.5 |
+| Bitcoin, 1 input | 9,999 bytes | 3.3 | 53.3 | 6.5 |
+| Bitcoin, 2 inputs | 219 bytes | 2.9 | 82.9 | 7.5 |
+| Bitcoin, 2 inputs | 9,999 bytes | 4.9 | 84.9 | 9.5 |
+| Bitcoin, 3 inputs | 219 bytes | 3.5 | 113.5 | 9.5 |
+| Bitcoin, 3 inputs | 9,999 bytes | 6.4 | 116.4 | 12.5 |
+| Bitcoin, 5 inputs | 219 bytes | 4.6 | 174.6 | 13.5 |
+| Bitcoin, 5 inputs | 9,999 bytes | 9.5 | 179.5 | 18.6 |
+| Bitcoin, 8 inputs | 219 bytes | 6.3 | 266.3 | 19.5 |
+| Bitcoin, 8 inputs | 9,999 bytes | 14.1 | 274.1 | 27.6 |
+| EVM, USDC transfer | n/a | 2.1 | 52.1 | 5.3 |
+
+`btc_max_inputs` is 3, the spec's target, which needs at most 116.4 Tgas and leaves room for the
+policy checks still to come. Measured on 3 Nov in the sandbox with a 181 KB bench contract running
+the real adapters against the mock signer, so "total burnt" excludes the real MPC network's work.
+The bench has no policy, ledger or queue yet. To reproduce:
+`make wasm && cargo test -p covenant-integration-tests --test gas_bench -- --nocapture`.
 
 ## Repo map
 

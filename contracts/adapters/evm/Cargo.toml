@@ -10,4 +10,5 @@ covenant-policy.workspace = true
 near-sdk.workspace = true
 
 [dev-dependencies]
+hex.workspace = true
 near-sdk = { workspace = true, features = ["unit-testing"] }

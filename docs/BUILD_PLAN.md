@@ -2,7 +2,7 @@
 
 This is the plan we follow from an empty repo to a submitted entry by **20:00 UTC on Sat 14 Nov 2026**. Work through milestones M0 to M13 in order of date, and tick boxes as you finish them. [SPEC.md](SPEC.md) holds the detail behind each task.
 
-**Where we are on 3 Nov: 18%.** M0 and M1 have passed their exit checks. M2 is due today, and all three gates keep their dates.
+**Where we are on 3 Nov: 26%.** M0, M1 and M2 have passed their exit checks. Gate 1 is due tomorrow, and all three gates keep their dates.
 
 ## How to use this plan
 
@@ -195,10 +195,12 @@ Both parsers also pass mutation spot-checks, and `btc_accepts_a_real_testnet4_fu
 
 *Goal: our hashes match the outside world, and we know what fits in 300 Tgas.*
 
-- [ ] **Lead:** BIP143 sighash per input
-- [ ] **Lead:** `btc_sighash_matches_bip143_vectors`: the official BIP143 P2WPKH example plus 4 from bitcoinjs, stored in `tests/vectors/`
-- [ ] **B:** `keccak256(0x02 ‖ rlp(fields))`, with `evm_hash_matches_viem` (5 vectors in `tests/vectors/`)
-- [ ] **Lead:** measure gas for 1, 2 and 3 inputs plus the wasm size. Set `btc_max_inputs` from the result, and record the numbers in the README
+- [x] **Lead:** BIP143 sighash per input
+- [x] **Lead:** `btc_sighash_matches_bip143_vectors`: the official BIP143 P2WPKH example plus 4 from bitcoinjs, stored in `tests/vectors/`
+- [x] **B:** `keccak256(0x02 ‖ rlp(fields))`, with `evm_hash_matches_viem` (5 vectors in `tests/vectors/`)
+- [x] **Lead:** measure gas for 1, 2 and 3 inputs plus the wasm size. Set `btc_max_inputs` from the result, and record the numbers in the README
+
+`btc_max_inputs` stays at 3: it needs at most 116.4 of the 300 Tgas limit, and 8 inputs would still fit today, but with little room for the M4 and M5 checks. Vectors come from `pnpm --filter @covenant/scripts vectors`.
 
 **Exit check:** all vectors match; gas table in the README; `btc_max_inputs` chosen from a measurement.
 
@@ -208,6 +210,7 @@ Both parsers also pass mutation spot-checks, and `btc_accepts_a_real_testnet4_fu
 
 - [ ] **Lead:** `propose_spend` to adapter to `sign` to `on_signed`, reusing the join and callback in `tests/spike`. The vault attaches 1 yoctoNEAR and 30 Tgas per call
 - [ ] **Lead:** delete `tests/spike` and the spike account once this works
+- [ ] **Lead:** delete `tests/gas-bench`, measure the vault itself, and update the README's gas table
 - [ ] **Lead:** TypeScript witness assembly in `agent/src/bitcoin/`: DER encoding, sighash byte, witness, serialization, broadcast
 - [ ] **Lead:** check each signature against the derived key before broadcast
 - [ ] **B:** EVM signing path against the mock signer
@@ -364,7 +367,7 @@ The spec's target is 40 or more named tests. Tick each one when it passes in CI.
 - [x] `btc_rejects_witness_prev_tx` (new, C2)
 - [x] `btc_rejects_too_many_inputs`
 - [x] `btc_rejects_op_return`
-- [ ] `btc_sighash_matches_bip143_vectors`
+- [x] `btc_sighash_matches_bip143_vectors`
 - [ ] `btc_fee_counts_against_daily_cap` (new, C4)
 - [ ] `btc_split_outputs_cannot_dodge_per_tx_cap` (new, C5)
 
@@ -384,7 +387,7 @@ The spec's target is 40 or more named tests. Tick each one when it passes in CI.
 - [x] `evm_rejects_unlisted_payee`
 - [x] `evm_rejects_dirty_address_padding`
 - [x] `evm_rejects_non_canonical_rlp`
-- [ ] `evm_hash_matches_viem`
+- [x] `evm_hash_matches_viem`
 
 **Property**
 

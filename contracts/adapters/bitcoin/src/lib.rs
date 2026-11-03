@@ -8,6 +8,8 @@ use near_sdk::json_types::U128;
 const MAX_OUTPUTS: u64 = 8;
 const MIN_OUTPUT_SATS: u64 = 330;
 const OP_RETURN: u8 = 0x6a;
+const SIGHASH_ALL: u32 = 1;
+const OUTPOINT_LEN: usize = 36;
 
 /// The vault's own Bitcoin key, used to recognise its inputs and change.
 pub struct BitcoinVault<'a> {
@@ -84,19 +86,114 @@ struct Output<'a> {
     script: &'a [u8],
 }
 
-struct Outpoint<'a> {
-    txid: &'a [u8],
-    vout: u32,
+struct Input<'a> {
+    outpoint: &'a [u8],
+    sequence: &'a [u8],
+}
+
+/// An unsigned transaction with rule 1's structure checked. Locktime is left to `parse`, so the
+/// sighash can be tested against BIP143's own example, which sets one.
+struct Unsigned<'a> {
+    version: u32,
+    inputs: Vec<Input<'a>>,
+    outputs: Vec<Output<'a>>,
+    raw_outputs: &'a [u8],
+    locktime: u32,
 }
 
 fn double_sha256(bytes: &[u8]) -> [u8; 32] {
     env::sha256_array(env::sha256_array(bytes))
 }
 
-fn vault_script(pubkey: &[u8; 33]) -> Vec<u8> {
+fn hash160(pubkey: &[u8; 33]) -> [u8; 20] {
+    env::ripemd160_array(env::sha256_array(pubkey))
+}
+
+fn p2wpkh_script(pubkey_hash: &[u8; 20]) -> Vec<u8> {
     let mut script = vec![0x00, 0x14];
-    script.extend(env::ripemd160_array(env::sha256_array(pubkey)));
+    script.extend(pubkey_hash);
     script
+}
+
+fn read_unsigned(tx: &[u8], max_inputs: u64) -> Result<Unsigned<'_>, CovenantError> {
+    // A zero input count is also how a witness marker reads, so both land here.
+    let mut reader = Reader { bytes: tx };
+    let version = reader.u32_le()?;
+    if !matches!(version, 1 | 2) {
+        return Err(CovenantError::MalformedTx);
+    }
+    let input_count = reader.varint()?;
+    if input_count == 0 {
+        return Err(CovenantError::MalformedTx);
+    }
+    if input_count > max_inputs {
+        return Err(CovenantError::TooManyInputs);
+    }
+    let mut inputs: Vec<Input> = Vec::new();
+    for _ in 0..input_count {
+        let outpoint = reader.take(OUTPOINT_LEN)?;
+        if !reader.script()?.is_empty() {
+            return Err(CovenantError::MalformedTx);
+        }
+        let sequence = reader.take(4)?;
+        if inputs.iter().any(|input| input.outpoint == outpoint) {
+            return Err(CovenantError::MalformedTx);
+        }
+        inputs.push(Input { outpoint, sequence });
+    }
+    let output_count = reader.varint()?;
+    if output_count == 0 || output_count > MAX_OUTPUTS {
+        return Err(CovenantError::MalformedTx);
+    }
+    let outputs_start = reader.bytes;
+    let mut outputs = Vec::new();
+    for _ in 0..output_count {
+        outputs.push(reader.output()?);
+    }
+    let raw_outputs = &outputs_start[..outputs_start.len() - reader.bytes.len()];
+    let locktime = reader.u32_le()?;
+    reader.finish()?;
+    Ok(Unsigned {
+        version,
+        inputs,
+        outputs,
+        raw_outputs,
+        locktime,
+    })
+}
+
+/// The BIP143 SIGHASH_ALL hash for each input, spending `amounts` from one P2WPKH key.
+fn sighashes(tx: &Unsigned, amounts: &[u64], pubkey_hash: &[u8; 20]) -> Vec<[u8; 32]> {
+    let mut outpoints = Vec::with_capacity(tx.inputs.len() * OUTPOINT_LEN);
+    let mut sequences = Vec::with_capacity(tx.inputs.len() * 4);
+    for input in &tx.inputs {
+        outpoints.extend(input.outpoint);
+        sequences.extend(input.sequence);
+    }
+    let hash_prevouts = double_sha256(&outpoints);
+    let hash_sequence = double_sha256(&sequences);
+    let hash_outputs = double_sha256(tx.raw_outputs);
+
+    tx.inputs
+        .iter()
+        .zip(amounts)
+        .map(|(input, amount)| {
+            let mut preimage = Vec::with_capacity(182);
+            preimage.extend(tx.version.to_le_bytes());
+            preimage.extend(hash_prevouts);
+            preimage.extend(hash_sequence);
+            preimage.extend(input.outpoint);
+            preimage.extend([0x19, 0x76, 0xa9, 0x14]);
+            preimage.extend(pubkey_hash);
+            preimage.extend([0x88, 0xac]);
+            preimage.extend(amount.to_le_bytes());
+            preimage.extend(input.sequence);
+            preimage.extend(hash_outputs);
+            preimage.extend(tx.locktime.to_le_bytes());
+            preimage.extend(SIGHASH_ALL.to_le_bytes());
+            double_sha256(&preimage)
+        })
+        .collect()
 }
 
 /// Finds the output an input spends, after proving `prev_tx` is the transaction it names.
@@ -104,13 +201,15 @@ fn vault_script(pubkey: &[u8; 33]) -> Vec<u8> {
 /// A serialized outpoint holds the txid in the same byte order the hash produces, so the two
 /// compare directly (C1). A witness-serialized prev tx is refused because it can't hash to its
 /// txid (C2); the agent strips witness data first.
-fn spent_output<'a>(prev_tx: &'a [u8], outpoint: &Outpoint) -> Result<Output<'a>, CovenantError> {
+fn spent_output<'a>(prev_tx: &'a [u8], outpoint: &[u8]) -> Result<Output<'a>, CovenantError> {
     if prev_tx.get(4) == Some(&0) {
         return Err(CovenantError::MalformedTx);
     }
-    if double_sha256(prev_tx) != outpoint.txid {
+    let (txid, vout) = outpoint.split_at(32);
+    if double_sha256(prev_tx) != txid {
         return Err(CovenantError::PrevTxMismatch);
     }
+    let vout = u32::from_le_bytes([vout[0], vout[1], vout[2], vout[3]]) as u64;
 
     let mut reader = Reader { bytes: prev_tx };
     reader.take(4)?;
@@ -122,7 +221,7 @@ fn spent_output<'a>(prev_tx: &'a [u8], outpoint: &Outpoint) -> Result<Output<'a>
     let mut spent = None;
     for index in 0..reader.varint()? {
         let output = reader.output()?;
-        if index == outpoint.vout as u64 {
+        if index == vout {
             spent = Some(output);
         }
     }
@@ -131,10 +230,8 @@ fn spent_output<'a>(prev_tx: &'a [u8], outpoint: &Outpoint) -> Result<Output<'a>
     spent.ok_or(CovenantError::InputNotOwned)
 }
 
-/// Parses an unsigned transaction into its payments and fee, enforcing spec rules 1 to 5.
-///
-/// `signing_hashes` stays empty until the BIP143 sighash lands in M2. The vault doesn't call this
-/// yet, and `propose_spend` still fails closed.
+/// Parses an unsigned transaction into its payments, fee and one BIP143 sighash per input,
+/// enforcing spec rules 1 to 5.
 pub fn parse(
     tx: &[u8],
     meta: &TxMeta,
@@ -145,64 +242,35 @@ pub fn parse(
         return Err(CovenantError::MalformedTx);
     };
 
-    // Rule 1. A zero input count is also how a witness marker reads, so both land here.
-    let mut reader = Reader { bytes: tx };
-    if !matches!(reader.u32_le()?, 1 | 2) {
+    // Rule 1.
+    let unsigned = read_unsigned(tx, policy.btc_max_inputs as u64)?;
+    if unsigned.locktime != 0 {
         return Err(CovenantError::MalformedTx);
     }
-    let input_count = reader.varint()?;
-    if input_count == 0 {
-        return Err(CovenantError::MalformedTx);
-    }
-    if input_count > policy.btc_max_inputs as u64 {
-        return Err(CovenantError::TooManyInputs);
-    }
-    let mut outpoints: Vec<Outpoint> = Vec::new();
-    for _ in 0..input_count {
-        let txid = reader.take(32)?;
-        let vout = reader.u32_le()?;
-        if !reader.script()?.is_empty() {
-            return Err(CovenantError::MalformedTx);
-        }
-        reader.take(4)?;
-        if outpoints.iter().any(|o| o.txid == txid && o.vout == vout) {
-            return Err(CovenantError::MalformedTx);
-        }
-        outpoints.push(Outpoint { txid, vout });
-    }
-    let output_count = reader.varint()?;
-    if output_count == 0 || output_count > MAX_OUTPUTS {
-        return Err(CovenantError::MalformedTx);
-    }
-    let mut outputs = Vec::new();
-    for _ in 0..output_count {
-        outputs.push(reader.output()?);
-    }
-    if reader.u32_le()? != 0 {
-        return Err(CovenantError::MalformedTx);
-    }
-    reader.finish()?;
 
     // Rule 2. `prev_txs` lines up with the inputs, one for each.
-    if prev_txs.len() != outpoints.len() {
+    if prev_txs.len() != unsigned.inputs.len() {
         return Err(CovenantError::PrevTxMismatch);
     }
-    let own_script = vault_script(vault.pubkey);
+    let pubkey_hash = hash160(vault.pubkey);
+    let own_script = p2wpkh_script(&pubkey_hash);
+    let mut amounts = Vec::with_capacity(unsigned.inputs.len());
     let mut total_in: u64 = 0;
-    for (outpoint, prev_tx) in outpoints.iter().zip(prev_txs) {
-        let spent = spent_output(&prev_tx.0, outpoint)?;
+    for (input, prev_tx) in unsigned.inputs.iter().zip(prev_txs) {
+        let spent = spent_output(&prev_tx.0, input.outpoint)?;
         if spent.script != own_script.as_slice() {
             return Err(CovenantError::InputNotOwned);
         }
         total_in = total_in
             .checked_add(spent.amount)
             .ok_or(CovenantError::MalformedTx)?;
+        amounts.push(spent.amount);
     }
 
     // Rule 3.
     let mut payments = Vec::new();
     let mut total_out: u64 = 0;
-    for output in &outputs {
+    for output in &unsigned.outputs {
         if output.script.first() == Some(&OP_RETURN) || output.amount < MIN_OUTPUT_SATS {
             return Err(CovenantError::UnsupportedScript);
         }
@@ -233,7 +301,7 @@ pub fn parse(
         .ok_or(CovenantError::MalformedTx)?;
 
     // Rule 5. Cross-multiplied, because dividing would round a rate just over the cap down to it.
-    let weight = 4 * tx.len() as u128 + 2 + 108 * input_count as u128;
+    let weight = 4 * tx.len() as u128 + 2 + 108 * unsigned.inputs.len() as u128;
     let vsize = weight.div_ceil(4);
     if fee as u128 > policy.btc_max_fee_rate as u128 * vsize {
         return Err(CovenantError::FeeTooHigh);
@@ -242,7 +310,7 @@ pub fn parse(
     Ok(ParsedTx {
         payments,
         fee: fee as u128,
-        signing_hashes: Vec::new(),
+        signing_hashes: sighashes(&unsigned, &amounts, &pubkey_hash),
     })
 }
 
@@ -254,6 +322,8 @@ mod tests {
 
     const PUBKEY: [u8; 33] = [0x02; 33];
     const FUNDING: &str = include_str!("../../../../tests/vectors/btc_testnet4_funding.json");
+    const BIP143: &str = include_str!("../../../../tests/vectors/btc_sighash_bip143.json");
+    const SIGHASHES: &str = include_str!("../../../../tests/vectors/btc_sighash.json");
 
     fn payee_script() -> Vec<u8> {
         let mut script = vec![0x00, 0x14];
@@ -268,7 +338,7 @@ mod tests {
     }
 
     fn own_script() -> Vec<u8> {
-        vault_script(&PUBKEY)
+        p2wpkh_script(&hash160(&PUBKEY))
     }
 
     fn policy() -> Policy {
@@ -643,6 +713,88 @@ mod tests {
         assert_eq!(
             parse(&tx, &meta(&[&witness]), &policy(), &vault),
             Err(CovenantError::MalformedTx)
+        );
+    }
+
+    fn hex_field(value: &Value) -> Vec<u8> {
+        hex::decode(value.as_str().unwrap()).unwrap()
+    }
+
+    /// BIP143's own example, then bitcoinjs-lib's vectors through the whole of `parse`, so the
+    /// amounts come from the prev txs just as they will in production.
+    #[test]
+    fn btc_sighash_matches_bip143_vectors() {
+        let official: Value = serde_json::from_str(BIP143).unwrap();
+        let tx_bytes = hex_field(&official["unsigned_tx"]);
+        let tx = read_unsigned(&tx_bytes, u64::MAX).unwrap();
+        let pubkey: [u8; 33] = hex_field(&official["pubkey"]).try_into().unwrap();
+        let amounts: Vec<u64> = official["amounts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|amount| amount.as_u64().unwrap())
+            .collect();
+        let hashes = sighashes(&tx, &amounts, &hash160(&pubkey));
+        assert_eq!(
+            hashes[official["input"].as_u64().unwrap() as usize].to_vec(),
+            hex_field(&official["sighash"])
+        );
+
+        let generated: Value = serde_json::from_str(SIGHASHES).unwrap();
+        let vectors = generated["vectors"].as_array().unwrap();
+        assert_eq!(vectors.len(), 4);
+        for vector in vectors {
+            let name = vector["name"].as_str().unwrap();
+            let pubkey: [u8; 33] = hex_field(&vector["pubkey"]).try_into().unwrap();
+            let prev_txs: Vec<_> = vector["prev_txs"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|prev| hex_field(prev).into())
+                .collect();
+            let mut policy = policy();
+            policy.btc_max_fee_rate = u64::MAX / 1_000_000;
+            policy.payees = vector["payees"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|script| Payee {
+                    chain: ChainKind::Bitcoin,
+                    to: hex_field(script),
+                    label: "vector".into(),
+                })
+                .collect();
+            let parsed = parse(
+                &hex_field(&vector["unsigned_tx"]),
+                &TxMeta::Bitcoin { prev_txs },
+                &policy,
+                &BitcoinVault { pubkey: &pubkey },
+            )
+            .unwrap();
+            let expected: Vec<[u8; 32]> = vector["sighashes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|hash| hex_field(hash).try_into().unwrap())
+                .collect();
+            assert_eq!(parsed.signing_hashes, expected, "{name}");
+        }
+    }
+
+    #[test]
+    fn btc_sighash_commits_to_each_input_amount() {
+        let (prev, txid) = coin();
+        let tx = unsigned(&[(txid, 0)], &[(99_000, payee_script())]);
+        let parsed = run(&tx, &[&prev]).unwrap();
+        let read = read_unsigned(&tx, 3).unwrap();
+        let pubkey_hash = hash160(&PUBKEY);
+        assert_eq!(
+            parsed.signing_hashes,
+            sighashes(&read, &[100_000], &pubkey_hash)
+        );
+        assert_ne!(
+            parsed.signing_hashes,
+            sighashes(&read, &[100_001], &pubkey_hash)
         );
     }
 }

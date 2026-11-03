@@ -8,6 +8,7 @@ members = [
     "tests/integration",
     "tests/mock-signer",
     "tests/spike",
+    "tests/gas-bench",
 ]
 
 [workspace.package]

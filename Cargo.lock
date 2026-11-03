@@ -531,6 +531,18 @@ name = "covenant-adapter-evm"
 version = "0.1.0"
 dependencies = [
  "covenant-policy",
+ "hex",
+ "near-sdk",
+]
+
+[[package]]
+name = "covenant-gas-bench"
+version = "0.1.0"
+dependencies = [
+ "covenant-adapter-bitcoin",
+ "covenant-adapter-evm",
+ "covenant-policy",
+ "hex",
  "near-sdk",
 ]
 
@@ -541,7 +553,9 @@ dependencies = [
  "anyhow",
  "base64 0.22.1",
  "near-workspaces",
+ "ripemd",
  "serde_json",
+ "sha2 0.10.9",
  "tokio",
 ]
 
