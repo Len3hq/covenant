@@ -61,7 +61,7 @@ These block work, so settle them at today's standup. Each has a recommended answ
 
 | # | Decision | Recommendation | Owner | By |
 | --- | --- | --- | --- | --- |
-| D1 | Who fills each role? Is the team 2, 3 or 4 people? | Put names in the role table. Use the spec's cut rules for 2 or 3 people. | Lead | 2 Nov |
+| D1 | ~~Who fills each role?~~ | Resolved for now: Frank runs everything alone, so every role label in this plan means Frank. Revisit if anyone joins. | Lead | Done |
 | D2 | ~~Was the pre-1 Nov signing spike run?~~ | Resolved: run on 3 Nov and passed. See [SPIKE.md](SPIKE.md). | Lead | Done |
 | D3 | The repo is `Len3hq/convenant` and private, but the product is Covenant and the spec needs a public repo. | Rename to `covenant` today, before links spread. Go public by M11 at the latest, after a gitleaks run. | Lead | 2 Nov (rename), 12 Nov (public) |
 | D4 | Final vault account name | Provisionally `covenant.len3hq.testnet`, deployed on 3 Nov. Change it before funding if you want another name, because the vault addresses derive from it (see C7). | Lead | Before funding |
@@ -160,7 +160,7 @@ Checked on 2 Nov 2026. Use these instead of the matching "verify" notes in the s
 
 **Still to do**
 
-- [ ] **All:** settle D1, D3 and D4, then add names to the role table
+- [ ] **Lead:** settle D3 and D4
 - [ ] **Lead:** share the keys in `~/.near-credentials` through the team's password manager; they exist on one machine only
 - [ ] **Lead:** fund the vault addresses below (testnet4 BTC, Base Sepolia ETH, Circle faucet USDC). These faucets need a person. Use small amounts until D4 is final
 
@@ -304,7 +304,6 @@ Checked on 2 Nov 2026. Use these instead of the matching "verify" notes in the s
 
 - [ ] **All:** draft the README: one-line pitch, GIF, problem, "Try it in 3 minutes", architecture diagram, invariants, limitations
 - [ ] **Lead:** make the repo public after a final gitleaks run (D3), and settle D8
-- [ ] **Lead:** protect `main` (PR and CI required). GitHub only allows this on a private repo with a paid plan, so it waits until the repo is public
 - [ ] **All:** tag `rc1` at end of day. Bug fixes only after this
 - [ ] Stretch only if gate 3 passed, in this order: Solana, then Heirloom, then the TEE reviewer
 
@@ -425,9 +424,8 @@ Cut from the top of this list down. Items below the line are never cut, because 
 
 ## Working agreement
 
-- **Branches:** `main` always deployable; short-lived `feat/<area>-<thing>`; squash merge; PR title is a conventional commit.
-- **Reviews:** one reviewer per PR, and the Lead for anything in `contracts/`.
-- **Before pushing:** `make check`.
+- **Branches:** all work happens directly on `main`, with no feature branches or PRs, while Frank is the only person on the project. Commit messages are conventional commits.
+- **Before pushing:** `make check`. With no PRs, this and CI on `main` are the only gates, so fix a red `main` before anything else.
 - **Security claims:** none goes in the README or video without a named test or an explorer link.
 - **Secrets:** testnet keys only, in `.env` and the shared password manager. If gitleaks fails, rotate first and then clean up.
 - **Freeze:** after M11, bug fixes only, and the Lead approves each one.

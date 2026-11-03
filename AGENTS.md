@@ -37,5 +37,5 @@ Sandbox tests read the built wasm, so rebuild after any contract change.
 
 ## Workflow
 
-Branch `feat/<area>-<thing>` from `main`, squash merge, and use a conventional commit as the PR title.
-The lead reviews every change to `contracts/`.
+Commit directly to `main`, with no feature branches or PRs, while one person runs the project. Use
+conventional commit messages, and run `make check` before pushing.
