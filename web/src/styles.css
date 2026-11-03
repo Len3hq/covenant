@@ -26,3 +26,54 @@ section {
   border: 1px solid #dfe2e8;
   border-radius: 8px;
 }
+
+.wide {
+  grid-column: 1 / -1;
+}
+
+.status {
+  display: inline-block;
+  margin: 0;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.status.active {
+  color: #0b5d33;
+  background: #dcf3e6;
+}
+
+.status.frozen {
+  color: #8a1c1c;
+  background: #fbe3e3;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  overflow-wrap: anywhere;
+}
+
+th,
+td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #dfe2e8;
+  text-align: left;
+}
+
+dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 16px;
+  margin: 16px 0 0;
+}
+
+dt {
+  color: #5b6270;
+}
+
+dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}

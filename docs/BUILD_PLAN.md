@@ -2,7 +2,7 @@
 
 This is the plan we follow from an empty repo to a submitted entry by **20:00 UTC on Sat 14 Nov 2026**. Work through milestones M0 to M13 in order of date, and tick boxes as you finish them. [SPEC.md](SPEC.md) holds the detail behind each task.
 
-**Where we are on 3 Nov: 0%.** M0's signing spike passed and the vault is deployed on testnet. M0 closes when both vault addresses are funded. M1 and M2 are due today, and all three gates keep their dates.
+**Where we are on 3 Nov: 0%.** M0's signing spike passed and the vault is deployed on testnet. M0 closes when the Bitcoin funding confirms. M1's work is done, and M2 is due today. All three gates keep their dates.
 
 ## How to use this plan
 
@@ -69,6 +69,7 @@ These block work, so settle them at today's standup. Each has a recommended answ
 | D6 | Keep or remove the contract's full-access key? | Keep it through the build so we can redeploy. Remove it, or hand it to the owner multisig, before the final recorded run. Say which in SECURITY.md. | Lead | 6 Nov |
 | D7 | LLM provider | NEAR AI Cloud if its API works by 8 Nov. Otherwise any tool-calling model behind `LLM_BASE_URL`. | B | 8 Nov |
 | D8 | Prize split and payout wallet | Agree in writing, as the form requires. | Lead | 12 Nov |
+| D9 | ~~Cut the real Sputnik DAO guardian and dashboard policy editing up front, since Frank works alone?~~ | Resolved on 3 Nov: no. Both stay in scope. | Lead | Done |
 
 ## Spec corrections
 
@@ -99,6 +100,7 @@ Those additions are in the [test tracker](#named-test-tracker). They also give t
 | C12 | The scope says the agent key only calls `propose_spend`, while the key spec also allows `execute`. | The key spec is right. Use "`propose_spend` and `execute`" everywhere. | M6 |
 | C13 | Queue entries are specified as "raw tx ≤ 2 KB", but `execute` also needs each input's amounts, which come from prev txs that could be far larger. | Store the parsed payments, fee and signing hashes in `Pending`, and re-check those. Don't store prev txs. The current `Pending` struct is a placeholder. | M5 |
 | C14 | The Makefile list has no `demo` target, though the done-check runs `make demo`. | Added. It runs all three scenarios. | Done |
+| C15 | `ChangeNotToVault` can't fire under Bitcoin rule 3. Nothing in a transaction marks an output as change, so change sent to a foreign script is just an unlisted output. | That case returns `OutputNotWhitelisted`, and `btc_rejects_change_to_foreign_script` asserts it. Say so in the README and video. The variant stays unused. | Done |
 
 ### Already changed in the scaffold
 
@@ -170,18 +172,22 @@ Checked on 2 Nov 2026. Use these instead of the matching "verify" notes in the s
 | Bitcoin testnet4 | `tb1qddd2cgvedtlfgvgvx6f93rt9te77zsu9ccmcw9` | About 1,000,000 sats |
 | Base Sepolia | `0xd913a8c28efdb2f30563e063b5fac5abd6ec9361` | About 0.05 ETH and 20 USDC |
 
+Funding on 3 Nov: 759,051 sats sent, of which 5,000 are confirmed so far; 20 USDC; 0.0001 ETH, which needs a top-up before the M10 recorded run.
+
 **Exit check:** CI green on `main`; one real MPC signature recorded in `docs/SPIKE.md`; both funded addresses visible in explorers.
 
 ### M1: Parsers (to 18%), Tue 3 Nov
 
 *Goal: raw bytes in, typed payments or a named error out.*
 
-- [ ] **Lead:** `contracts/adapters/bitcoin`: non-witness parser following spec rules 1 to 5, with C1 and C2 applied
-- [ ] **Lead:** tests `btc_accepts_whitelisted_payment_with_change`, `btc_rejects_unlisted_output`, `btc_rejects_change_to_foreign_script`, `btc_rejects_fee_rate_above_cap`, `btc_rejects_prev_tx_mismatch`, `btc_rejects_input_not_owned`, `btc_rejects_witness_serialization`, `btc_rejects_witness_prev_tx`, `btc_rejects_too_many_inputs`, `btc_rejects_op_return`
-- [ ] **B:** `contracts/adapters/evm`: type-2 RLP decoder and both transaction shapes, no `alloy` or `ethers` dependency in the contract
-- [ ] **B:** tests `evm_accepts_native_transfer_to_payee`, `evm_accepts_usdc_transfer_to_payee`, `evm_rejects_approve`, `evm_rejects_transfer_from`, `evm_rejects_arbitrary_calldata`, `evm_rejects_legacy_type0`, `evm_rejects_wrong_chain_id`, `evm_rejects_gas_cost_above_cap`, `evm_rejects_value_with_token_call`, `evm_rejects_unlisted_token`, `evm_rejects_unlisted_payee`
-- [ ] **C:** dashboard reads contract views: frozen state, addresses, policy
-- [ ] **C:** tests `non_agent_cannot_propose`, plus real access-control sandbox tests for owner methods
+- [x] **Lead:** `contracts/adapters/bitcoin`: non-witness parser following spec rules 1 to 5, with C1 and C2 applied
+- [x] **Lead:** tests `btc_accepts_whitelisted_payment_with_change`, `btc_rejects_unlisted_output`, `btc_rejects_change_to_foreign_script`, `btc_rejects_fee_rate_above_cap`, `btc_rejects_prev_tx_mismatch`, `btc_rejects_input_not_owned`, `btc_rejects_witness_serialization`, `btc_rejects_witness_prev_tx`, `btc_rejects_too_many_inputs`, `btc_rejects_op_return`
+- [x] **B:** `contracts/adapters/evm`: type-2 RLP decoder and both transaction shapes, no `alloy` or `ethers` dependency in the contract
+- [x] **B:** tests `evm_accepts_native_transfer_to_payee`, `evm_accepts_usdc_transfer_to_payee`, `evm_rejects_approve`, `evm_rejects_transfer_from`, `evm_rejects_arbitrary_calldata`, `evm_rejects_legacy_type0`, `evm_rejects_wrong_chain_id`, `evm_rejects_gas_cost_above_cap`, `evm_rejects_value_with_token_call`, `evm_rejects_unlisted_token`, `evm_rejects_unlisted_payee`
+- [x] **C:** dashboard reads contract views: frozen state, addresses, policy
+- [x] **C:** tests `non_agent_cannot_propose`, plus real access-control sandbox tests for owner methods
+
+Both parsers also pass mutation spot-checks, and `btc_accepts_a_real_testnet4_funding_tx` runs on real chain data. `signing_hashes` stays empty until M2, and `propose_spend` still fails closed until M3.
 
 **Exit check:** every test above passes in CI.
 
@@ -229,8 +235,9 @@ Checked on 2 Nov 2026. Use these instead of the matching "verify" notes in the s
 
 - [ ] **Lead:** queue with `QueueFull`, `execute` with its re-check, `veto` (with C6 and C13)
 - [ ] **Lead:** complete the freeze and guardian rules (with C11), and settle D6
-- [ ] **Lead:** tests `queued_spend_not_executable_before_delay`, `vetoed_spend_cannot_execute`, `execute_rechecks_tightened_policy`, `execute_after_long_delay_respects_daily_cap`, `queue_full_rejects`, `frozen_blocks_propose_and_execute`, `guardian_can_freeze_not_unfreeze`
-- [ ] **B:** tests `evm_rejects_eip7702_type4`, `evm_rejects_dirty_address_padding`, `evm_rejects_non_canonical_rlp`, `prop_evm_only_two_shapes_sign`, `prop_mutated_allowed_tx_never_changes_payments_silently`
+- [ ] **Lead:** tests `queued_spend_not_executable_before_delay`, `vetoed_spend_cannot_execute`, `execute_rechecks_tightened_policy`, `execute_after_long_delay_respects_daily_cap`, `queue_full_rejects`, `frozen_blocks_propose_and_execute`
+- [x] **B:** tests `evm_rejects_eip7702_type4`, `evm_rejects_dirty_address_padding`, `evm_rejects_non_canonical_rlp` (done early, with the M1 parser)
+- [ ] **B:** tests `prop_evm_only_two_shapes_sign`, `prop_mutated_allowed_tx_never_changes_payments_silently`
 - [ ] **C:** queue and activity panels; implement `make veto` and `make freeze`
 
 **Exit check:** integration suite green in CI.
@@ -346,37 +353,37 @@ The spec's target is 40 or more named tests. Tick each one when it passes in CI.
 
 **Bitcoin**
 
-- [ ] `btc_accepts_whitelisted_payment_with_change`
-- [ ] `btc_rejects_unlisted_output`
-- [ ] `btc_rejects_change_to_foreign_script`
-- [ ] `btc_rejects_fee_rate_above_cap`
-- [ ] `btc_rejects_prev_tx_mismatch`
-- [ ] `btc_rejects_input_not_owned`
+- [x] `btc_accepts_whitelisted_payment_with_change`
+- [x] `btc_rejects_unlisted_output`
+- [x] `btc_rejects_change_to_foreign_script`
+- [x] `btc_rejects_fee_rate_above_cap`
+- [x] `btc_rejects_prev_tx_mismatch`
+- [x] `btc_rejects_input_not_owned`
 - [ ] `btc_blocks_split_fee_attack`
-- [ ] `btc_rejects_witness_serialization`
-- [ ] `btc_rejects_witness_prev_tx` (new, C2)
-- [ ] `btc_rejects_too_many_inputs`
-- [ ] `btc_rejects_op_return`
+- [x] `btc_rejects_witness_serialization`
+- [x] `btc_rejects_witness_prev_tx` (new, C2)
+- [x] `btc_rejects_too_many_inputs`
+- [x] `btc_rejects_op_return`
 - [ ] `btc_sighash_matches_bip143_vectors`
 - [ ] `btc_fee_counts_against_daily_cap` (new, C4)
 - [ ] `btc_split_outputs_cannot_dodge_per_tx_cap` (new, C5)
 
 **EVM**
 
-- [ ] `evm_accepts_native_transfer_to_payee`
-- [ ] `evm_accepts_usdc_transfer_to_payee`
-- [ ] `evm_rejects_approve`
-- [ ] `evm_rejects_transfer_from`
-- [ ] `evm_rejects_arbitrary_calldata`
-- [ ] `evm_rejects_eip7702_type4`
-- [ ] `evm_rejects_legacy_type0`
-- [ ] `evm_rejects_wrong_chain_id`
-- [ ] `evm_rejects_gas_cost_above_cap`
-- [ ] `evm_rejects_value_with_token_call`
-- [ ] `evm_rejects_unlisted_token`
-- [ ] `evm_rejects_unlisted_payee`
-- [ ] `evm_rejects_dirty_address_padding`
-- [ ] `evm_rejects_non_canonical_rlp`
+- [x] `evm_accepts_native_transfer_to_payee`
+- [x] `evm_accepts_usdc_transfer_to_payee`
+- [x] `evm_rejects_approve`
+- [x] `evm_rejects_transfer_from`
+- [x] `evm_rejects_arbitrary_calldata`
+- [x] `evm_rejects_eip7702_type4`
+- [x] `evm_rejects_legacy_type0`
+- [x] `evm_rejects_wrong_chain_id`
+- [x] `evm_rejects_gas_cost_above_cap`
+- [x] `evm_rejects_value_with_token_call`
+- [x] `evm_rejects_unlisted_token`
+- [x] `evm_rejects_unlisted_payee`
+- [x] `evm_rejects_dirty_address_padding`
+- [x] `evm_rejects_non_canonical_rlp`
 - [ ] `evm_hash_matches_viem`
 
 **Property**
@@ -388,9 +395,9 @@ The spec's target is 40 or more named tests. Tick each one when it passes in CI.
 **Integration**
 
 - [ ] `agent_key_cannot_call_set_policy`
-- [ ] `non_agent_cannot_propose`
+- [x] `non_agent_cannot_propose`
 - [ ] `frozen_blocks_propose_and_execute`
-- [ ] `guardian_can_freeze_not_unfreeze`
+- [x] `guardian_can_freeze_not_unfreeze`
 - [ ] `queued_spend_not_executable_before_delay`
 - [ ] `vetoed_spend_cannot_execute`
 - [ ] `execute_rechecks_tightened_policy`
@@ -408,13 +415,13 @@ Cut from the top of this list down. Items below the line are never cut, because 
 | --- | --- | --- | --- |
 | 1 | All stretch work | Nothing required | Gate 3 not passed |
 | 2 | Multi-input Bitcoin (`btc_max_inputs = 1`) | Larger payments need a pre-consolidated UTXO | Gas over the limit, or gate 1 slipping |
-| 3 | Real Sputnik DAO as guardian (use a plain account) | One NEAR feature to show | Any slip by 6 Nov |
-| 4 | Dashboard policy editing (read-only, `set_policy` through the CLI) | One action | Any slip by 9 Nov |
-| 5 | Live LLM in the demo (replay only, plus one recorded LLM run) | Live agent footage | LLM flaky by 9 Nov |
-| 6 | EVM deployment (tested, not deployed) | Second chain live | Gate 2 missed |
+| 3 | Live LLM in the demo (replay only, plus one recorded LLM run) | Live agent footage | LLM flaky by 9 Nov |
+| 4 | EVM deployment (tested, not deployed) | Second chain live | Gate 2 missed |
 | | **Never cut:** contract-computed hashes, policy rejection, the agent's restricted key, EVIDENCE.md, submission | | |
 
-**If the team is smaller:** with 3 people, C also takes the README and video. With 2, B also takes a single-page dashboard. Working alone, cut items 3 and 4 now and make EVM the first item at risk.
+**Not on this list:** the real Sputnik DAO guardian and dashboard policy editing stay in scope (D9).
+
+**If the team is smaller:** with 3 people, C also takes the README and video. With 2, B also takes a single-page dashboard. Working alone, EVM is the first item at risk.
 
 **Top risks:** the full register is in [SPEC.md](SPEC.md#risk-register). Watch these two daily:
 

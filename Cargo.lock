@@ -522,6 +522,7 @@ name = "covenant-adapter-bitcoin"
 version = "0.1.0"
 dependencies = [
  "covenant-policy",
+ "hex",
  "near-sdk",
 ]
 
