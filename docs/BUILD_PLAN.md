@@ -10,7 +10,7 @@ This is the plan we follow from an empty repo to a submitted entry by **20:00 UT
 - **Each task has one owner.** Role labels are from the spec: **Lead** (contract + Bitcoin), **B** (EVM + agent), **C** (dashboard + tests + evidence), **D** (optional: docs + video).
 - **Each day ends with a check.** At the daily 15-minute standup, the lead reads yesterday's exit check, today's exit check and any blockers.
 - **A missed gate triggers its fallback that same evening.** Fallbacks are in [If we fall behind](#if-we-fall-behind).
-- **Update this file in the same PR as the work.** Tick the box, and add the proof link where a task asks for one.
+- **Update this file in the same commit as the work.** Tick the box, and add the proof link where a task asks for one.
 
 ## The road to 100%
 
