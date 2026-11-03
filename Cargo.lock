@@ -545,7 +545,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "covenant-mock-signer"
+version = "0.1.0"
+dependencies = [
+ "near-sdk",
+]
+
+[[package]]
 name = "covenant-policy"
+version = "0.1.0"
+dependencies = [
+ "near-sdk",
+]
+
+[[package]]
+name = "covenant-spike"
 version = "0.1.0"
 dependencies = [
  "near-sdk",

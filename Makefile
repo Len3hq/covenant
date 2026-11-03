@@ -1,9 +1,10 @@
 SHELL := /bin/bash
 CARGO_NEAR_VERSION := 0.22.0
 VAULT_MANIFEST := contracts/covenant-vault/Cargo.toml
+MOCK_SIGNER_MANIFEST := tests/mock-signer/Cargo.toml
 
 .DEFAULT_GOAL := help
-.PHONY: help setup fmt lint wasm test build check deploy demo demo-pay demo-attack demo-queue veto freeze testnet-smoke
+.PHONY: help setup fmt lint wasm test build check addresses deploy demo demo-pay demo-attack demo-queue veto freeze testnet-smoke
 
 help: ## List the targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-15s %s\n", $$1, $$2}'
@@ -21,8 +22,9 @@ lint: ## Lint Rust and TypeScript
 	cargo clippy --workspace --all-targets -- -D warnings
 	pnpm -r lint
 
-wasm: ## Build the vault contract to target/near/covenant_vault/
+wasm: ## Build the vault and mock signer to target/near/
 	cargo near build non-reproducible-wasm --manifest-path $(VAULT_MANIFEST)
+	cargo near build non-reproducible-wasm --manifest-path $(MOCK_SIGNER_MANIFEST)
 
 test: wasm ## Run all Rust, sandbox and TypeScript tests
 	cargo test --workspace
@@ -34,8 +36,11 @@ build: wasm ## Build the contract, agent and dashboard
 check: lint test build ## Run everything CI runs, except the secret scan
 	gitleaks detect --no-banner
 
-deploy: ## Deploy the vault to NEAR testnet (milestone M0)
-	@echo "deploy: not implemented yet, see M0 in docs/BUILD_PLAN.md" >&2; exit 1
+addresses: ## Print the vault's Bitcoin and EVM addresses
+	node --env-file=.env scripts/src/derive-addresses.ts
+
+deploy: wasm ## Deploy the vault to NEAR testnet (needs the near CLI and the vault's key)
+	node --env-file=.env scripts/src/deploy.ts
 
 demo: demo-pay demo-attack demo-queue ## Run all three judge scenarios
 

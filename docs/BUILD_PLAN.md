@@ -2,7 +2,7 @@
 
 This is the plan we follow from an empty repo to a submitted entry by **20:00 UTC on Sat 14 Nov 2026**. Work through milestones M0 to M13 in order of date, and tick boxes as you finish them. [SPEC.md](SPEC.md) holds the detail behind each task.
 
-**Where we are on 2 Nov: 0%.** M0 is in progress and the repo scaffold is done. We start one day behind the original schedule, and all three gates keep their dates.
+**Where we are on 3 Nov: 0%.** M0's signing spike passed and the vault is deployed on testnet. M0 closes when both vault addresses are funded. M1 and M2 are due today, and all three gates keep their dates.
 
 ## How to use this plan
 
@@ -16,7 +16,7 @@ This is the plan we follow from an empty repo to a submitted entry by **20:00 UT
 
 | Milestone | Progress | Due | Owner | Exit check |
 | --- | --- | --- | --- | --- |
-| M0 Foundation and signing spike | 10% | Mon 2 Nov | All | CI green; one real MPC signature; both vault addresses funded |
+| M0 Foundation and signing spike | 10% | Tue 3 Nov (was 2 Nov) | All | CI green; one real MPC signature; both vault addresses funded |
 | M1 Parsers | 18% | Tue 3 Nov | Lead, B | Parser rejection tests pass on both chains |
 | M2 Signing hashes and gas numbers | 26% | Tue 3 Nov | Lead, B | Hashes match all vectors; `btc_max_inputs` set from a measurement |
 | **M3 Gate 1: Bitcoin signed by the contract** | 36% | **Wed 4 Nov** | Lead | Confirmed testnet4 txid in EVIDENCE.md |
@@ -62,9 +62,9 @@ These block work, so settle them at today's standup. Each has a recommended answ
 | # | Decision | Recommendation | Owner | By |
 | --- | --- | --- | --- | --- |
 | D1 | Who fills each role? Is the team 2, 3 or 4 people? | Put names in the role table. Use the spec's cut rules for 2 or 3 people. | Lead | 2 Nov |
-| D2 | Was the pre-1 Nov signing spike run? | If not, it's the first task in M0. It covers the entry's biggest risk. | Lead | 2 Nov |
+| D2 | ~~Was the pre-1 Nov signing spike run?~~ | Resolved: run on 3 Nov and passed. See [SPIKE.md](SPIKE.md). | Lead | Done |
 | D3 | The repo is `Len3hq/convenant` and private, but the product is Covenant and the spec needs a public repo. | Rename to `covenant` today, before links spread. Go public by M11 at the latest, after a gitleaks run. | Lead | 2 Nov (rename), 12 Nov (public) |
-| D4 | Final vault account name | Choose it before funding, because the vault addresses derive from it (see C7). Suggested: `covenant.<team>.testnet`. | Lead | 2 Nov |
+| D4 | Final vault account name | Provisionally `covenant.len3hq.testnet`, deployed on 3 Nov. Change it before funding if you want another name, because the vault addresses derive from it (see C7). | Lead | Before funding |
 | D5 | How judges run `make demo` without our keys (see C8) | Commit no key. `make demo` uses a shared agent key sent through the submission form if the form allows it, and otherwise plays the recorded run. Check the form today. | Lead | 4 Nov |
 | D6 | Keep or remove the contract's full-access key? | Keep it through the build so we can redeploy. Remove it, or hand it to the owner multisig, before the final recorded run. Say which in SECURITY.md. | Lead | 6 Nov |
 | D7 | LLM provider | NEAR AI Cloud if its API works by 8 Nov. Otherwise any tool-calling model behind `LLM_BASE_URL`. | B | 8 Nov |
@@ -95,7 +95,7 @@ Those additions are in the [test tracker](#named-test-tracker). They also give t
 | C8 | `.env.example` is defined as "never real keys" and also as holding a demo key, and keys are rotated on 14 Nov, before judging on 16 to 18 Nov. | Commit no key. Decide the judge path in D5. Keep the demo key valid until judging ends, and rotate it afterwards. | M0, M13 |
 | C9 | `make demo` must finish in under 5 minutes, but a testnet4 confirmation can take far longer. | `demo-pay` finishes when the node accepts the broadcast, and prints the explorer link. Confirmed txids live in EVIDENCE.md. | M7 |
 | C10 | Judges share the rolling 24 h caps, the funds and the agent key's 1 NEAR allowance, so a few runs could leave the next judge with `DailyCapExceeded`. | Size caps and funding for at least 10 full demo runs, measure real allowance use, and top up during judging. Keep the recorded run as a fallback. | M8 |
-| C11 | "Freeze blocks pending callbacks" overstates it. An MPC signature is public on-chain once produced, and blocking our callback can't take it back. | Freeze stops new `sign` calls. SECURITY.md must state that signatures already requested can still land. Keep the reservation when a callback runs during a freeze. | M5, M8 |
+| C11 | "Freeze blocks pending callbacks" overstates it. An MPC signature is public on-chain once produced, and blocking our callback can't take it back. | Freeze stops new `sign` calls. SECURITY.md must state that signatures already requested can still land, and that a partly failed join still publishes its successful signatures ([spike](SPIKE.md)). Keep the reservation when a callback runs during a freeze. | M5, M8 |
 | C12 | The scope says the agent key only calls `propose_spend`, while the key spec also allows `execute`. | The key spec is right. Use "`propose_spend` and `execute`" everywhere. | M6 |
 | C13 | Queue entries are specified as "raw tx ≤ 2 KB", but `execute` also needs each input's amounts, which come from prev txs that could be far larger. | Store the parsed payments, fee and signing hashes in `Pending`, and re-check those. Don't store prev txs. The current `Pending` struct is a placeholder. | M5 |
 | C14 | The Makefile list has no `demo` target, though the done-check runs `make demo`. | Added. It runs all three scenarios. | Done |
@@ -119,7 +119,10 @@ Checked on 2 Nov 2026. Use these instead of the matching "verify" notes in the s
 | Testnet MPC contract | `v1.signer-prod.testnet`, version 3.18.0, responding | Live view call |
 | Deriving vault keys | `derived_public_key(path, predecessor, domain_id)` exists | Live view call |
 | `sign` arguments | `{"request": {"payload_v2": {"Ecdsa": "<32-byte hex>"}, "path": "...", "domain_id": 0}}` | [MPC docs](https://github.com/near/mpc/blob/main/crates/contract/README.md) |
-| `sign` deposit and gas | At least 1 yoctoNEAR, with excess refunded; about 7 Tgas used, at least 10 Tgas required | MPC docs |
+| `sign` deposit and gas | At least 1 yoctoNEAR, with excess refunded. **The live contract requires 15 Tgas, not the 10 its docs state.** Attach 30 Tgas. | MPC docs, [spike](SPIKE.md) |
+| Contract-initiated signing | Works, up to 8 signatures joined with `Promise::and`, in about 5 to 15 s; every signature verified against the derived key | [Spike](SPIKE.md) |
+| Failed `sign` | The callback still runs and sees the failure. One failure doesn't stop the other signatures in the join. | [Spike](SPIKE.md) |
+| `domain_id` | 0 is secp256k1 (Bitcoin and EVM), 1 is Ed25519 | Live `state` view, [spike](SPIKE.md) |
 | Signature format | `s` is already low-s; `r` is bytes 1 to 33 of compressed `big_r` | MPC docs |
 | Solana payload size | Eddsa accepts 32 to 1232 bytes, so the spec's 32-byte worry doesn't apply | MPC docs |
 | Base Sepolia USDC | `0x036CbD53842c5426634e7929541eC2318f3dCF7e` returns symbol `USDC`, 6 decimals | Live `eth_call` |
@@ -127,7 +130,7 @@ Checked on 2 Nov 2026. Use these instead of the matching "verify" notes in the s
 | Toolchain | Rust 1.99.0, near-sdk 5.30.0 and cargo-near 0.22.0 build a 208 KB wasm that deploys and runs in the sandbox | `vault_deploys_and_answers_views` |
 | Hash host functions | `env::sha256`, `env::keccak256` and `env::ripemd160_array` are available | near-sdk source |
 
-**Still unproven, and covered by the M0 spike:** a contract-initiated `sign` confirmed end to end; `Promise::and` over several `sign` calls; the real latency; the live response JSON; and which `domain_id` values testnet uses. The strategy document and the 1,735-character description that the spec mentions weren't available during setup, so M12 and M13 assume the Lead has them.
+**Still unproven:** broadcasting a transaction signed this way (gates 1 and 2). The strategy document and the 1,735-character description that the spec mentions weren't available during setup, so M12 and M13 assume the Lead has them.
 
 ## Milestones
 
@@ -145,17 +148,26 @@ Checked on 2 Nov 2026. Use these instead of the matching "verify" notes in the s
 - [x] CI workflow for Rust, wasm, TypeScript and gitleaks
 - [x] AGENTS.md and doc stubs
 
-**To do today**
+**Done on 3 Nov**
 
-- [ ] **All:** settle D1 to D4, then add names to the role table
-- [ ] **All:** confirm CI is green on GitHub, and protect `main` (PR required, CI required)
-- [ ] **Lead:** create testnet accounts for vault, owner, agent and guardian
-- [ ] **Lead:** run the spike in a throwaway contract: one contract-initiated `sign` with a real payload. Record latency, gas and the response JSON in `docs/SPIKE.md`. **If this fails, stop other work and fix it.**
-- [ ] **Lead:** spike `Promise::and` over 2 and 3 `sign` calls and `.then` a callback
-- [ ] **C:** write `scripts/derive-addresses`: `derived_public_key` to a testnet4 bech32 address and an EVM address
-- [ ] **C:** write `scripts/deploy` and implement `make deploy`; deploy the skeleton to testnet
-- [ ] **C:** fund both vault addresses (testnet4 BTC, Base Sepolia ETH, Circle faucet USDC), and fund the vault with NEAR
-- [ ] **C:** add a mock signer contract in `tests/mock-signer` with the live `sign` shape, deterministic or failing on demand
+- [x] Testnet accounts under `len3hq.testnet`: `covenant`, `owner`, `agent`, `guardian`, `spike`
+- [x] Spike: real contract-initiated signatures, and `Promise::and` over up to 8 `sign` calls with a callback ([SPIKE.md](SPIKE.md))
+- [x] `make addresses`: `derived_public_key` to a testnet4 bech32 address and an EVM address, tested against known vectors
+- [x] `make deploy`, with the skeleton deployed to `covenant.len3hq.testnet`
+- [x] Vault funded with 4 NEAR
+- [x] Mock signer in `tests/mock-signer`, using the live `sign` shape and failing on demand
+- [x] `MpcSignature` matches the live response shape
+
+**Still to do**
+
+- [ ] **All:** settle D1, D3 and D4, then add names to the role table
+- [ ] **Lead:** share the keys in `~/.near-credentials` through the team's password manager; they exist on one machine only
+- [ ] **Lead:** fund the vault addresses below (testnet4 BTC, Base Sepolia ETH, Circle faucet USDC). These faucets need a person. Use small amounts until D4 is final
+
+| Address | Value | Needs |
+| --- | --- | --- |
+| Bitcoin testnet4 | `tb1qddd2cgvedtlfgvgvx6f93rt9te77zsu9ccmcw9` | About 1,000,000 sats |
+| Base Sepolia | `0xd913a8c28efdb2f30563e063b5fac5abd6ec9361` | About 0.05 ETH and 20 USDC |
 
 **Exit check:** CI green on `main`; one real MPC signature recorded in `docs/SPIKE.md`; both funded addresses visible in explorers.
 
@@ -187,8 +199,8 @@ Checked on 2 Nov 2026. Use these instead of the matching "verify" notes in the s
 
 *Goal: the core claim works once, for real.*
 
-- [ ] **Lead:** `propose_spend` to adapter to `sign` to `on_signed`, using the `sign` shape from [Verified facts](#verified-facts). The vault attaches 1 yoctoNEAR per call
-- [ ] **Lead:** replace the placeholder `MpcSignature` with the live response shape
+- [ ] **Lead:** `propose_spend` to adapter to `sign` to `on_signed`, reusing the join and callback in `tests/spike`. The vault attaches 1 yoctoNEAR and 30 Tgas per call
+- [ ] **Lead:** delete `tests/spike` and the spike account once this works
 - [ ] **Lead:** TypeScript witness assembly in `agent/src/bitcoin/`: DER encoding, sighash byte, witness, serialization, broadcast
 - [ ] **Lead:** check each signature against the derived key before broadcast
 - [ ] **B:** EVM signing path against the mock signer
@@ -204,7 +216,7 @@ Checked on 2 Nov 2026. Use these instead of the matching "verify" notes in the s
 
 - [ ] **Lead:** per-asset `per_tx`, rolling 24 h ledger with reservations, payee and token allow-lists, fee caps, in `contracts/policy` (with C4 and C5)
 - [ ] **Lead:** rejections log `spend_rejected` and return `Rejected(err)`; auth failures and malformed bytes panic
-- [ ] **Lead:** tests `btc_blocks_split_fee_attack`, `btc_fee_counts_against_daily_cap`, `btc_split_outputs_cannot_dodge_per_tx_cap`, `rejection_emits_event_without_state_change`, `sign_failure_releases_reservation`
+- [ ] **Lead:** tests `btc_blocks_split_fee_attack`, `btc_fee_counts_against_daily_cap`, `btc_split_outputs_cannot_dodge_per_tx_cap`, `rejection_emits_event_without_state_change`, `sign_failure_releases_reservation` (covering total and partial failure; the mock signer will need to fail on a chosen call)
 - [ ] **C:** `prop_daily_cap_never_exceeded`, `concurrent_proposals_respect_daily_cap`
 - [ ] **B:** EVM live signing on testnet: native ETH transfer confirmed on Base Sepolia
 
@@ -292,6 +304,7 @@ Checked on 2 Nov 2026. Use these instead of the matching "verify" notes in the s
 
 - [ ] **All:** draft the README: one-line pitch, GIF, problem, "Try it in 3 minutes", architecture diagram, invariants, limitations
 - [ ] **Lead:** make the repo public after a final gitleaks run (D3), and settle D8
+- [ ] **Lead:** protect `main` (PR and CI required). GitHub only allows this on a private repo with a paid plan, so it waits until the repo is public
 - [ ] **All:** tag `rc1` at end of day. Bug fixes only after this
 - [ ] Stretch only if gate 3 passed, in this order: Solana, then Heirloom, then the TEE reviewer
 

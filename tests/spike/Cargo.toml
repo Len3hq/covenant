@@ -1,0 +1,16 @@
+[package]
+name = "covenant-spike"
+description = "Throwaway contract proving contract-initiated MPC signing. See docs/SPIKE.md."
+repository = "https://github.com/Len3hq/convenant"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk.workspace = true
+
+[dev-dependencies]
+near-sdk = { workspace = true, features = ["unit-testing"] }

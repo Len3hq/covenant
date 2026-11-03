@@ -6,6 +6,8 @@ members = [
     "contracts/adapters/bitcoin",
     "contracts/adapters/evm",
     "tests/integration",
+    "tests/mock-signer",
+    "tests/spike",
 ]
 
 [workspace.package]

@@ -1,12 +1,12 @@
 # Evidence
 
-Filled in from real testnet runs, starting at gate 1. Nothing has been recorded yet.
+Filled in from real testnet runs. The accounts below are provisional until the vault name is final. No payments have been made yet.
 
 | Item | Value |
 | --- | --- |
-| Vault contract | Pending |
-| Bitcoin testnet4 vault address | Pending |
-| Base Sepolia vault address | Pending |
+| Vault contract | [`covenant.len3hq.testnet`](https://testnet.nearblocks.io/address/covenant.len3hq.testnet) |
+| Bitcoin testnet4 vault address | [`tb1qddd2cgvedtlfgvgvx6f93rt9te77zsu9ccmcw9`](https://mempool.space/testnet4/address/tb1qddd2cgvedtlfgvgvx6f93rt9te77zsu9ccmcw9) |
+| Base Sepolia vault address | [`0xd913a8c28efdb2f30563e063b5fac5abd6ec9361`](https://sepolia.basescan.org/address/0xd913a8c28efdb2f30563e063b5fac5abd6ec9361) |
 | Named test count | Pending |
 
 | Outcome | Chain | NEAR receipt | Chain explorer |

@@ -29,12 +29,25 @@ pub struct Pending {
     pub executable_at: U64,
 }
 
-/// The shape returned by the MPC signer. Confirm it against the live contract in the spike.
+#[near(serializers = [json])]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AffinePoint {
+    pub affine_point: String,
+}
+
+#[near(serializers = [json])]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Scalar {
+    pub scalar: String,
+}
+
+/// The signature returned by the MPC signer, as recorded in docs/SPIKE.md.
 #[near(serializers = [json])]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MpcSignature {
-    pub big_r: String,
-    pub s: String,
+    pub scheme: String,
+    pub big_r: AffinePoint,
+    pub s: Scalar,
     pub recovery_id: u8,
 }
 
@@ -324,6 +337,18 @@ mod tests {
             [9u8; 20],
             policy(100, 50),
         )
+    }
+
+    #[test]
+    fn mpc_signature_parses_a_live_response() {
+        let live = r#"{
+            "scheme": "Secp256k1",
+            "big_r": { "affine_point": "0265c90fd8479fe510e68c39fb23e42bf30e1869e6affb2249c09820a08bb664ec" },
+            "s": { "scalar": "08f7ed44a950030d0cbb3b5066a08049ded45620080af5c455617fbaec6a3878" },
+            "recovery_id": 1
+        }"#;
+        let signature: MpcSignature = near_sdk::serde_json::from_str(live).unwrap();
+        assert_eq!(signature.recovery_id, 1);
     }
 
     #[test]

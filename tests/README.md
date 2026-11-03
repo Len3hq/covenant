@@ -2,7 +2,9 @@
 
 | Folder | Contents | Status |
 | --- | --- | --- |
-| `integration/` | near-workspaces sandbox tests. Run `make wasm` first. | Deploy test in place |
+| `integration/` | near-workspaces sandbox tests. Run `make wasm` first. | Deploy and mock signer tests in place |
+| `mock-signer/` | Stand-in for the MPC signer in sandbox tests | Done |
+| `spike/` | Throwaway contract from the M0 signing spike | Delete at M3 |
 | `vectors/` | BIP143 and EIP-1559 fixtures (JSON) | Starts at M1 |
 | `attacks/` | Named malicious-proposer suites | Starts at M7 |
 
