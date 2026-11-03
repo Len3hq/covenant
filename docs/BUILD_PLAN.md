@@ -2,7 +2,7 @@
 
 This is the plan we follow from an empty repo to a submitted entry by **20:00 UTC on Sat 14 Nov 2026**. Work through milestones M0 to M13 in order of date, and tick boxes as you finish them. [SPEC.md](SPEC.md) holds the detail behind each task.
 
-**Where we are on 3 Nov: 0%.** M0's signing spike passed and the vault is deployed on testnet. M0 closes when the Bitcoin funding confirms. M1's work is done, and M2 is due today. All three gates keep their dates.
+**Where we are on 3 Nov: 18%.** M0 and M1 have passed their exit checks. M2 is due today, and all three gates keep their dates.
 
 ## How to use this plan
 
@@ -165,14 +165,14 @@ Checked on 2 Nov 2026. Use these instead of the matching "verify" notes in the s
 - [x] **Lead:** settle D4
 - [x] **Lead:** rename the repo (D3); going public is still due by M11
 - [ ] **Lead:** share the keys in `~/.near-credentials` through the team's password manager; they exist on one machine only
-- [ ] **Lead:** fund the vault addresses below (testnet4 BTC, Base Sepolia ETH, Circle faucet USDC). These faucets need a person
+- [x] **Lead:** fund the vault addresses below (testnet4 BTC, Base Sepolia ETH, Circle faucet USDC). These faucets need a person
 
 | Address | Value | Needs |
 | --- | --- | --- |
 | Bitcoin testnet4 | `tb1qddd2cgvedtlfgvgvx6f93rt9te77zsu9ccmcw9` | About 1,000,000 sats |
 | Base Sepolia | `0xd913a8c28efdb2f30563e063b5fac5abd6ec9361` | About 0.05 ETH and 20 USDC |
 
-Funding on 3 Nov: 759,051 sats sent, of which 5,000 are confirmed so far; 20 USDC; 0.0001 ETH, which needs a top-up before the M10 recorded run.
+Funded on 3 Nov: 759,051 sats, all confirmed; 20 USDC; 0.0001 ETH, which needs a top-up before the M10 recorded run.
 
 **Exit check:** CI green on `main`; one real MPC signature recorded in `docs/SPIKE.md`; both funded addresses visible in explorers.
 
