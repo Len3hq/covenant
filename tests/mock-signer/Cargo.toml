@@ -1,0 +1,16 @@
+[package]
+name = "covenant-mock-signer"
+description = "Stand-in for the MPC signer in sandbox tests, which have no MPC network."
+repository = "https://github.com/Len3hq/convenant"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk.workspace = true
+
+[dev-dependencies]
+near-sdk = { workspace = true, features = ["unit-testing"] }

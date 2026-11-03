@@ -5,9 +5,10 @@ Bitcoin and EVM chains through Chain Signatures, and it signs a spend only after
 transaction itself and checking it against one policy. The agent can ask for anything. The contract
 decides what gets signed.
 
-> **Status: early build.** The repo, contract skeleton, sandbox test and CI are in place. The
-> adapters and `propose_spend` refuse every transaction until they're implemented, and nothing is
-> deployed yet. Progress is tracked in [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md).
+> **Status: early build.** A skeleton of the vault is on NEAR testnet, and a separate spike has
+> proved contract-initiated MPC signing ([docs/SPIKE.md](docs/SPIKE.md)). The adapters and
+> `propose_spend` refuse every transaction until they're implemented. Progress is tracked in
+> [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md).
 
 ## How a spend works
 
@@ -18,7 +19,8 @@ decides what gets signed.
 
 ## Quick start
 
-Requires Rust (via rustup), Node 22, pnpm 11 and gitleaks.
+Requires Rust (via rustup), Node 22, pnpm 11 and gitleaks. Testnet commands also need the
+[NEAR CLI](https://github.com/near/near-cli-rs).
 
 ```sh
 make setup   # install cargo-near and JS dependencies, create .env
@@ -26,7 +28,7 @@ make test    # build the wasm, then run Rust, sandbox and TypeScript tests
 make help    # list every target
 ```
 
-The `demo-*`, `deploy`, `veto`, `freeze` and `testnet-smoke` targets exit with an error naming the
+The `demo-*`, `veto`, `freeze` and `testnet-smoke` targets exit with an error naming the
 milestone that delivers them.
 
 ## Repo map

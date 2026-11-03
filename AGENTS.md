@@ -6,6 +6,7 @@ Instructions for AI agents and new contributors.
 
 - [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md): what to do next, in order, and the spec corrections.
 - [docs/SPEC.md](docs/SPEC.md): the detailed behaviour of every component.
+- [docs/SPIKE.md](docs/SPIKE.md): measured behaviour of the live MPC signer.
 
 ## Commands
 
@@ -13,7 +14,9 @@ Instructions for AI agents and new contributors.
 | --- | --- |
 | Install tools and dependencies | `make setup` |
 | Everything CI runs | `make check` |
-| Build the contract | `make wasm` (output in `target/near/covenant_vault/`) |
+| Build the contracts | `make wasm` (output in `target/near/`) |
+| Show vault addresses | `make addresses` (needs `.env`) |
+| Deploy to testnet | `make deploy` (needs `.env`, the NEAR CLI and the vault's key) |
 | Rust tests, without the sandbox | `cargo test --workspace --exclude covenant-integration-tests` |
 | Sandbox tests | `make wasm && cargo test -p covenant-integration-tests` |
 | TypeScript | `pnpm -r lint`, `pnpm -r test`, `pnpm -r build` |
