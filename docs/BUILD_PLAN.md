@@ -304,6 +304,7 @@ Checked on 2 Nov 2026. Use these instead of the matching "verify" notes in the s
 
 - [ ] **All:** draft the README: one-line pitch, GIF, problem, "Try it in 3 minutes", architecture diagram, invariants, limitations
 - [ ] **Lead:** make the repo public after a final gitleaks run (D3), and settle D8
+- [ ] **Lead:** protect `main` (PR and CI required). GitHub only allows this on a private repo with a paid plan, so it waits until the repo is public
 - [ ] **All:** tag `rc1` at end of day. Bug fixes only after this
 - [ ] Stretch only if gate 3 passed, in this order: Solana, then Heirloom, then the TEE reviewer
 
