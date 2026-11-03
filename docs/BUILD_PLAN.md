@@ -64,7 +64,7 @@ These block work, so settle them at today's standup. Each has a recommended answ
 | D1 | ~~Who fills each role?~~ | Resolved for now: Frank runs everything alone, so every role label in this plan means Frank. Revisit if anyone joins. | Lead | Done |
 | D2 | ~~Was the pre-1 Nov signing spike run?~~ | Resolved: run on 3 Nov and passed. See [SPIKE.md](SPIKE.md). | Lead | Done |
 | D3 | The repo is `Len3hq/convenant` and private, but the product is Covenant and the spec needs a public repo. | Rename to `covenant` today, before links spread. Go public by M11 at the latest, after a gitleaks run. | Lead | 2 Nov (rename), 12 Nov (public) |
-| D4 | Final vault account name | Provisionally `covenant.len3hq.testnet`, deployed on 3 Nov. Change it before funding if you want another name, because the vault addresses derive from it (see C7). | Lead | Before funding |
+| D4 | ~~Final vault account name~~ | Resolved: `covenant.len3hq.testnet`, confirmed on 3 Nov. Don't rename it, because the vault addresses derive from it (see C7). | Lead | Done |
 | D5 | How judges run `make demo` without our keys (see C8) | Commit no key. `make demo` uses a shared agent key sent through the submission form if the form allows it, and otherwise plays the recorded run. Check the form today. | Lead | 4 Nov |
 | D6 | Keep or remove the contract's full-access key? | Keep it through the build so we can redeploy. Remove it, or hand it to the owner multisig, before the final recorded run. Say which in SECURITY.md. | Lead | 6 Nov |
 | D7 | LLM provider | NEAR AI Cloud if its API works by 8 Nov. Otherwise any tool-calling model behind `LLM_BASE_URL`. | B | 8 Nov |
@@ -160,9 +160,10 @@ Checked on 2 Nov 2026. Use these instead of the matching "verify" notes in the s
 
 **Still to do**
 
-- [ ] **Lead:** settle D3 and D4
+- [x] **Lead:** settle D4
+- [ ] **Lead:** settle D3
 - [ ] **Lead:** share the keys in `~/.near-credentials` through the team's password manager; they exist on one machine only
-- [ ] **Lead:** fund the vault addresses below (testnet4 BTC, Base Sepolia ETH, Circle faucet USDC). These faucets need a person. Use small amounts until D4 is final
+- [ ] **Lead:** fund the vault addresses below (testnet4 BTC, Base Sepolia ETH, Circle faucet USDC). These faucets need a person
 
 | Address | Value | Needs |
 | --- | --- | --- |
