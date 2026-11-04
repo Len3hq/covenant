@@ -43,8 +43,24 @@ pub struct ParsedTx {
     pub payments: Vec<Payment>,
     /// Sats, or max wei.
     pub fee: u128,
+    /// The asset the fee is paid in, which for an ERC-20 spend differs from the payment's.
+    pub fee_asset: AssetId,
     /// One per Bitcoin input; one for EVM.
     pub signing_hashes: Vec<[u8; 32]>,
+}
+
+/// What one spend takes from an asset's caps.
+#[near(serializers = [json])]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Charge {
+    pub asset: AssetId,
+    pub amount: U128,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Decision {
+    Sign,
+    Queue,
 }
 
 #[near(serializers = [borsh, json])]
@@ -140,6 +156,60 @@ pub enum CovenantError {
     SignFailed,
 }
 
+/// Sums payments and the fee per asset, so neither splitting outputs nor paying through fees gets a
+/// spend under a cap.
+pub fn charges(parsed: &ParsedTx) -> Result<Vec<Charge>, CovenantError> {
+    let mut charges: Vec<Charge> = Vec::new();
+    let fee = (&parsed.fee_asset, parsed.fee);
+    let payments = parsed.payments.iter().map(|p| (&p.asset, p.amount.0));
+    for (asset, amount) in payments.chain([fee]) {
+        match charges.iter_mut().find(|charge| charge.asset == *asset) {
+            Some(charge) => {
+                charge.amount.0 = charge
+                    .amount
+                    .0
+                    .checked_add(amount)
+                    .ok_or(CovenantError::MalformedTx)?;
+            }
+            None => charges.push(Charge {
+                asset: asset.clone(),
+                amount: U128(amount),
+            }),
+        }
+    }
+    Ok(charges)
+}
+
+/// Checks each charge against its asset's caps. `spent_24h` is what the ledger holds for an asset,
+/// reservations included.
+pub fn check(
+    charges: &[Charge],
+    policy: &Policy,
+    spent_24h: impl Fn(&AssetId) -> u128,
+) -> Result<Decision, CovenantError> {
+    let mut decision = Decision::Sign;
+    for charge in charges {
+        let cap = policy
+            .caps
+            .iter()
+            .find(|cap| cap.asset == charge.asset)
+            .ok_or(CovenantError::AssetNotCapped)?;
+        if charge.amount.0 > cap.per_tx.0 {
+            return Err(CovenantError::PerTxCapExceeded);
+        }
+        let total = spent_24h(&charge.asset)
+            .checked_add(charge.amount.0)
+            .ok_or(CovenantError::DailyCapExceeded)?;
+        if total > cap.per_24h.0 {
+            return Err(CovenantError::DailyCapExceeded);
+        }
+        if charge.amount.0 >= cap.queue_at.0 {
+            decision = Decision::Queue;
+        }
+    }
+    Ok(decision)
+}
+
 impl fmt::Display for CovenantError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(self, f)
@@ -171,6 +241,144 @@ mod tests {
             evm_max_gas_cost: U128(1_000_000_000_000_000),
             veto_delay_ns: 120_000_000_000,
         }
+    }
+
+    fn btc_spend(amounts: &[u128], fee: u128) -> ParsedTx {
+        ParsedTx {
+            payments: amounts
+                .iter()
+                .map(|amount| Payment {
+                    asset: AssetId::Btc,
+                    to: vec![0xaa; 22],
+                    amount: U128(*amount),
+                })
+                .collect(),
+            fee,
+            fee_asset: AssetId::Btc,
+            signing_hashes: vec![[0; 32]],
+        }
+    }
+
+    fn decide(parsed: &ParsedTx, caps: AssetCap, spent: u128) -> Result<Decision, CovenantError> {
+        check(&charges(parsed)?, &policy(vec![caps]), |_| spent)
+    }
+
+    #[test]
+    fn spend_below_every_cap_is_signed() {
+        assert_eq!(
+            decide(&btc_spend(&[40], 9), cap(100, 500, 50), 0),
+            Ok(Decision::Sign)
+        );
+    }
+
+    #[test]
+    fn spend_reaching_queue_threshold_is_queued() {
+        assert_eq!(
+            decide(&btc_spend(&[40], 10), cap(100, 500, 50), 0),
+            Ok(Decision::Queue)
+        );
+    }
+
+    #[test]
+    fn per_tx_cap_is_exact() {
+        let caps = cap(100, 500, 50);
+        assert_eq!(
+            decide(&btc_spend(&[90], 10), caps.clone(), 0),
+            Ok(Decision::Queue)
+        );
+        assert_eq!(
+            decide(&btc_spend(&[90], 11), caps, 0),
+            Err(CovenantError::PerTxCapExceeded)
+        );
+    }
+
+    #[test]
+    fn btc_split_outputs_cannot_dodge_per_tx_cap() {
+        let split = btc_spend(&[40; 8], 1);
+        assert_eq!(
+            decide(&split, cap(100, 500, 50), 0),
+            Err(CovenantError::PerTxCapExceeded)
+        );
+    }
+
+    #[test]
+    fn btc_split_outputs_cannot_dodge_queue() {
+        let split = btc_spend(&[20; 3], 1);
+        assert_eq!(decide(&split, cap(100, 500, 50), 0), Ok(Decision::Queue));
+    }
+
+    #[test]
+    fn btc_fee_counts_against_daily_cap() {
+        let spend = btc_spend(&[40], 5);
+        assert_eq!(decide(&spend, cap(100, 500, 50), 455), Ok(Decision::Sign));
+        assert_eq!(
+            decide(&spend, cap(100, 500, 50), 456),
+            Err(CovenantError::DailyCapExceeded)
+        );
+    }
+
+    #[test]
+    fn self_spend_still_pays_its_fee_from_the_cap() {
+        assert_eq!(
+            decide(&btc_spend(&[], 5), cap(100, 500, 50), 496),
+            Err(CovenantError::DailyCapExceeded)
+        );
+    }
+
+    #[test]
+    fn uncapped_asset_is_refused() {
+        let mut spend = btc_spend(&[40], 5);
+        spend.payments[0].asset = AssetId::Sol;
+        assert_eq!(
+            decide(&spend, cap(100, 500, 50), 0),
+            Err(CovenantError::AssetNotCapped)
+        );
+    }
+
+    #[test]
+    fn token_spend_needs_a_cap_for_its_gas() {
+        let token = AssetId::Erc20 {
+            chain_id: 84532,
+            token: [1; 20],
+        };
+        let gas = AssetId::EvmNative { chain_id: 84532 };
+        let spend = ParsedTx {
+            payments: vec![Payment {
+                asset: token.clone(),
+                to: vec![0xaa; 20],
+                amount: U128(40),
+            }],
+            fee: 5,
+            fee_asset: gas.clone(),
+            signing_hashes: vec![[0; 32]],
+        };
+        let mut token_cap = cap(100, 500, 50);
+        token_cap.asset = token;
+        assert_eq!(
+            decide(&spend, token_cap.clone(), 0),
+            Err(CovenantError::AssetNotCapped)
+        );
+        let mut gas_cap = cap(100, 500, 50);
+        gas_cap.asset = gas;
+        let both = policy(vec![token_cap, gas_cap]);
+        assert_eq!(
+            check(&charges(&spend).unwrap(), &both, |_| 0),
+            Ok(Decision::Sign)
+        );
+    }
+
+    #[test]
+    fn charges_that_overflow_are_refused() {
+        let spend = btc_spend(&[u128::MAX, 1], 0);
+        assert_eq!(charges(&spend), Err(CovenantError::MalformedTx));
+    }
+
+    #[test]
+    fn spent_that_overflows_is_refused() {
+        assert_eq!(
+            decide(&btc_spend(&[40], 5), cap(100, 500, 50), u128::MAX),
+            Err(CovenantError::DailyCapExceeded)
+        );
     }
 
     #[test]

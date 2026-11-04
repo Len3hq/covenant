@@ -5,12 +5,12 @@ import {
   describePayee,
   loadVault,
   vetoDelaySeconds,
+  type Balance,
   type Policy,
   type VaultState,
 } from "./vault";
 
 const upcoming = [
-  { title: "Balances", detail: "BTC, ETH and USDC, with spend in the last 24 h against each cap." },
   { title: "Queue", detail: "Queued spends with a countdown and a veto action." },
   { title: "Activity log", detail: "Signed, rejected, queued and vetoed spends, newest first." },
 ];
@@ -33,6 +33,36 @@ function VaultPanel({ vault }: { vault: VaultState }) {
         <dt>Base Sepolia</dt>
         <dd>{vault.evmAddress}</dd>
       </dl>
+    </section>
+  );
+}
+
+function BalancesPanel({ balances }: { balances: Balance[] }) {
+  return (
+    <section className="wide">
+      <h2>Balances</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Asset</th>
+            <th>Balance</th>
+            <th>Spent in 24 h</th>
+            <th>Limit per 24 h</th>
+            <th>Unit</th>
+          </tr>
+        </thead>
+        <tbody>
+          {balances.map(({ name, unit, balance, spent24h, per24h }) => (
+            <tr key={name}>
+              <td>{name}</td>
+              <td>{balance ?? "Unavailable"}</td>
+              <td>{spent24h}</td>
+              <td>{per24h}</td>
+              <td>{unit}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </section>
   );
 }
@@ -103,6 +133,7 @@ export function Dashboard({ accountId, status }: { accountId: string; status: Va
       </header>
       <div className="panels">
         {status.kind === "ready" && <VaultPanel vault={status.vault} />}
+        {status.kind === "ready" && <BalancesPanel balances={status.vault.balances} />}
         {status.kind === "ready" && <PolicyPanel policy={status.vault.policy} />}
         {upcoming.map(({ title, detail }) => (
           <section key={title}>

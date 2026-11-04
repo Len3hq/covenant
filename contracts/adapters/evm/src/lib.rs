@@ -173,6 +173,7 @@ pub fn parse(tx: &[u8], policy: &Policy) -> Result<ParsedTx, CovenantError> {
     Ok(ParsedTx {
         payments: vec![payment],
         fee: gas_cost,
+        fee_asset: AssetId::EvmNative { chain_id },
         signing_hashes: vec![env::keccak256_array(tx)],
     })
 }

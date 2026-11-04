@@ -310,6 +310,7 @@ pub fn parse(
     Ok(ParsedTx {
         payments,
         fee: fee as u128,
+        fee_asset: AssetId::Btc,
         signing_hashes: sighashes(&unsigned, &amounts, &pubkey_hash),
     })
 }

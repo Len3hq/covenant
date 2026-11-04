@@ -110,13 +110,13 @@ async fn non_agent_cannot_propose() -> anyhow::Result<()> {
     for caller in [&v.owner, &v.guardian, &v.stranger] {
         assert_refused(caller, &v.contract, "propose_spend", proposal(), "NotAgent").await?;
     }
-    // The agent gets past the access check and hits the fail-closed stub.
+    // The agent gets past the access check, and only then do the empty bytes fail.
     assert_refused(
         &v.agent,
         &v.contract,
         "propose_spend",
         proposal(),
-        "not implemented",
+        "MalformedTx",
     )
     .await
 }

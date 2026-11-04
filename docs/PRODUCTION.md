@@ -56,7 +56,8 @@ Make a new backup whenever a key changes.
 - [ ] Create the agent's function-call key: receiver `covenant.len3hq.testnet`, methods `propose_spend`
       and `execute`, allowance 1 NEAR.
 - [ ] Confirm `agent_key_cannot_call_set_policy` passes.
-- [ ] Add the real payees to [policy.testnet.json](../scripts/policy.testnet.json).
+- [ ] Replace the throwaway test payee in [policy.testnet.json](../scripts/policy.testnet.json) with the
+      real payees, then run `make set-policy` from the lead's machine.
 - [ ] Settle how judges get access (D5).
 - [ ] Run `make check` and confirm CI is green on `main`.
 
@@ -93,7 +94,7 @@ Requires Node 22 or later and pnpm.
 The dashboard is a static site. Anything named `VITE_*` ends up in the public bundle, so **never give it
 a secret**.
 
-- [ ] Set `VITE_NEAR_RPC_URL` and `VITE_VAULT_ACCOUNT_ID`.
+- [ ] Set `VITE_NEAR_RPC_URL`, `VITE_VAULT_ACCOUNT_ID`, `VITE_BTC_API_URL` and `VITE_EVM_RPC_URL`.
 - [ ] Publish the output of `pnpm --filter @covenant/web build` to a public URL.
 
 ### Funding

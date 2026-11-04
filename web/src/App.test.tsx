@@ -16,13 +16,17 @@ const vault: VaultState = {
     evm_max_gas_cost: "1000000000000000",
     veto_delay_ns: 120_000_000_000,
   },
+  balances: [
+    { name: "BTC", unit: "sats", balance: "738910", spent24h: "20141", per24h: "2000000" },
+    { name: "USDC", unit: "base units", balance: null, spent24h: "0", per24h: "200000000" },
+  ],
 };
 
 describe("App", () => {
   it("renders every panel still to come while it loads", () => {
     const html = renderToString(<App />);
     expect(html).toContain("Reading");
-    for (const title of ["Balances", "Queue", "Activity log"]) {
+    for (const title of ["Queue", "Activity log"]) {
       expect(html).toContain(title);
     }
   });
@@ -40,6 +44,14 @@ describe("Dashboard", () => {
     expect(html).toContain("sats");
     expect(html).toContain("120 s");
     expect(html).toContain("every payment is refused");
+  });
+
+  it("shows balances and spend, and says when a chain can't be read", () => {
+    const html = renderToString(<Dashboard accountId="v" status={{ kind: "ready", vault }} />);
+    expect(html).toContain("Balances");
+    expect(html).toContain("738910");
+    expect(html).toContain("20141");
+    expect(html).toContain("Unavailable");
   });
 
   it("shows a read failure instead of pretending to be connected", () => {

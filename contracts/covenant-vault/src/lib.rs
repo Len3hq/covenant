@@ -2,12 +2,22 @@
 //! policy crate decides, and this contract orchestrates: it reserves budget, queues or signs,
 //! and records. See docs/SPEC.md, "Vault contract spec".
 
-use covenant_policy::{AssetId, ChainKind, CovenantError, Payment, Policy, TxMeta};
+use covenant_adapter_bitcoin::BitcoinVault;
+use covenant_policy::{
+    AssetId, ChainKind, Charge, CovenantError, Decision, ParsedTx, Payment, Policy, TxMeta,
+};
 use near_sdk::json_types::{Base64VecU8, U128, U64};
+use near_sdk::serde_json::{self, json};
 use near_sdk::store::{IterableMap, LookupMap};
-use near_sdk::{env, near, AccountId, PanicOnDefault};
+use near_sdk::{env, near, AccountId, Gas, NearToken, PanicOnDefault, Promise, PromiseOrValue};
 
 const NS_PER_24H: u64 = 86_400_000_000_000;
+/// docs/SPIKE.md: the live signer needs 15 Tgas, and 8 joined calls ran at 30.
+const SIGN_GAS: Gas = Gas::from_tgas(30);
+const CALLBACK_GAS: Gas = Gas::from_tgas(20);
+const SECP256K1_DOMAIN: u32 = 0;
+/// Well above a signature's JSON, which is under 300 bytes.
+const MAX_SIGNATURE_LEN: usize = 1024;
 
 #[near(serializers = [borsh, json])]
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -168,17 +178,91 @@ impl CovenantVault {
         }
     }
 
-    /// Not implemented yet: refuses every call after the access and freeze checks.
+    /// Parses, checks and signs a spend. Policy failures return `Rejected` and change nothing;
+    /// auth failures and malformed bytes panic. Spends that must wait out the veto window are
+    /// refused until the queue exists.
     pub fn propose_spend(
         &mut self,
         chain: ChainKind,
         tx: Base64VecU8,
         meta: TxMeta,
-    ) -> SpendOutcome {
+    ) -> PromiseOrValue<SpendOutcome> {
         self.assert_agent();
         self.assert_not_frozen();
-        let _ = (chain, tx, meta, &self.signer, &self.paths, self.next_id);
-        env::panic_str("propose_spend: not implemented")
+        let parsed = match self.parse(chain, &tx.0, &meta) {
+            Ok(parsed) => parsed,
+            Err(CovenantError::MalformedTx) => fail(CovenantError::MalformedTx),
+            Err(error) => return self.reject(chain, vec![], 0, error),
+        };
+        let charges = covenant_policy::charges(&parsed).unwrap_or_else(|error| fail(error));
+        let decision =
+            covenant_policy::check(&charges, &self.policy, |asset| self.spent_24h(asset));
+        match decision {
+            Ok(Decision::Sign) => {}
+            Ok(Decision::Queue) => env::panic_str("propose_spend: queue not implemented"),
+            Err(error) => return self.reject(chain, parsed.payments, parsed.fee, error),
+        }
+
+        let id = self.next_id;
+        self.next_id += 1;
+        let at = env::block_timestamp();
+        for charge in &charges {
+            self.reserve(charge, at);
+        }
+        CovenantEvent::SpendProposed(SpendEvent {
+            id: U64(id),
+            chain,
+            payments: parsed.payments.clone(),
+            fee: U128(parsed.fee),
+            error: None,
+        })
+        .emit();
+        PromiseOrValue::Promise(self.sign_all(id, chain, parsed, charges, at))
+    }
+
+    /// Runs after every `sign` in the join. A failed `sign` doesn't revert the join, so it shows up
+    /// here as a failed result. See docs/SPIKE.md.
+    #[private]
+    #[allow(clippy::too_many_arguments)]
+    pub fn on_signed(
+        &mut self,
+        id: U64,
+        count: u64,
+        chain: ChainKind,
+        payments: Vec<Payment>,
+        fee: U128,
+        charges: Vec<Charge>,
+        at: U64,
+    ) -> SpendOutcome {
+        let signatures: Option<Vec<MpcSignature>> = (0..count)
+            .map(|index| {
+                let bytes = env::promise_result_checked(index, MAX_SIGNATURE_LEN).ok()?;
+                serde_json::from_slice(&bytes).ok()
+            })
+            .collect();
+        let event = SpendEvent {
+            id,
+            chain,
+            payments,
+            fee,
+            error: signatures.is_none().then_some(CovenantError::SignFailed),
+        };
+        match signatures {
+            Some(signatures) => {
+                CovenantEvent::SpendSigned(event).emit();
+                SpendOutcome::Signed { id, signatures }
+            }
+            None => {
+                // A freeze keeps the reservation, because part of the join may have been signed.
+                if !self.frozen {
+                    for charge in &charges {
+                        self.release(charge, at.0);
+                    }
+                }
+                CovenantEvent::SpendRejected(event).emit();
+                SpendOutcome::Rejected(CovenantError::SignFailed)
+            }
+        }
     }
 
     /// Not implemented yet: refuses every call after the access and freeze checks.
@@ -242,15 +326,7 @@ impl CovenantVault {
     }
 
     pub fn get_spent_24h(&self, asset: AssetId) -> U128 {
-        let cutoff = env::block_timestamp().saturating_sub(NS_PER_24H);
-        let spent = self.ledger.get(&asset).map_or(0, |entries| {
-            entries
-                .iter()
-                .filter(|(at, _)| *at > cutoff)
-                .map(|(_, amount)| *amount)
-                .sum()
-        });
-        U128(spent)
+        U128(self.spent_24h(&asset))
     }
 
     pub fn is_frozen(&self) -> bool {
@@ -259,6 +335,114 @@ impl CovenantVault {
 }
 
 impl CovenantVault {
+    fn parse(&self, chain: ChainKind, tx: &[u8], meta: &TxMeta) -> Result<ParsedTx, CovenantError> {
+        match (chain, meta) {
+            (ChainKind::Bitcoin, _) => {
+                let vault = BitcoinVault {
+                    pubkey: &self.btc_pubkey,
+                };
+                covenant_adapter_bitcoin::parse(tx, meta, &self.policy, &vault)
+            }
+            (ChainKind::Evm, TxMeta::Evm) => covenant_adapter_evm::parse(tx, &self.policy),
+            (ChainKind::Evm, _) => Err(CovenantError::MalformedTx),
+            (ChainKind::Solana, _) => env::panic_str("propose_spend: solana not implemented"),
+        }
+    }
+
+    fn reject(
+        &self,
+        chain: ChainKind,
+        payments: Vec<Payment>,
+        fee: u128,
+        error: CovenantError,
+    ) -> PromiseOrValue<SpendOutcome> {
+        CovenantEvent::SpendRejected(SpendEvent {
+            id: U64(self.next_id),
+            chain,
+            payments,
+            fee: U128(fee),
+            error: Some(error),
+        })
+        .emit();
+        PromiseOrValue::Value(SpendOutcome::Rejected(error))
+    }
+
+    fn sign_all(
+        &self,
+        id: u64,
+        chain: ChainKind,
+        parsed: ParsedTx,
+        charges: Vec<Charge>,
+        at: u64,
+    ) -> Promise {
+        let path = match chain {
+            ChainKind::Bitcoin => &self.paths.btc,
+            ChainKind::Evm => &self.paths.evm,
+            ChainKind::Solana => &self.paths.sol,
+        };
+        let count = parsed.signing_hashes.len() as u64;
+        parsed
+            .signing_hashes
+            .iter()
+            .map(|hash| {
+                let args = json!({
+                    "request": {
+                        "payload_v2": { "Ecdsa": hex::encode(hash) },
+                        "path": path,
+                        "domain_id": SECP256K1_DOMAIN,
+                    }
+                });
+                Promise::new(self.signer.clone()).function_call(
+                    "sign".to_string(),
+                    args.to_string().into_bytes(),
+                    NearToken::from_yoctonear(1),
+                    SIGN_GAS,
+                )
+            })
+            .reduce(Promise::and)
+            .unwrap_or_else(|| env::panic_str("nothing to sign"))
+            .then(
+                Self::ext(env::current_account_id())
+                    .with_static_gas(CALLBACK_GAS)
+                    .on_signed(
+                        U64(id),
+                        count,
+                        chain,
+                        parsed.payments,
+                        U128(parsed.fee),
+                        charges,
+                        U64(at),
+                    ),
+            )
+    }
+
+    fn spent_24h(&self, asset: &AssetId) -> u128 {
+        let cutoff = env::block_timestamp().saturating_sub(NS_PER_24H);
+        self.ledger.get(asset).map_or(0, |entries| {
+            entries
+                .iter()
+                .filter(|(at, _)| *at > cutoff)
+                .map(|(_, amount)| *amount)
+                .sum()
+        })
+    }
+
+    fn reserve(&mut self, charge: &Charge, at: u64) {
+        let cutoff = at.saturating_sub(NS_PER_24H);
+        let entries = self.ledger.entry(charge.asset.clone()).or_default();
+        entries.retain(|(entry_at, _)| *entry_at > cutoff);
+        entries.push((at, charge.amount.0));
+    }
+
+    fn release(&mut self, charge: &Charge, at: u64) {
+        if let Some(entries) = self.ledger.get_mut(&charge.asset) {
+            let entry = (at, charge.amount.0);
+            if let Some(index) = entries.iter().position(|e| *e == entry) {
+                entries.remove(index);
+            }
+        }
+    }
+
     fn assert_agent(&self) {
         if env::predecessor_account_id() != self.agent {
             fail(CovenantError::NotAgent);
@@ -384,7 +568,7 @@ mod tests {
     fn non_agent_cannot_reach_propose() {
         let mut vault = vault();
         call_as("owner.testnet");
-        vault.propose_spend(ChainKind::Evm, vec![].into(), TxMeta::Evm);
+        let _ = vault.propose_spend(ChainKind::Evm, vec![].into(), TxMeta::Evm);
     }
 
     #[test]
@@ -394,7 +578,7 @@ mod tests {
         call_as("guardian.testnet");
         vault.freeze();
         call_as("agent.testnet");
-        vault.propose_spend(ChainKind::Evm, vec![].into(), TxMeta::Evm);
+        let _ = vault.propose_spend(ChainKind::Evm, vec![].into(), TxMeta::Evm);
     }
 
     #[test]
@@ -407,10 +591,45 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "not implemented")]
-    fn unimplemented_propose_fails_closed() {
+    #[should_panic(expected = "MalformedTx")]
+    fn malformed_tx_panics() {
         let mut vault = vault();
         call_as("agent.testnet");
-        vault.propose_spend(ChainKind::Evm, vec![].into(), TxMeta::Evm);
+        let _ = vault.propose_spend(ChainKind::Evm, vec![].into(), TxMeta::Evm);
+    }
+
+    #[test]
+    #[should_panic(expected = "MalformedTx")]
+    fn evm_with_bitcoin_meta_panics() {
+        let mut vault = vault();
+        call_as("agent.testnet");
+        let meta = TxMeta::Bitcoin { prev_txs: vec![] };
+        let _ = vault.propose_spend(ChainKind::Evm, vec![].into(), meta);
+    }
+
+    #[test]
+    #[should_panic(expected = "solana not implemented")]
+    fn solana_fails_closed() {
+        let mut vault = vault();
+        call_as("agent.testnet");
+        let _ = vault.propose_spend(ChainKind::Solana, vec![].into(), TxMeta::Solana);
+    }
+
+    #[test]
+    fn release_removes_only_its_own_reservation() {
+        let mut vault = vault();
+        call_as("agent.testnet");
+        let charge = |amount| Charge {
+            asset: AssetId::Btc,
+            amount: U128(amount),
+        };
+        vault.reserve(&charge(30), 1);
+        vault.reserve(&charge(30), 2);
+        vault.reserve(&charge(40), 2);
+        assert_eq!(vault.spent_24h(&AssetId::Btc), 100);
+        vault.release(&charge(30), 2);
+        assert_eq!(vault.spent_24h(&AssetId::Btc), 70);
+        vault.release(&charge(30), 2);
+        assert_eq!(vault.spent_24h(&AssetId::Btc), 70);
     }
 }

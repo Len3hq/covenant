@@ -2,7 +2,7 @@
 
 A contract can request real signatures from the testnet MPC network, including several in one call, and all 21 returned signatures verified against the expected derived key. Run on 3 Nov 2026 against `v1.signer-prod.testnet` version 3.18.0.
 
-The spike contract is [tests/spike](../tests/spike), deployed at `spike.len3hq.testnet`. Each case ran once, so treat the timings as rough, not as a load test.
+The spike contract was deployed at `spike.len3hq.testnet`. Both it and its source, `tests/spike`, were deleted at M3, and the transactions below remain on chain. Each case ran once, so treat the timings as rough, not as a load test.
 
 ## Results
 
@@ -59,4 +59,4 @@ Partial failure doesn't break the caps. SIGHASH_ALL ties each Bitcoin signature 
 
 ## Not covered
 
-This spike signed test hashes. It didn't broadcast anything to Bitcoin or Base, and the vault doesn't sign yet. Those are gates 1 and 2.
+This spike signed test hashes. It didn't broadcast anything to Bitcoin or Base. Those are gates 1 and 2.

@@ -536,17 +536,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "covenant-gas-bench"
-version = "0.1.0"
-dependencies = [
- "covenant-adapter-bitcoin",
- "covenant-adapter-evm",
- "covenant-policy",
- "hex",
- "near-sdk",
-]
-
-[[package]]
 name = "covenant-integration-tests"
 version = "0.1.0"
 dependencies = [
@@ -568,13 +557,6 @@ dependencies = [
 
 [[package]]
 name = "covenant-policy"
-version = "0.1.0"
-dependencies = [
- "near-sdk",
-]
-
-[[package]]
-name = "covenant-spike"
 version = "0.1.0"
 dependencies = [
  "near-sdk",

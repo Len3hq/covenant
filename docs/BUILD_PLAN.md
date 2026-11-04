@@ -208,13 +208,15 @@ Both parsers also pass mutation spot-checks, and `btc_accepts_a_real_testnet4_fu
 
 *Goal: the core claim works once, for real.*
 
-- [ ] **Lead:** `propose_spend` to adapter to `sign` to `on_signed`, reusing the join and callback in `tests/spike`. The vault attaches 1 yoctoNEAR and 30 Tgas per call
-- [ ] **Lead:** delete `tests/spike` and the spike account once this works
-- [ ] **Lead:** delete `tests/gas-bench`, measure the vault itself, and update the README's gas table
-- [ ] **Lead:** TypeScript witness assembly in `agent/src/bitcoin/`: DER encoding, sighash byte, witness, serialization, broadcast
-- [ ] **Lead:** check each signature against the derived key before broadcast
-- [ ] **B:** EVM signing path against the mock signer
-- [ ] **C:** balances panel
+- [x] **Lead:** `propose_spend` to adapter to `sign` to `on_signed`, reusing the join and callback in `tests/spike`. The vault attaches 1 yoctoNEAR and 30 Tgas per call
+- [x] **Lead:** delete `tests/spike` and the spike account once this works
+- [x] **Lead:** delete `tests/gas-bench`, measure the vault itself, and update the README's gas table
+- [x] **Lead:** TypeScript witness assembly in `agent/src/bitcoin/`: DER encoding, sighash byte, witness, serialization, broadcast
+- [x] **Lead:** check each signature against the derived key before broadcast
+- [x] **B:** EVM signing path against the mock signer
+- [x] **C:** balances panel
+
+Brought forward from M4, so the live vault never signs without caps: `per_tx`, the rolling 24 h ledger with reservations, C4, C5, and `Rejected` results. A spend that reaches `queue_at` panics until M5, and the payment went to a throwaway address, whose key is only in the local `.env`.
 
 **Exit check:** a confirmed testnet4 txid in EVIDENCE.md, spent from the vault by a contract-requested signature.
 
@@ -224,9 +226,10 @@ Both parsers also pass mutation spot-checks, and `btc_accepts_a_real_testnet4_fu
 
 *Goal: every rule enforced in one tested place.*
 
-- [ ] **Lead:** per-asset `per_tx`, rolling 24 h ledger with reservations, payee and token allow-lists, fee caps, in `contracts/policy` (with C4 and C5)
-- [ ] **Lead:** rejections log `spend_rejected` and return `Rejected(err)`; auth failures and malformed bytes panic
-- [ ] **Lead:** tests `btc_blocks_split_fee_attack`, `btc_fee_counts_against_daily_cap`, `btc_split_outputs_cannot_dodge_per_tx_cap`, `rejection_emits_event_without_state_change`, `sign_failure_releases_reservation` (covering total and partial failure; the mock signer will need to fail on a chosen call)
+- [x] **Lead:** per-asset `per_tx`, rolling 24 h ledger with reservations, payee and token allow-lists, fee caps, in `contracts/policy` (with C4 and C5) (done early, at M3)
+- [x] **Lead:** rejections log `spend_rejected` and return `Rejected(err)`; auth failures and malformed bytes panic (done early, at M3)
+- [x] **Lead:** tests `btc_fee_counts_against_daily_cap`, `btc_split_outputs_cannot_dodge_per_tx_cap`, `rejection_emits_event_without_state_change`, `sign_failure_releases_reservation`, covering total and partial failure (done early, at M3)
+- [ ] **Lead:** test `btc_blocks_split_fee_attack`
 - [ ] **C:** `prop_daily_cap_never_exceeded`, `concurrent_proposals_respect_daily_cap`
 - [ ] **B:** EVM live signing on testnet: native ETH transfer confirmed on Base Sepolia
 
@@ -368,8 +371,8 @@ The spec's target is 40 or more named tests. Tick each one when it passes in CI.
 - [x] `btc_rejects_too_many_inputs`
 - [x] `btc_rejects_op_return`
 - [x] `btc_sighash_matches_bip143_vectors`
-- [ ] `btc_fee_counts_against_daily_cap` (new, C4)
-- [ ] `btc_split_outputs_cannot_dodge_per_tx_cap` (new, C5)
+- [x] `btc_fee_counts_against_daily_cap` (new, C4)
+- [x] `btc_split_outputs_cannot_dodge_per_tx_cap` (new, C5)
 
 **EVM**
 
@@ -405,9 +408,9 @@ The spec's target is 40 or more named tests. Tick each one when it passes in CI.
 - [ ] `vetoed_spend_cannot_execute`
 - [ ] `execute_rechecks_tightened_policy`
 - [ ] `execute_after_long_delay_respects_daily_cap` (new, C6)
-- [ ] `sign_failure_releases_reservation`
+- [x] `sign_failure_releases_reservation`
 - [ ] `concurrent_proposals_respect_daily_cap`
-- [ ] `rejection_emits_event_without_state_change`
+- [x] `rejection_emits_event_without_state_change`
 - [ ] `queue_full_rejects`
 
 ## If we fall behind

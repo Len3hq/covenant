@@ -5,10 +5,10 @@ Bitcoin and EVM chains through Chain Signatures, and it signs a spend only after
 transaction itself and checking it against one policy. The agent can ask for anything. The contract
 decides what gets signed.
 
-> **Status: early build.** A skeleton of the vault is on NEAR testnet, and a separate spike has
-> proved contract-initiated MPC signing ([docs/SPIKE.md](docs/SPIKE.md)). The adapters parse
-> transactions and compute signing hashes, but the vault doesn't call them yet, so `propose_spend`
-> still refuses every transaction. Progress is tracked in [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md).
+> **Status: in active build.** The vault on NEAR testnet now parses, checks and signs real Bitcoin
+> spends. EVM signing passes in the sandbox and goes live at M4. Spends large enough to need the
+> veto window are refused until the queue exists at M5, and `execute` and `veto` still refuse every
+> call. Progress is tracked in [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md).
 
 ## How a spend works
 
@@ -38,22 +38,21 @@ NEAR limits a transaction to 300 Tgas. A proposal must prepay its own execution,
 
 | Spend | Prev tx size | Proposal receipt (Tgas) | Must prepay (Tgas) | Total burnt (Tgas) |
 | --- | --- | --- | --- | --- |
-| Bitcoin, 1 input | 219 bytes | 2.3 | 52.3 | 5.5 |
-| Bitcoin, 1 input | 9,999 bytes | 3.3 | 53.3 | 6.5 |
-| Bitcoin, 2 inputs | 219 bytes | 2.9 | 82.9 | 7.5 |
-| Bitcoin, 2 inputs | 9,999 bytes | 4.9 | 84.9 | 9.5 |
-| Bitcoin, 3 inputs | 219 bytes | 3.5 | 113.5 | 9.5 |
-| Bitcoin, 3 inputs | 9,999 bytes | 6.4 | 116.4 | 12.5 |
-| Bitcoin, 5 inputs | 219 bytes | 4.6 | 174.6 | 13.5 |
-| Bitcoin, 5 inputs | 9,999 bytes | 9.5 | 179.5 | 18.6 |
-| Bitcoin, 8 inputs | 219 bytes | 6.3 | 266.3 | 19.5 |
-| Bitcoin, 8 inputs | 9,999 bytes | 14.1 | 274.1 | 27.6 |
-| EVM, USDC transfer | n/a | 2.1 | 52.1 | 5.3 |
+| Bitcoin, 1 input | About 220 bytes | 2.8 | 52.8 | 6.5 |
+| Bitcoin, 1 input | About 10,000 bytes | 3.8 | 53.8 | 8.1 |
+| Bitcoin, 2 inputs | About 220 bytes | 3.4 | 83.4 | 8.6 |
+| Bitcoin, 2 inputs | About 10,000 bytes | 5.4 | 85.4 | 11.8 |
+| Bitcoin, 3 inputs | About 220 bytes | 4.0 | 114.0 | 10.6 |
+| Bitcoin, 3 inputs | About 10,000 bytes | 6.9 | 116.9 | 15.4 |
+| Bitcoin, 5 inputs | About 220 bytes | 5.1 | 175.1 | 14.7 |
+| Bitcoin, 5 inputs | About 10,000 bytes | 10.0 | 180.0 | 22.7 |
+| Bitcoin, 8 inputs | About 220 bytes | 6.8 | 266.8 | 20.9 |
+| Bitcoin, 8 inputs | About 10,000 bytes | 14.7 | 274.7 | 33.7 |
+| EVM, USDC transfer | n/a | 2.8 | 52.8 | 6.6 |
 
-`btc_max_inputs` is 3, the spec's target, which needs at most 116.4 Tgas and leaves room for the
-policy checks still to come. Measured on 3 Nov in the sandbox with a 181 KB bench contract running
-the real adapters against the mock signer, so "total burnt" excludes the real MPC network's work.
-The bench has no policy, ledger or queue yet. To reproduce:
+`btc_max_inputs` is 3, the spec's target, which needs at most 116.9 Tgas. Measured on 4 Nov in the
+sandbox on the 263 KB vault itself, including its policy checks and ledger, against the mock signer.
+"Total burnt" therefore excludes the real MPC network's work. To reproduce:
 `make wasm && cargo test -p covenant-integration-tests --test gas_bench -- --nocapture`.
 
 ## Repo map

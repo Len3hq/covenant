@@ -47,6 +47,7 @@ pub struct SignResponse {
 #[derive(Default)]
 pub struct MockSigner {
     fail: bool,
+    fail_after: Option<u64>,
     calls: u64,
 }
 
@@ -55,6 +56,11 @@ impl MockSigner {
     /// Makes every later `sign` fail, to exercise `SignFailed` handling.
     pub fn set_fail(&mut self, fail: bool) {
         self.fail = fail;
+    }
+
+    /// Fails every `sign` once `calls` have succeeded, to exercise a partly failed join.
+    pub fn set_fail_after(&mut self, calls: Option<u64>) {
+        self.fail_after = calls;
     }
 
     pub fn get_calls(&self) -> u64 {
@@ -69,7 +75,7 @@ impl MockSigner {
         if env::prepaid_gas() < MIN_SIGN_GAS {
             env::panic_str("Provided gas is lower than required");
         }
-        if self.fail {
+        if self.fail || self.fail_after.is_some_and(|calls| self.calls >= calls) {
             env::panic_str("mock signer: failing on demand");
         }
         let Payload::Ecdsa(payload) = request.payload_v2 else {

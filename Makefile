@@ -4,7 +4,7 @@ VAULT_MANIFEST := contracts/covenant-vault/Cargo.toml
 MOCK_SIGNER_MANIFEST := tests/mock-signer/Cargo.toml
 
 .DEFAULT_GOAL := help
-.PHONY: help setup fmt lint wasm test build check addresses deploy demo demo-pay demo-attack demo-queue veto freeze testnet-smoke
+.PHONY: help setup fmt lint wasm test build check addresses deploy set-policy pay-btc demo demo-pay demo-attack demo-queue veto freeze testnet-smoke
 
 help: ## List the targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-15s %s\n", $$1, $$2}'
@@ -22,10 +22,9 @@ lint: ## Lint Rust and TypeScript
 	cargo clippy --workspace --all-targets -- -D warnings
 	pnpm -r lint
 
-wasm: ## Build the vault, mock signer and gas bench to target/near/
+wasm: ## Build the vault and mock signer to target/near/
 	cargo near build non-reproducible-wasm --manifest-path $(VAULT_MANIFEST)
 	cargo near build non-reproducible-wasm --manifest-path $(MOCK_SIGNER_MANIFEST)
-	cargo near build non-reproducible-wasm --manifest-path tests/gas-bench/Cargo.toml
 
 test: wasm ## Run all Rust, sandbox and TypeScript tests
 	cargo test --workspace
@@ -42,6 +41,13 @@ addresses: ## Print the vault's Bitcoin and EVM addresses
 
 deploy: wasm ## Deploy the vault to NEAR testnet (needs the near CLI and the vault's key)
 	node --env-file=.env scripts/src/deploy.ts
+
+set-policy: ## Apply scripts/policy.testnet.json to the deployed vault (needs the owner's key)
+	node --env-file=.env scripts/src/set-policy.ts
+
+pay-btc: ## Pay from the vault: make pay-btc TO=<address> SATS=<amount> (needs AGENT_PRIVATE_KEY)
+	pnpm --filter @covenant/agent build
+	node --env-file=.env agent/dist/pay-btc.js $(TO) $(SATS)
 
 demo: demo-pay demo-attack demo-queue ## Run all three judge scenarios
 
