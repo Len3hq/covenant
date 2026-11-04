@@ -2,7 +2,7 @@
 
 This is the plan we follow from an empty repo to a submitted entry by **20:00 UTC on Sat 14 Nov 2026**. Work through milestones M0 to M13 in order of date, and tick boxes as you finish them. [SPEC.md](SPEC.md) holds the detail behind each task.
 
-**Where we are on 3 Nov: 26%.** M0, M1 and M2 have passed their exit checks. Gate 1 is due tomorrow, and all three gates keep their dates.
+**Where we are on 4 Nov: 36%.** M0 to M3 have passed their exit checks, and Gate 1 passed on its due date. M4 is partly done, and all remaining gates keep their dates.
 
 ## How to use this plan
 
@@ -219,6 +219,8 @@ Both parsers also pass mutation spot-checks, and `btc_accepts_a_real_testnet4_fu
 Brought forward from M4, so the live vault never signs without caps: `per_tx`, the rolling 24 h ledger with reservations, C4, C5, and `Rejected` results. A spend that reaches `queue_at` panics until M5, and the payment went to a throwaway address, whose key is only in the local `.env`.
 
 **Exit check:** a confirmed testnet4 txid in EVIDENCE.md, spent from the vault by a contract-requested signature.
+
+Passed on 4 Nov: [`4cffaf61…`](https://mempool.space/testnet4/tx/4cffaf61a766be2d0ca02be13ee43aac0812b1d29986e1b763665c42ce52c07e), confirmed in block 158989.
 
 **If missed by tonight:** apply `btc_max_inputs = 1`. If a single input fails too, escalate to DevRel and put the whole team on it.
 

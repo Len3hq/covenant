@@ -11,7 +11,7 @@ Filled in from real testnet runs.
 
 | Outcome | Chain | NEAR receipt | Chain explorer |
 | --- | --- | --- | --- |
-| BTC payment | Bitcoin testnet4 | [3ZgtQynX…](https://testnet.nearblocks.io/txns/3ZgtQynXR9rr6mU5gvKSHoTRnRZ3FnecxpzAhvZQajQe) | [4cffaf61…](https://mempool.space/testnet4/tx/4cffaf61a766be2d0ca02be13ee43aac0812b1d29986e1b763665c42ce52c07e), awaiting confirmation |
+| BTC payment | Bitcoin testnet4 | [3ZgtQynX…](https://testnet.nearblocks.io/txns/3ZgtQynXR9rr6mU5gvKSHoTRnRZ3FnecxpzAhvZQajQe) | [4cffaf61…](https://mempool.space/testnet4/tx/4cffaf61a766be2d0ca02be13ee43aac0812b1d29986e1b763665c42ce52c07e), confirmed in block 158989 |
 | USDC payment | Base Sepolia | Pending | Pending |
 | Rejected BTC attack (`OutputNotWhitelisted`) | NEAR | [2ZKGhLm1…](https://testnet.nearblocks.io/txns/2ZKGhLm1ye6KwCKrxHs8zeCRmNoG3b8zXRukeowUJGpS) | None: never signed |
 | Rejected EVM approve (`CalldataNotAllowed`) | NEAR | Pending | None: never signed |
