@@ -2,7 +2,7 @@
 
 This is the plan we follow from an empty repo to a submitted entry by **20:00 UTC on Sat 14 Nov 2026**. Work through milestones M0 to M13 in order of date, and tick boxes as you finish them. [SPEC.md](SPEC.md) holds the detail behind each task.
 
-**Where we are on 4 Nov: 36%.** M0 to M3 have passed their exit checks, and Gate 1 passed on its due date. M4 is partly done, and all remaining gates keep their dates.
+**Where we are on 4 Nov: 46%.** M0 to M4 have passed their exit checks, with M4 finished a day early. All remaining gates keep their dates.
 
 ## How to use this plan
 
@@ -236,6 +236,8 @@ Passed on 4 Nov: [`4cffaf61…`](https://mempool.space/testnet4/tx/4cffaf61a766b
 - [x] **B:** EVM live signing on testnet: native ETH transfer confirmed on Base Sepolia ([`0x4638f90c…`](https://sepolia.basescan.org/tx/0x4638f90c74963d32b16cd9cc1928d6c2c5aa6f34b0d3690cdf55586b25f88d8d))
 
 **Exit check:** every policy rule has a named test passing in CI.
+
+Passed on 4 Nov, on `cc83f80`. A spend reaching `queue_at` stays refused until M5.
 
 ### M5: Queue, veto, freeze (to 54%), Fri 6 Nov
 
