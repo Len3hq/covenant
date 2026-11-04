@@ -101,15 +101,15 @@ struct Unsigned<'a> {
     locktime: u32,
 }
 
-fn double_sha256(bytes: &[u8]) -> [u8; 32] {
+pub fn double_sha256(bytes: &[u8]) -> [u8; 32] {
     env::sha256_array(env::sha256_array(bytes))
 }
 
-fn hash160(pubkey: &[u8; 33]) -> [u8; 20] {
+pub fn hash160(pubkey: &[u8; 33]) -> [u8; 20] {
     env::ripemd160_array(env::sha256_array(pubkey))
 }
 
-fn p2wpkh_script(pubkey_hash: &[u8; 20]) -> Vec<u8> {
+pub fn p2wpkh_script(pubkey_hash: &[u8; 20]) -> Vec<u8> {
     let mut script = vec![0x00, 0x14];
     script.extend(pubkey_hash);
     script
@@ -780,6 +780,37 @@ mod tests {
                 .collect();
             assert_eq!(parsed.signing_hashes, expected, "{name}");
         }
+    }
+
+    /// The 2020 SegWit fee attack. Two proposals spend the same two coins, and each understates the
+    /// coin it isn't signing so the fee looks small. Together their signatures would complete a
+    /// transaction that burns a huge fee. Lying means altering a previous transaction, which changes
+    /// its hash, so neither proposal gets a signature.
+    #[test]
+    fn btc_blocks_split_fee_attack() {
+        const REAL: u64 = 1_000_000;
+        const CLAIMED: u64 = 40_000;
+        let first = prev_tx(&[(REAL, own_script())], 1);
+        let second = prev_tx(&[(REAL, own_script())], 2);
+        let tx = unsigned(
+            &[(double_sha256(&first), 0), (double_sha256(&second), 0)],
+            &[(1_039_000, payee_script())],
+        );
+
+        // Honest amounts expose the real fee of 961,000 sats.
+        assert_eq!(run(&tx, &[&first, &second]), Err(CovenantError::FeeTooHigh));
+
+        // Each lie would make the fee look like 1,000 sats.
+        let first_lie = prev_tx(&[(CLAIMED, own_script())], 1);
+        let second_lie = prev_tx(&[(CLAIMED, own_script())], 2);
+        assert_eq!(
+            run(&tx, &[&first, &second_lie]),
+            Err(CovenantError::PrevTxMismatch)
+        );
+        assert_eq!(
+            run(&tx, &[&first_lie, &second]),
+            Err(CovenantError::PrevTxMismatch)
+        );
     }
 
     #[test]

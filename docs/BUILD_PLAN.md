@@ -231,9 +231,9 @@ Passed on 4 Nov: [`4cffaf61…`](https://mempool.space/testnet4/tx/4cffaf61a766b
 - [x] **Lead:** per-asset `per_tx`, rolling 24 h ledger with reservations, payee and token allow-lists, fee caps, in `contracts/policy` (with C4 and C5) (done early, at M3)
 - [x] **Lead:** rejections log `spend_rejected` and return `Rejected(err)`; auth failures and malformed bytes panic (done early, at M3)
 - [x] **Lead:** tests `btc_fee_counts_against_daily_cap`, `btc_split_outputs_cannot_dodge_per_tx_cap`, `rejection_emits_event_without_state_change`, `sign_failure_releases_reservation`, covering total and partial failure (done early, at M3)
-- [ ] **Lead:** test `btc_blocks_split_fee_attack`
-- [ ] **C:** `prop_daily_cap_never_exceeded`, `concurrent_proposals_respect_daily_cap`
-- [ ] **B:** EVM live signing on testnet: native ETH transfer confirmed on Base Sepolia
+- [x] **Lead:** test `btc_blocks_split_fee_attack`
+- [x] **C:** `prop_daily_cap_never_exceeded`, `concurrent_proposals_respect_daily_cap`. Vetoes join the property test at M5
+- [x] **B:** EVM live signing on testnet: native ETH transfer confirmed on Base Sepolia ([`0x4638f90c…`](https://sepolia.basescan.org/tx/0x4638f90c74963d32b16cd9cc1928d6c2c5aa6f34b0d3690cdf55586b25f88d8d))
 
 **Exit check:** every policy rule has a named test passing in CI.
 
@@ -367,7 +367,7 @@ The spec's target is 40 or more named tests. Tick each one when it passes in CI.
 - [x] `btc_rejects_fee_rate_above_cap`
 - [x] `btc_rejects_prev_tx_mismatch`
 - [x] `btc_rejects_input_not_owned`
-- [ ] `btc_blocks_split_fee_attack`
+- [x] `btc_blocks_split_fee_attack`
 - [x] `btc_rejects_witness_serialization`
 - [x] `btc_rejects_witness_prev_tx` (new, C2)
 - [x] `btc_rejects_too_many_inputs`
@@ -397,7 +397,7 @@ The spec's target is 40 or more named tests. Tick each one when it passes in CI.
 **Property**
 
 - [ ] `prop_mutated_allowed_tx_never_changes_payments_silently`
-- [ ] `prop_daily_cap_never_exceeded`
+- [x] `prop_daily_cap_never_exceeded`
 - [ ] `prop_evm_only_two_shapes_sign`
 
 **Integration**
@@ -411,7 +411,7 @@ The spec's target is 40 or more named tests. Tick each one when it passes in CI.
 - [ ] `execute_rechecks_tightened_policy`
 - [ ] `execute_after_long_delay_respects_daily_cap` (new, C6)
 - [x] `sign_failure_releases_reservation`
-- [ ] `concurrent_proposals_respect_daily_cap`
+- [x] `concurrent_proposals_respect_daily_cap`
 - [x] `rejection_emits_event_without_state_change`
 - [ ] `queue_full_rejects`
 

@@ -27,7 +27,12 @@ function prevTx(salt: number, value: bigint): Transaction {
 const PREVS = [prevTx(1, 5_000n), prevTx(2, 500_000n), prevTx(3, 254_051n)];
 const scriptCode = payments.p2pkh({ hash: hash160(PUBKEY) }).output as Uint8Array;
 
-function mpcSign(tx: Transaction, index: number, value: bigint, highS = false): MpcSignature {
+function mpcSign(
+  tx: Transaction,
+  index: number,
+  value: bigint,
+  highS = false,
+): MpcSignature & { recovery_id: number } {
   const sighash = tx.hashForWitnessV0(index, scriptCode, value, 1);
   const compact = secp256k1.sign(sighash, SECRET, { prehash: false, format: "compact" });
   const r = compact.slice(0, 32);
@@ -36,6 +41,7 @@ function mpcSign(tx: Transaction, index: number, value: bigint, highS = false): 
   return {
     big_r: { affine_point: `02${hex.encode(r)}` },
     s: { scalar: highS ? flipped : hex.encode(s) },
+    recovery_id: 0,
   };
 }
 
@@ -49,6 +55,10 @@ function deps(sign: (tx: Transaction, values: bigint[]) => SpendOutcome): {
   const vault: VaultClient = {
     btcPubkey: async () => PUBKEY,
     btcLimits: async () => ({ maxInputs: 3, maxFeeRate: 50n }),
+    evmAddress: async () => "0x",
+    proposeEvm: async () => {
+      throw new Error("not a Bitcoin proposal");
+    },
     proposeBitcoin: async ({ tx, prevTxs }) => {
       const parsed = Transaction.fromBuffer(Buffer.from(tx));
       proposed = { tx: parsed, prevTxs };
@@ -191,6 +201,7 @@ describe("payBitcoin", () => {
             {
               big_r: { affine_point: `02${hex.encode(compact.slice(0, 32))}` },
               s: { scalar: hex.encode(compact.slice(32)) },
+              recovery_id: 0,
             },
           ],
         },

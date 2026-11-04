@@ -5,10 +5,11 @@ Bitcoin and EVM chains through Chain Signatures, and it signs a spend only after
 transaction itself and checking it against one policy. The agent can ask for anything. The contract
 decides what gets signed.
 
-> **Status: in active build.** The vault on NEAR testnet now parses, checks and signs real Bitcoin
-> spends. EVM signing passes in the sandbox and goes live at M4. Spends large enough to need the
-> veto window are refused until the queue exists at M5, and `execute` and `veto` still refuse every
-> call. Progress is tracked in [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md).
+> **Status: in active build.** The vault on NEAR testnet now parses, checks and signs real spends,
+> with confirmed payments on Bitcoin testnet4 and Base Sepolia ([EVIDENCE.md](EVIDENCE.md)). USDC
+> signing passes in the sandbox and goes live at M6. Spends large enough to need the veto window are
+> refused until the queue exists at M5, and `execute` and `veto` still refuse every call. Progress
+> is tracked in [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md).
 
 ## How a spend works
 

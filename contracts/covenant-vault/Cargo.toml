@@ -18,3 +18,4 @@ covenant-adapter-evm.workspace = true
 
 [dev-dependencies]
 near-sdk = { workspace = true, features = ["unit-testing"] }
+proptest = "1"

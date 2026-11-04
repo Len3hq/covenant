@@ -18,7 +18,8 @@ Instructions for AI agents and new contributors.
 | Show vault addresses | `make addresses` (needs `.env`) |
 | Deploy to testnet | `make deploy` (needs `.env`, the NEAR CLI and the vault's key) |
 | Update the live policy | `make set-policy` (needs the owner's key) |
-| Pay from the vault | `make pay-btc TO=<address> SATS=<amount>` (needs `AGENT_PRIVATE_KEY`) |
+| Pay BTC from the vault | `make pay-btc TO=<address> SATS=<amount>` (needs `AGENT_PRIVATE_KEY`) |
+| Pay ETH from the vault | `make pay-eth TO=<address> WEI=<amount>` (needs `AGENT_PRIVATE_KEY`) |
 | Rust tests, without the sandbox | `cargo test --workspace --exclude covenant-integration-tests` |
 | Sandbox tests | `make wasm && cargo test -p covenant-integration-tests` |
 | TypeScript | `pnpm -r lint`, `pnpm -r test`, `pnpm -r build` |

@@ -5,6 +5,8 @@ mod common;
 use common::*;
 use near_workspaces::result::ExecutionFinalResult;
 use serde_json::{json, Value};
+use std::task::Poll;
+use std::time::Duration;
 
 const PAYMENT: u64 = 50_000;
 const FEE: u64 = 10_000;
@@ -108,6 +110,58 @@ async fn daily_cap_holds_across_spends() -> anyhow::Result<()> {
     let result: Value = propose(&s, honest_spend(1)).await?.into_result()?.json()?;
     assert_eq!(result, json!({ "Rejected": "DailyCapExceeded" }));
     assert_eq!(signer_calls(&s).await?, 2);
+    Ok(())
+}
+
+/// Sent one at a time so each gets its own nonce, without waiting for any of them to finish.
+#[tokio::test]
+async fn concurrent_proposals_respect_daily_cap() -> anyhow::Result<()> {
+    let cap = BtcCap {
+        per_tx: 100_000,
+        per_24h: 2 * (PAYMENT + FEE),
+        queue_at: 100_000,
+    };
+    let s = setup(&cap).await?;
+    let mut pending = Vec::new();
+    for _ in 0..3 {
+        pending.push(
+            s.agent
+                .call(s.vault.id(), "propose_spend")
+                .args_json(honest_spend(1))
+                .max_gas()
+                .transact_async()
+                .await?,
+        );
+    }
+    let mut outcomes = Vec::new();
+    for status in pending {
+        loop {
+            if let Poll::Ready(outcome) = status.status().await? {
+                outcomes.push(outcome);
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    }
+
+    let mut signed = 0;
+    let mut refused = 0;
+    for outcome in outcomes {
+        let result: Value = outcome.into_result()?.json()?;
+        if result.get("Signed").is_some() {
+            signed += 1;
+        } else if result == json!({ "Rejected": "DailyCapExceeded" }) {
+            refused += 1;
+        } else {
+            panic!("unexpected outcome: {result}");
+        }
+    }
+    assert_eq!((signed, refused), (2, 1));
+    assert_eq!(signer_calls(&s).await?, 2);
+    assert_eq!(
+        spent(&s, json!("Btc")).await?,
+        (2 * (PAYMENT + FEE)).to_string()
+    );
     Ok(())
 }
 

@@ -4,7 +4,7 @@ VAULT_MANIFEST := contracts/covenant-vault/Cargo.toml
 MOCK_SIGNER_MANIFEST := tests/mock-signer/Cargo.toml
 
 .DEFAULT_GOAL := help
-.PHONY: help setup fmt lint wasm test build check addresses deploy set-policy pay-btc demo demo-pay demo-attack demo-queue veto freeze testnet-smoke
+.PHONY: help setup fmt lint wasm test build check addresses deploy set-policy pay-btc pay-eth demo demo-pay demo-attack demo-queue veto freeze testnet-smoke
 
 help: ## List the targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-15s %s\n", $$1, $$2}'
@@ -48,6 +48,10 @@ set-policy: ## Apply scripts/policy.testnet.json to the deployed vault (needs th
 pay-btc: ## Pay from the vault: make pay-btc TO=<address> SATS=<amount> (needs AGENT_PRIVATE_KEY)
 	pnpm --filter @covenant/agent build
 	node --env-file=.env agent/dist/pay-btc.js $(TO) $(SATS)
+
+pay-eth: ## Pay from the vault: make pay-eth TO=<address> WEI=<amount> (needs AGENT_PRIVATE_KEY)
+	pnpm --filter @covenant/agent build
+	node --env-file=.env agent/dist/pay-eth.js $(TO) $(WEI)
 
 demo: demo-pay demo-attack demo-queue ## Run all three judge scenarios
 

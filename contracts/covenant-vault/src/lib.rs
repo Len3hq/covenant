@@ -632,4 +632,213 @@ mod tests {
         vault.release(&charge(30), 2);
         assert_eq!(vault.spent_24h(&AssetId::Btc), 70);
     }
+
+    mod daily_cap {
+        use super::*;
+        use covenant_adapter_bitcoin::{double_sha256, hash160, p2wpkh_script};
+        use covenant_policy::{AssetCap, Payee};
+        use near_sdk::{PromiseResult, RuntimeFeesConfig};
+        use proptest::prelude::*;
+
+        const PER_TX: u64 = 100_000;
+        const PER_24H: u64 = 300_000;
+        const HOUR: u64 = NS_PER_24H / 24;
+        const FEE: u64 = 1_000;
+        const SIGNATURE: &str = r#"{"scheme":"Secp256k1","big_r":{"affine_point":"02aa"},"s":{"scalar":"bb"},"recovery_id":0}"#;
+
+        #[derive(Clone, Debug)]
+        enum Step {
+            Propose(u64),
+            /// Settles the oldest proposal still awaiting signatures.
+            Settle {
+                signed: bool,
+            },
+            Wait(u64),
+        }
+
+        /// Payments stay below the queue threshold, which has its own tests.
+        fn steps() -> impl Strategy<Value = Vec<Step>> {
+            let step = prop_oneof![
+                4 => (1_000u64..PER_TX - FEE).prop_map(Step::Propose),
+                3 => any::<bool>().prop_map(|signed| Step::Settle { signed }),
+                1 => (0u64..30).prop_map(|hours| Step::Wait(hours * HOUR)),
+            ];
+            prop::collection::vec(step, 1..40)
+        }
+
+        fn at_time(now: u64, results: Vec<PromiseResult>) {
+            let vault = account("vault.testnet");
+            let caller = if results.is_empty() {
+                account("agent.testnet")
+            } else {
+                vault.clone()
+            };
+            testing_env!(
+                VMContextBuilder::new()
+                    .current_account_id(vault)
+                    .predecessor_account_id(caller)
+                    .block_timestamp(now)
+                    .prepaid_gas(Gas::from_tgas(300))
+                    .build(),
+                near_sdk::test_vm_config(),
+                RuntimeFeesConfig::test(),
+                Default::default(),
+                results,
+            );
+        }
+
+        fn payee() -> Vec<u8> {
+            [vec![0x00, 0x14], vec![0xaa; 20]].concat()
+        }
+
+        fn output(amount: u64, script: &[u8]) -> Vec<u8> {
+            let mut bytes = amount.to_le_bytes().to_vec();
+            bytes.push(script.len() as u8);
+            bytes.extend(script);
+            bytes
+        }
+
+        /// A spend of one fresh coin, with no change.
+        fn proposal(salt: u64, amount: u64, own: &[u8]) -> (Base64VecU8, TxMeta) {
+            let mut prev = vec![2, 0, 0, 0, 1];
+            prev.extend(salt.to_le_bytes());
+            prev.extend([0; 28]);
+            prev.push(0);
+            prev.extend([0xff; 4]);
+            prev.push(1);
+            prev.extend(output(amount + FEE, own));
+            prev.extend([0; 4]);
+
+            let mut tx = vec![2, 0, 0, 0, 1];
+            tx.extend(double_sha256(&prev));
+            tx.extend([0; 4]);
+            tx.push(0);
+            tx.extend([0xfd, 0xff, 0xff, 0xff]);
+            tx.push(1);
+            tx.extend(output(amount, &payee()));
+            tx.extend([0; 4]);
+            let prev_txs = vec![prev.into()];
+            (tx.into(), TxMeta::Bitcoin { prev_txs })
+        }
+
+        /// Starts from empty storage, because the mock keeps it across proptest cases.
+        fn capped_vault() -> CovenantVault {
+            near_sdk::mock::with_mocked_blockchain(|chain| {
+                chain.take_storage();
+            });
+            let mut vault = vault();
+            vault.policy.caps = vec![AssetCap {
+                asset: AssetId::Btc,
+                per_tx: U128(PER_TX as u128),
+                per_24h: U128(PER_24H as u128),
+                queue_at: U128(PER_TX as u128),
+            }];
+            vault.policy.payees = vec![Payee {
+                chain: ChainKind::Bitcoin,
+                to: payee(),
+                label: "supplier".into(),
+            }];
+            vault.policy.btc_max_fee_rate = 1_000;
+            vault
+        }
+
+        struct Awaiting {
+            id: u64,
+            at: u64,
+            amount: u128,
+        }
+
+        fn in_window(charged: &[(u64, u128)], now: u64) -> u128 {
+            charged
+                .iter()
+                .filter(|(at, _)| *at > now.saturating_sub(NS_PER_24H))
+                .map(|(_, amount)| *amount)
+                .sum()
+        }
+
+        proptest! {
+            #![proptest_config(ProptestConfig::with_cases(64))]
+
+            /// A model charges every accepted proposal and refunds only failed ones, separately from
+            /// the vault's ledger. The two must always agree, and neither may pass the cap. Vetoes
+            /// join these sequences at M5.
+            #[test]
+            fn prop_daily_cap_never_exceeded(steps in steps()) {
+                let mut vault = capped_vault();
+                let own = p2wpkh_script(&hash160(&vault.btc_pubkey));
+                let mut now = NS_PER_24H;
+                let mut charged: Vec<(u64, u128)> = Vec::new();
+                let mut awaiting: Vec<Awaiting> = Vec::new();
+
+                for (salt, step) in steps.into_iter().enumerate() {
+                    match step {
+                        Step::Propose(amount) => {
+                            at_time(now, vec![]);
+                            let (tx, meta) = proposal(salt as u64, amount, &own);
+                            let charge = (amount + FEE) as u128;
+                            let room = in_window(&charged, now) + charge <= PER_24H as u128;
+                            let id = vault.next_id;
+                            match vault.propose_spend(ChainKind::Bitcoin, tx, meta) {
+                                PromiseOrValue::Promise(promise) => {
+                                    let _ = promise;
+                                    prop_assert!(room);
+                                    charged.push((now, charge));
+                                    awaiting.push(Awaiting { id, at: now, amount: charge });
+                                }
+                                PromiseOrValue::Value(outcome) => {
+                                    prop_assert!(!room);
+                                    prop_assert_eq!(
+                                        outcome,
+                                        SpendOutcome::Rejected(CovenantError::DailyCapExceeded)
+                                    );
+                                }
+                            }
+                        }
+                        Step::Settle { signed } => {
+                            if awaiting.is_empty() {
+                                continue;
+                            }
+                            let spend = awaiting.remove(0);
+                            let result = if signed {
+                                PromiseResult::Successful(SIGNATURE.as_bytes().to_vec())
+                            } else {
+                                PromiseResult::Failed
+                            };
+                            at_time(now, vec![result]);
+                            let charges = vec![Charge {
+                                asset: AssetId::Btc,
+                                amount: U128(spend.amount),
+                            }];
+                            let outcome = vault.on_signed(
+                                U64(spend.id),
+                                1,
+                                ChainKind::Bitcoin,
+                                vec![],
+                                U128(FEE as u128),
+                                charges,
+                                U64(spend.at),
+                            );
+                            if signed {
+                                let is_signed = matches!(outcome, SpendOutcome::Signed { .. });
+                                prop_assert!(is_signed);
+                            } else {
+                                prop_assert_eq!(
+                                    outcome,
+                                    SpendOutcome::Rejected(CovenantError::SignFailed)
+                                );
+                                let entry = (spend.at, spend.amount);
+                                let index = charged.iter().position(|e| *e == entry).unwrap();
+                                charged.remove(index);
+                            }
+                        }
+                        Step::Wait(ns) => now += ns,
+                    }
+                    at_time(now, vec![]);
+                    let spent = vault.get_spent_24h(AssetId::Btc).0;
+                    prop_assert_eq!(spent, in_window(&charged, now));
+                    prop_assert!(spent <= PER_24H as u128);
+                }
+            }
+        }
+    }
 }
