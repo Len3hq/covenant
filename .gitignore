@@ -8,3 +8,4 @@ agent/spends.json
 *.log
 .DS_Store
 .vscode/
+*.enc
