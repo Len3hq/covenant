@@ -7,8 +7,8 @@ decides what gets signed.
 
 > **Status: in active build.** The vault on NEAR testnet now parses, checks and signs real spends,
 > with confirmed payments on Bitcoin testnet4 and Base Sepolia ([EVIDENCE.md](EVIDENCE.md)). USDC
-> signing passes in the sandbox and goes live at M6. Spends large enough to need the veto window are
-> refused until the queue exists at M5, and `execute` and `veto` still refuse every call. Progress
+> signing passes in the sandbox and goes live at M6. Large spends wait in a veto queue, which the
+> owner or guardian can clear, and the agent finishes a queued spend from M7. Progress
 > is tracked in [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md).
 
 ## How a spend works
@@ -29,7 +29,7 @@ make test    # build the wasm, then run Rust, sandbox and TypeScript tests
 make help    # list every target
 ```
 
-The `demo-*`, `veto`, `freeze` and `testnet-smoke` targets exit with an error naming the
+The `demo-*` and `testnet-smoke` targets exit with an error naming the
 milestone that delivers them.
 
 ## Gas

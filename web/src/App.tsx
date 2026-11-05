@@ -1,19 +1,21 @@
 import { useEffect, useState } from "react";
 import {
   defaultConfig,
+  describeActivity,
   describeAsset,
   describePayee,
+  describePayment,
   loadVault,
+  secondsUntil,
   vetoDelaySeconds,
+  type Activity,
   type Balance,
+  type Pending,
   type Policy,
   type VaultState,
 } from "./vault";
 
-const upcoming = [
-  { title: "Queue", detail: "Queued spends with a countdown and a veto action." },
-  { title: "Activity log", detail: "Signed, rejected, queued and vetoed spends, newest first." },
-];
+const REFRESH_MS = 5_000;
 
 export type VaultStatus =
   | { kind: "loading" }
@@ -118,6 +120,90 @@ function PolicyPanel({ policy }: { policy: Policy }) {
   );
 }
 
+function QueuePanel({ queue, policy, now }: { queue: Pending[]; policy: Policy; now: number }) {
+  return (
+    <section className="wide">
+      <h2>Queue</h2>
+      {queue.length === 0 ? (
+        <p>Nothing is waiting.</p>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>Spend</th>
+              <th>Chain</th>
+              <th>Payments</th>
+              <th>Executable in</th>
+            </tr>
+          </thead>
+          <tbody>
+            {queue.map((spend) => (
+              <tr key={spend.id}>
+                <td>{spend.id}</td>
+                <td>{spend.chain}</td>
+                <td>
+                  {spend.payments.map((payment) => (
+                    <div key={payment.to.join()}>{describePayment(payment, policy)}</div>
+                  ))}
+                </td>
+                <td>{secondsUntil(spend.executable_at, now)} s</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <p>
+        The owner or guardian can stop any of these with <code>make veto ID=&lt;spend&gt;</code>.
+      </p>
+    </section>
+  );
+}
+
+function ActivityPanel({ activity, policy }: { activity: Activity[] | null; policy: Policy }) {
+  return (
+    <section className="wide">
+      <h2>Activity log</h2>
+      {activity === null && <p>Unavailable: the transaction API couldn't be read.</p>}
+      {activity?.length === 0 && <p>Nothing has happened yet.</p>}
+      {activity && activity.length > 0 && (
+        <table>
+          <thead>
+            <tr>
+              <th>Time (UTC)</th>
+              <th>Outcome</th>
+              <th>Chain</th>
+              <th>Payments</th>
+              <th>NEAR transaction</th>
+            </tr>
+          </thead>
+          <tbody>
+            {activity.map((entry, index) => {
+              const { outcome, stopped } = describeActivity(entry);
+              return (
+                <tr key={`${entry.txHash}-${index}`} className={stopped ? "stopped" : undefined}>
+                  <td>{new Date(entry.at).toISOString().slice(0, 19).replace("T", " ")}</td>
+                  <td>{outcome}</td>
+                  <td>{entry.chain ?? ""}</td>
+                  <td>
+                    {entry.payments.map((payment) => (
+                      <div key={payment.to.join()}>{describePayment(payment, policy)}</div>
+                    ))}
+                  </td>
+                  <td>
+                    <a href={`https://testnet.nearblocks.io/txns/${entry.txHash}`}>
+                      {entry.txHash.slice(0, 8)}
+                    </a>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+    </section>
+  );
+}
+
 export function Dashboard({ accountId, status }: { accountId: string; status: VaultStatus }) {
   return (
     <main>
@@ -135,12 +221,12 @@ export function Dashboard({ accountId, status }: { accountId: string; status: Va
         {status.kind === "ready" && <VaultPanel vault={status.vault} />}
         {status.kind === "ready" && <BalancesPanel balances={status.vault.balances} />}
         {status.kind === "ready" && <PolicyPanel policy={status.vault.policy} />}
-        {upcoming.map(({ title, detail }) => (
-          <section key={title}>
-            <h2>{title}</h2>
-            <p>{detail}</p>
-          </section>
-        ))}
+        {status.kind === "ready" && (
+          <QueuePanel queue={status.vault.queue} policy={status.vault.policy} now={Date.now()} />
+        )}
+        {status.kind === "ready" && (
+          <ActivityPanel activity={status.vault.activity} policy={status.vault.policy} />
+        )}
       </div>
     </main>
   );
@@ -151,15 +237,25 @@ export function App() {
 
   useEffect(() => {
     let current = true;
-    loadVault()
-      .then((vault) => {
-        if (current) setStatus({ kind: "ready", vault });
-      })
-      .catch((error: unknown) => {
-        if (current) setStatus({ kind: "error", message: String(error) });
-      });
+    const refresh = () => {
+      loadVault()
+        .then((vault) => {
+          if (current) setStatus({ kind: "ready", vault });
+        })
+        .catch((error: unknown) => {
+          // A failed refresh keeps the last good view on screen.
+          if (current) {
+            setStatus((last) =>
+              last.kind === "ready" ? last : { kind: "error", message: String(error) },
+            );
+          }
+        });
+    };
+    refresh();
+    const timer = setInterval(refresh, REFRESH_MS);
     return () => {
       current = false;
+      clearInterval(timer);
     };
   }, []);
 

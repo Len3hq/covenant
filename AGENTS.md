@@ -18,6 +18,9 @@ Instructions for AI agents and new contributors.
 | Show vault addresses | `make addresses` (needs `.env`) |
 | Deploy to testnet | `make deploy` (needs `.env`, the NEAR CLI and the vault's key) |
 | Update the live policy | `make set-policy` (needs the owner's key) |
+| Veto a queued spend | `make veto ID=<id>` (add `AS=<guardian>` to sign as the guardian) |
+| Freeze or unfreeze the vault | `make freeze`, `make unfreeze` |
+| Replace the guardian | `make set-guardian GUARDIAN=<account>` |
 | Pay BTC from the vault | `make pay-btc TO=<address> SATS=<amount>` (needs `AGENT_PRIVATE_KEY`) |
 | Pay ETH from the vault | `make pay-eth TO=<address> WEI=<amount>` (needs `AGENT_PRIVATE_KEY`) |
 | Rust tests, without the sandbox | `cargo test --workspace --exclude covenant-integration-tests` |

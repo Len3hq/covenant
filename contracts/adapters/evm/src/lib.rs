@@ -175,6 +175,7 @@ pub fn parse(tx: &[u8], policy: &Policy) -> Result<ParsedTx, CovenantError> {
         fee: gas_cost,
         fee_asset: AssetId::EvmNative { chain_id },
         signing_hashes: vec![env::keccak256_array(tx)],
+        vsize: 0,
     })
 }
 
@@ -664,6 +665,92 @@ mod tests {
             );
             let gas_cost: u128 = vector["gas_cost"].as_str().unwrap().parse().unwrap();
             assert_eq!(parsed.fee, gas_cost, "{name}");
+        }
+    }
+
+    /// The two allowed shapes, stated apart from the parser: no calldata and some value, or exactly
+    /// `transfer(address,uint256)` with clean ABI words and no value.
+    fn allowed_shape(value: u128, data: &[u8]) -> bool {
+        if data.is_empty() {
+            return value != 0;
+        }
+        data.len() == 68
+            && data[..4] == [0xa9, 0x05, 0x9c, 0xbb]
+            && data[4..16].iter().all(|byte| *byte == 0)
+            && data[36..52].iter().all(|byte| *byte == 0)
+            && value == 0
+    }
+
+    fn calldata() -> impl proptest::strategy::Strategy<Value = Vec<u8>> {
+        use proptest::prelude::*;
+        let bytes = proptest::collection::vec(any::<u8>(), 0..120);
+        let selector = prop_oneof![
+            Just(TRANSFER_SELECTOR),
+            Just([0x09, 0x5e, 0xa7, 0xb3]),
+            Just([0x23, 0xb8, 0x72, 0xdd]),
+            any::<[u8; 4]>(),
+        ];
+        // Near-valid words, so runs often get past the length check and test what follows.
+        let shaped = (
+            selector,
+            (any::<bool>(), any::<[u8; 12]>()),
+            (any::<bool>(), any::<[u8; 16]>()),
+            any::<u128>(),
+        )
+            .prop_map(
+                |(selector, (clean_address, padding), (clean_amount, high), amount)| {
+                    let mut data = selector.to_vec();
+                    data.extend(if clean_address { [0; 12] } else { padding });
+                    data.extend(PAYEE);
+                    data.extend(if clean_amount { [0; 16] } else { high });
+                    data.extend(amount.to_be_bytes());
+                    data
+                },
+            );
+        prop_oneof![bytes, shaped]
+    }
+
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig::with_cases(1024))]
+
+        #[test]
+        fn prop_evm_only_two_shapes_sign(
+            data in calldata(),
+            value in proptest::prop_oneof![proptest::strategy::Just(0u128), 1u128..1_000],
+            to_token in proptest::prelude::any::<bool>(),
+        ) {
+            let to = if data.is_empty() && !to_token { PAYEE } else { USDC };
+            let tx = Tx { to: to.to_vec(), value, data: data.clone(), ..Tx::native() };
+            if run(&tx).is_ok() {
+                proptest::prop_assert!(allowed_shape(value, &data));
+            } else if allowed_shape(value, &data) {
+                // The only allowed shape still refused here is a native payment to a non-payee.
+                proptest::prop_assert_eq!(to, USDC);
+                proptest::prop_assert!(data.is_empty());
+            }
+        }
+
+        /// Flips bytes of allowed spends. Each is refused, or it still pays a listed payee within
+        /// the gas cap, and it never reuses the signing hash.
+        #[test]
+        fn prop_mutated_allowed_evm_tx_never_pays_elsewhere(
+            flips in proptest::collection::vec((0usize..200, 1u8..=255), 1..4),
+            token in proptest::prelude::any::<bool>(),
+        ) {
+            let tx = if token { Tx::usdc() } else { Tx::native() };
+            let original = tx.encode();
+            let allowed = parse(&original, &policy()).unwrap();
+            let mut mutated = original.clone();
+            for (index, mask) in flips {
+                let index = index % mutated.len();
+                mutated[index] ^= mask;
+            }
+            proptest::prop_assume!(mutated != original);
+            if let Ok(parsed) = parse(&mutated, &policy()) {
+                proptest::prop_assert!(parsed.payments.iter().all(|p| p.to == PAYEE));
+                proptest::prop_assert!(parsed.fee <= MAX_GAS_COST);
+                proptest::prop_assert_ne!(parsed.signing_hashes, allowed.signing_hashes);
+            }
         }
     }
 }

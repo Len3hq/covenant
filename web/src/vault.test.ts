@@ -1,6 +1,14 @@
 import { hex } from "@scure/base";
 import { describe, expect, it } from "vitest";
-import { btcAddress, describeAsset, describePayee, loadVault } from "./vault";
+import {
+  btcAddress,
+  describeActivity,
+  describeAsset,
+  describePayee,
+  loadActivity,
+  loadVault,
+  secondsUntil,
+} from "./vault";
 
 const config = {
   rpcUrl: "https://rpc.example",
@@ -8,6 +16,7 @@ const config = {
   btcApiUrl: "https://btc.example",
   evmRpcUrl: "https://evm.example",
   evmChainId: 84532,
+  txApiUrl: "https://tx.example",
 };
 const USDC = hex.decode("036cbd53842c5426634e7929541ec2318f3dcf7e");
 const PUBKEY = "020377b2259fc3aab0f22b7f433de1695908c943a24e47028206c300da365b6ef7";
@@ -16,6 +25,7 @@ const views: Record<string, unknown> = {
   is_frozen: false,
   get_addresses: { btc_pubkey: PUBKEY, evm_address: "0xabc" },
   get_policy: { caps: [], payees: [] },
+  get_queue: [],
 };
 
 /** Answers like a NEAR RPC node: the return value is JSON, as an array of bytes. */
@@ -28,6 +38,78 @@ const rpc: typeof fetch = async (_url, init) => {
   return new Response(JSON.stringify({ result: { result: [...bytes] } }));
 };
 
+describe("loadActivity", () => {
+  const log = (event: string, data: unknown) =>
+    `EVENT_JSON:${JSON.stringify({ standard: "covenant", version: "1.0.0", event, data })}`;
+
+  function api(logs: Record<string, string[]>, times: Record<string, string>): typeof fetch {
+    return async (url, init) => {
+      if (String(url).endsWith("/v0/account")) {
+        const account_txs = Object.entries(times).map(([transaction_hash, tx_block_timestamp]) => ({
+          transaction_hash,
+          tx_block_timestamp,
+        }));
+        return new Response(JSON.stringify({ account_txs }));
+      }
+      const { tx_hashes: hashes } = JSON.parse(String(init?.body)) as { tx_hashes: string[] };
+      const transactions = hashes.map((hash) => ({
+        transaction: { hash },
+        receipts: (logs[hash] ?? []).map((line) => ({
+          execution_outcome: { outcome: { logs: [line] } },
+        })),
+      }));
+      return new Response(JSON.stringify({ transactions }));
+    };
+  }
+
+  it("reads the vault's events, newest first, and ignores everything else", async () => {
+    const fetcher = api(
+      {
+        old: [
+          log("spend_rejected", [{ id: "1", chain: "Bitcoin", payments: [], fee: "0", error: "OutputNotWhitelisted" }]),
+          "plain log line",
+          'EVENT_JSON:{"standard":"nep141","event":"ft_transfer"}',
+          "EVENT_JSON:{not json",
+        ],
+        recent: [log("frozen", [{ by: "owner.testnet" }])],
+      },
+      { old: "1000000000", recent: "2000000000" },
+    );
+    await expect(loadActivity(config, fetcher)).resolves.toEqual([
+      { event: "frozen", by: "owner.testnet", payments: [], txHash: "recent", at: 2000 },
+      {
+        event: "spend_rejected",
+        id: "1",
+        chain: "Bitcoin",
+        payments: [],
+        fee: "0",
+        error: "OutputNotWhitelisted",
+        txHash: "old",
+        at: 1000,
+      },
+    ]);
+  });
+
+  it("makes no second request for a vault with no transactions", async () => {
+    await expect(loadActivity(config, api({}, {}))).resolves.toEqual([]);
+  });
+});
+
+describe("describeActivity", () => {
+  it("names the error on a refusal and marks it as stopped", () => {
+    expect(
+      describeActivity({ event: "spend_rejected", error: "FeeTooHigh", payments: [], txHash: "", at: 0 }),
+    ).toEqual({ outcome: "Refused: FeeTooHigh", stopped: true });
+  });
+});
+
+describe("secondsUntil", () => {
+  it("counts down to a nanosecond timestamp and stops at zero", () => {
+    expect(secondsUntil("90000000000", 30_000)).toBe(60);
+    expect(secondsUntil("90000000000", 120_000)).toBe(0);
+  });
+});
+
 describe("loadVault", () => {
   it("reads the frozen state, addresses and policy", async () => {
     await expect(loadVault(config, rpc)).resolves.toEqual({
@@ -36,6 +118,8 @@ describe("loadVault", () => {
       evmAddress: "0xabc",
       policy: { caps: [], payees: [] },
       balances: [],
+      queue: [],
+      activity: null,
     });
   });
 

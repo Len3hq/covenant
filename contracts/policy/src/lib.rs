@@ -47,10 +47,12 @@ pub struct ParsedTx {
     pub fee_asset: AssetId,
     /// One per Bitcoin input; one for EVM.
     pub signing_hashes: Vec<[u8; 32]>,
+    /// Bitcoin virtual size, which the fee-rate cap needs. Zero on EVM.
+    pub vsize: u64,
 }
 
 /// What one spend takes from an asset's caps.
-#[near(serializers = [json])]
+#[near(serializers = [borsh, json])]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Charge {
     pub asset: AssetId,
@@ -210,6 +212,44 @@ pub fn check(
     Ok(decision)
 }
 
+/// Repeats the adapter rules that depend on policy, for a spend parsed under an earlier policy. A
+/// queued spend keeps its parsed form rather than its raw transaction, so this works from that.
+pub fn recheck_parsed(
+    chain: ChainKind,
+    parsed: &ParsedTx,
+    policy: &Policy,
+) -> Result<(), CovenantError> {
+    let listed = |payment: &Payment| {
+        policy
+            .payees
+            .iter()
+            .any(|payee| payee.chain == chain && payee.to == payment.to)
+    };
+    if !parsed.payments.iter().all(listed) {
+        return Err(CovenantError::OutputNotWhitelisted);
+    }
+    match (chain, &parsed.fee_asset) {
+        (ChainKind::Bitcoin, _) => {
+            if parsed.signing_hashes.len() > policy.btc_max_inputs as usize {
+                return Err(CovenantError::TooManyInputs);
+            }
+            if parsed.fee > policy.btc_max_fee_rate as u128 * parsed.vsize as u128 {
+                return Err(CovenantError::FeeTooHigh);
+            }
+        }
+        (ChainKind::Evm, AssetId::EvmNative { chain_id }) => {
+            if !policy.evm_chain_ids.contains(chain_id) {
+                return Err(CovenantError::WrongChainId);
+            }
+            if parsed.fee > policy.evm_max_gas_cost.0 {
+                return Err(CovenantError::GasCostTooHigh);
+            }
+        }
+        _ => return Err(CovenantError::MalformedTx),
+    }
+    Ok(())
+}
+
 impl fmt::Display for CovenantError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(self, f)
@@ -256,6 +296,7 @@ mod tests {
             fee,
             fee_asset: AssetId::Btc,
             signing_hashes: vec![[0; 32]],
+            vsize: 100,
         }
     }
 
@@ -351,6 +392,7 @@ mod tests {
             fee: 5,
             fee_asset: gas.clone(),
             signing_hashes: vec![[0; 32]],
+            vsize: 0,
         };
         let mut token_cap = cap(100, 500, 50);
         token_cap.asset = token;
@@ -364,6 +406,72 @@ mod tests {
         assert_eq!(
             check(&charges(&spend).unwrap(), &both, |_| 0),
             Ok(Decision::Sign)
+        );
+    }
+
+    #[test]
+    fn recheck_catches_each_tightened_bitcoin_rule() {
+        let spend = btc_spend(&[40], 5);
+        let mut rules = policy(vec![]);
+        rules.payees = vec![Payee {
+            chain: ChainKind::Bitcoin,
+            to: vec![0xaa; 22],
+            label: "supplier".into(),
+        }];
+        assert_eq!(recheck_parsed(ChainKind::Bitcoin, &spend, &rules), Ok(()));
+
+        let mut other_chain = rules.clone();
+        other_chain.payees[0].chain = ChainKind::Evm;
+        assert_eq!(
+            recheck_parsed(ChainKind::Bitcoin, &spend, &other_chain),
+            Err(CovenantError::OutputNotWhitelisted)
+        );
+        let mut fewer_inputs = rules.clone();
+        fewer_inputs.btc_max_inputs = 0;
+        assert_eq!(
+            recheck_parsed(ChainKind::Bitcoin, &spend, &fewer_inputs),
+            Err(CovenantError::TooManyInputs)
+        );
+        let mut lower_fee = rules;
+        lower_fee.btc_max_fee_rate = 0;
+        assert_eq!(
+            recheck_parsed(ChainKind::Bitcoin, &spend, &lower_fee),
+            Err(CovenantError::FeeTooHigh)
+        );
+    }
+
+    #[test]
+    fn recheck_catches_each_tightened_evm_rule() {
+        let spend = ParsedTx {
+            payments: vec![Payment {
+                asset: AssetId::EvmNative { chain_id: 84532 },
+                to: vec![0xaa; 20],
+                amount: U128(40),
+            }],
+            fee: 5,
+            fee_asset: AssetId::EvmNative { chain_id: 84532 },
+            signing_hashes: vec![[0; 32]],
+            vsize: 0,
+        };
+        let mut rules = policy(vec![]);
+        rules.payees = vec![Payee {
+            chain: ChainKind::Evm,
+            to: vec![0xaa; 20],
+            label: "supplier".into(),
+        }];
+        assert_eq!(recheck_parsed(ChainKind::Evm, &spend, &rules), Ok(()));
+
+        let mut other_chain = rules.clone();
+        other_chain.evm_chain_ids = vec![1];
+        assert_eq!(
+            recheck_parsed(ChainKind::Evm, &spend, &other_chain),
+            Err(CovenantError::WrongChainId)
+        );
+        let mut lower_gas = rules;
+        lower_gas.evm_max_gas_cost = U128(4);
+        assert_eq!(
+            recheck_parsed(ChainKind::Evm, &spend, &lower_gas),
+            Err(CovenantError::GasCostTooHigh)
         );
     }
 

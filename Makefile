@@ -4,7 +4,7 @@ VAULT_MANIFEST := contracts/covenant-vault/Cargo.toml
 MOCK_SIGNER_MANIFEST := tests/mock-signer/Cargo.toml
 
 .DEFAULT_GOAL := help
-.PHONY: help setup fmt lint wasm test build check addresses deploy set-policy pay-btc pay-eth demo demo-pay demo-attack demo-queue veto freeze testnet-smoke
+.PHONY: help setup fmt lint wasm test build check addresses deploy set-policy pay-btc pay-eth demo demo-pay demo-attack demo-queue veto freeze unfreeze set-guardian testnet-smoke
 
 help: ## List the targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-15s %s\n", $$1, $$2}'
@@ -64,11 +64,17 @@ demo-attack: ## Prompt-injected attack, refused by the contract (milestone M8)
 demo-queue: ## Large spend queued for veto (milestone M8)
 	@echo "demo-queue: not implemented yet, see M8 in docs/BUILD_PLAN.md" >&2; exit 1
 
-veto: ## Veto a queued spend as owner (milestone M5)
-	@echo "veto: not implemented yet, see M5 in docs/BUILD_PLAN.md" >&2; exit 1
+veto: ## Veto a queued spend: make veto ID=<spend id> [AS=<guardian account>]
+	node --env-file=.env scripts/src/admin.ts veto $(ID)
 
-freeze: ## Freeze the vault as owner or guardian (milestone M5)
-	@echo "freeze: not implemented yet, see M5 in docs/BUILD_PLAN.md" >&2; exit 1
+freeze: ## Freeze the vault: make freeze [AS=<guardian account>]
+	node --env-file=.env scripts/src/admin.ts freeze
+
+unfreeze: ## Unfreeze the vault, which only the owner can do
+	node --env-file=.env scripts/src/admin.ts unfreeze
+
+set-guardian: ## Replace the guardian: make set-guardian GUARDIAN=<account>
+	node --env-file=.env scripts/src/admin.ts set-guardian $(GUARDIAN)
 
 testnet-smoke: ## Propose one tiny spend on each chain (milestone M6)
 	@echo "testnet-smoke: not implemented yet, see M6 in docs/BUILD_PLAN.md" >&2; exit 1

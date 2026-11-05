@@ -72,7 +72,7 @@ make deploy
 
 - [ ] Deploy the final contract. Redeploying keeps the vault addresses, because they derive from the
       account name and paths.
-- [ ] Apply D6 before the final recorded run: remove the vault's full-access key or hand it to the owner
+- [ ] Apply D6 as the last contract step: remove the vault's full-access key or hand it to the owner
       multisig, and say which in SECURITY.md. **If the key is removed, the contract can't be redeployed**,
       so this comes last.
 
@@ -94,7 +94,7 @@ Requires Node 22 or later and pnpm.
 The dashboard is a static site. Anything named `VITE_*` ends up in the public bundle, so **never give it
 a secret**.
 
-- [ ] Set `VITE_NEAR_RPC_URL`, `VITE_VAULT_ACCOUNT_ID`, `VITE_BTC_API_URL` and `VITE_EVM_RPC_URL`.
+- [ ] Set `VITE_NEAR_RPC_URL`, `VITE_VAULT_ACCOUNT_ID`, `VITE_BTC_API_URL`, `VITE_EVM_RPC_URL` and `VITE_NEAR_TX_API_URL`.
 - [ ] Publish the output of `pnpm --filter @covenant/web build` to a public URL.
 
 ### Funding

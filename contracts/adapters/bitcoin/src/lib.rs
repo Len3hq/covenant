@@ -312,6 +312,7 @@ pub fn parse(
         fee: fee as u128,
         fee_asset: AssetId::Btc,
         signing_hashes: sighashes(&unsigned, &amounts, &pubkey_hash),
+        vsize: vsize as u64,
     })
 }
 
@@ -828,5 +829,37 @@ mod tests {
             parsed.signing_hashes,
             sighashes(&read, &[100_001], &pubkey_hash)
         );
+    }
+
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig::with_cases(512))]
+
+        /// Flips bytes of an allowed spend. It is refused, or it still pays only listed payees
+        /// within the fee cap, and it never reuses a signing hash, so no signature carries over.
+        #[test]
+        fn prop_mutated_allowed_tx_never_changes_payments_silently(
+            flips in proptest::collection::vec((0usize..400, 1u8..=255), 1..4),
+        ) {
+            let (prev, txid) = coin();
+            let original = unsigned(
+                &[(txid, 0)],
+                &[(40_000, payee_script()), (59_000, own_script())],
+            );
+            let allowed = run(&original, &[&prev]).unwrap();
+            let mut mutated = original.clone();
+            for (index, mask) in flips {
+                let index = index % mutated.len();
+                mutated[index] ^= mask;
+            }
+            proptest::prop_assume!(mutated != original);
+            if let Ok(parsed) = run(&mutated, &[&prev]) {
+                let listed = payee_script();
+                proptest::prop_assert!(parsed.payments.iter().all(|p| p.to == listed));
+                proptest::prop_assert!(
+                    parsed.fee <= policy().btc_max_fee_rate as u128 * parsed.vsize as u128
+                );
+                proptest::prop_assert_ne!(parsed.signing_hashes, allowed.signing_hashes.clone());
+            }
+        }
     }
 }

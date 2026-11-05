@@ -8,6 +8,7 @@ export interface VaultConfig {
   btcApiUrl: string;
   evmRpcUrl: string;
   evmChainId: number;
+  txApiUrl: string;
 }
 
 const USDC_BASE_SEPOLIA = "036cbd53842c5426634e7929541ec2318f3dcf7e";
@@ -19,7 +20,11 @@ export const defaultConfig: VaultConfig = {
   btcApiUrl: import.meta.env.VITE_BTC_API_URL ?? "https://mempool.space/testnet4/api",
   evmRpcUrl: import.meta.env.VITE_EVM_RPC_URL ?? "https://sepolia.base.org",
   evmChainId: 84532,
+  txApiUrl: import.meta.env.VITE_NEAR_TX_API_URL ?? "https://tx.test.fastnear.com",
 };
+
+/** Transactions read per refresh. The API takes up to this many hashes at once. */
+const ACTIVITY_LIMIT = 20;
 
 export type Asset =
   | "Btc"
@@ -61,12 +66,43 @@ export interface Balance {
   per24h: string;
 }
 
+export interface Payment {
+  asset: Asset;
+  to: number[];
+  amount: string;
+}
+
+export interface Pending {
+  id: string;
+  chain: Payee["chain"];
+  payments: Payment[];
+  fee: string;
+  queued_at: string;
+  executable_at: string;
+}
+
+export interface Activity {
+  event: string;
+  id?: string;
+  chain?: Payee["chain"];
+  payments: Payment[];
+  fee?: string;
+  error?: string;
+  by?: string;
+  txHash: string;
+  /** Milliseconds since the epoch. */
+  at: number;
+}
+
 export interface VaultState {
   frozen: boolean;
   btcAddress: string;
   evmAddress: string;
   policy: Policy;
   balances: Balance[];
+  queue: Pending[];
+  /** Null when the transaction API couldn't be read. */
+  activity: Activity[] | null;
 }
 
 interface Addresses {
@@ -183,14 +219,89 @@ async function loadBalance(
   };
 }
 
+async function postJson<T>(url: string, body: unknown, fetcher: typeof fetch): Promise<T> {
+  const response = await fetcher(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new Error(`${url} returned ${response.status}`);
+  return (await response.json()) as T;
+}
+
+interface CovenantLog {
+  standard: string;
+  event: string;
+  data?: unknown;
+}
+
+/** The vault's own events. Logs from other contracts in the same transaction are skipped. */
+function parseEvents(logs: string[]): CovenantLog[] {
+  const prefix = "EVENT_JSON:";
+  return logs.flatMap((log) => {
+    if (!log.startsWith(prefix)) return [];
+    try {
+      const parsed = JSON.parse(log.slice(prefix.length)) as CovenantLog;
+      return parsed.standard === "covenant" ? [parsed] : [];
+    } catch {
+      return [];
+    }
+  });
+}
+
+/** Newest first. The contract keeps no history, so this reads its event logs from an indexer. */
+export async function loadActivity(
+  config: VaultConfig = defaultConfig,
+  fetcher: typeof fetch = fetch,
+): Promise<Activity[]> {
+  const { account_txs: all } = await postJson<{
+    account_txs: { transaction_hash: string; tx_block_timestamp: string }[];
+  }>(`${config.txApiUrl}/v0/account`, { account_id: config.accountId }, fetcher);
+  const recent = [...all]
+    .sort((a, b) => Number(BigInt(b.tx_block_timestamp) - BigInt(a.tx_block_timestamp)))
+    .slice(0, ACTIVITY_LIMIT);
+  if (recent.length === 0) return [];
+  const { transactions } = await postJson<{
+    transactions: {
+      transaction: { hash: string };
+      receipts: { execution_outcome: { outcome: { logs: string[] } } }[];
+    }[];
+  }>(
+    `${config.txApiUrl}/v0/transactions`,
+    { tx_hashes: recent.map((tx) => tx.transaction_hash) },
+    fetcher,
+  );
+  const times = new Map(
+    recent.map((tx) => [tx.transaction_hash, Number(BigInt(tx.tx_block_timestamp) / 1_000_000n)]),
+  );
+  return transactions
+    .flatMap(({ transaction, receipts }) =>
+      receipts
+        .flatMap((receipt) => parseEvents(receipt.execution_outcome.outcome.logs))
+        .map(({ event, data }): Activity => {
+          const fields = (Array.isArray(data) ? data[0] : data) as Partial<Activity> | undefined;
+          return {
+            ...fields,
+            event,
+            payments: fields?.payments ?? [],
+            txHash: transaction.hash,
+            at: times.get(transaction.hash) ?? 0,
+          };
+        }),
+    )
+    .sort((a, b) => b.at - a.at);
+}
+
 export async function loadVault(
   config: VaultConfig = defaultConfig,
   fetcher: typeof fetch = fetch,
 ): Promise<VaultState> {
-  const [frozen, addresses, policy] = await Promise.all([
+  const [frozen, addresses, policy, queue, activity] = await Promise.all([
     view<boolean>(config, "is_frozen", fetcher),
     view<Addresses>(config, "get_addresses", fetcher),
     view<Policy>(config, "get_policy", fetcher),
+    view<Pending[]>(config, "get_queue", fetcher),
+    loadActivity(config, fetcher).catch(() => null),
   ]);
   const btc = btcAddress(addresses.btc_pubkey);
   const balances = await Promise.all(
@@ -198,7 +309,15 @@ export async function loadVault(
       loadBalance(config, cap, { btc, evm: addresses.evm_address }, fetcher),
     ),
   );
-  return { frozen, btcAddress: btc, evmAddress: addresses.evm_address, policy, balances };
+  return {
+    frozen,
+    btcAddress: btc,
+    evmAddress: addresses.evm_address,
+    policy,
+    balances,
+    queue,
+    activity,
+  };
 }
 
 function bytesToHex(bytes: number[]): string {
@@ -223,6 +342,45 @@ export function describeAsset(asset: Asset): { name: string; unit: string } {
 export function describePayee(payee: Payee): string {
   const prefix = payee.chain === "Evm" ? "0x" : "";
   return `${payee.label} (${payee.chain}): ${prefix}${bytesToHex(payee.to)}`;
+}
+
+/** Names a payment's destination from the policy, or shows its raw bytes if it's since been removed. */
+export function describePayment(payment: Payment, policy: Policy): string {
+  const { unit, name } = describeAsset(payment.asset);
+  const payee = policy.payees.find((p) => bytesToHex(p.to) === bytesToHex(payment.to));
+  return `${payment.amount} ${unit} of ${name} to ${payee?.label ?? bytesToHex(payment.to)}`;
+}
+
+/** Whole seconds until a nanosecond timestamp from the contract, never below zero. */
+export function secondsUntil(timestampNs: string, nowMs: number): number {
+  const left = BigInt(timestampNs) / 1_000_000_000n - BigInt(Math.floor(nowMs / 1000));
+  return left > 0n ? Number(left) : 0;
+}
+
+/** Plain words for the log, so a screenshot shows what went through and what was stopped. */
+export function describeActivity(entry: Activity): { outcome: string; stopped: boolean } {
+  switch (entry.event) {
+    case "spend_signed":
+      return { outcome: "Signed", stopped: false };
+    case "spend_rejected":
+      return { outcome: `Refused: ${entry.error ?? "unknown"}`, stopped: true };
+    case "spend_queued":
+      return { outcome: "Queued for veto window", stopped: false };
+    case "spend_vetoed":
+      return { outcome: "Vetoed", stopped: true };
+    case "spend_proposed":
+      return { outcome: "Proposed", stopped: false };
+    case "frozen":
+      return { outcome: `Frozen by ${entry.by ?? "unknown"}`, stopped: true };
+    case "unfrozen":
+      return { outcome: `Unfrozen by ${entry.by ?? "unknown"}`, stopped: false };
+    case "policy_updated":
+      return { outcome: "Policy updated", stopped: false };
+    case "guardian_updated":
+      return { outcome: "Guardian replaced", stopped: false };
+    default:
+      return { outcome: entry.event, stopped: false };
+  }
 }
 
 /** Whole seconds, since the delay is only ever shown to a person. */

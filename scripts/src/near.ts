@@ -1,3 +1,5 @@
+import { execFileSync } from "node:child_process";
+
 const CALL_FUNCTION = "call_function";
 
 /** Calls a contract view method over JSON-RPC. */
@@ -36,4 +38,31 @@ export function requireEnv(name: string): string {
   const value = process.env[name];
   if (!value) throw new Error(`${name} is not set. Copy .env.example to .env and fill it in.`);
   return value;
+}
+
+/** Calls a method on the deployed vault through the NEAR CLI, which holds the signer's key. */
+export function callVault(signer: string, method: string, args: unknown): void {
+  execFileSync(
+    "near",
+    [
+      "contract",
+      "call-function",
+      "as-transaction",
+      requireEnv("VAULT_ACCOUNT_ID"),
+      method,
+      "json-args",
+      JSON.stringify(args),
+      "prepaid-gas",
+      "30 Tgas",
+      "attached-deposit",
+      "0 NEAR",
+      "sign-as",
+      signer,
+      "network-config",
+      requireEnv("NEAR_NETWORK"),
+      "sign-with-legacy-keychain",
+      "send",
+    ],
+    { stdio: "inherit" },
+  );
 }

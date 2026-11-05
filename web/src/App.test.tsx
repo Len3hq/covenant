@@ -20,15 +20,13 @@ const vault: VaultState = {
     { name: "BTC", unit: "sats", balance: "738910", spent24h: "20141", per24h: "2000000" },
     { name: "USDC", unit: "base units", balance: null, spent24h: "0", per24h: "200000000" },
   ],
+  queue: [],
+  activity: [],
 };
 
 describe("App", () => {
-  it("renders every panel still to come while it loads", () => {
-    const html = renderToString(<App />);
-    expect(html).toContain("Reading");
-    for (const title of ["Queue", "Activity log"]) {
-      expect(html).toContain(title);
-    }
+  it("says it is reading the vault while it loads", () => {
+    expect(renderToString(<App />)).toContain("Reading");
   });
 });
 
@@ -44,6 +42,53 @@ describe("Dashboard", () => {
     expect(html).toContain("sats");
     expect(html).toContain("120 s");
     expect(html).toContain("every payment is refused");
+  });
+
+  it("shows a queued spend with its wait and how to stop it", () => {
+    const executableAt = String((BigInt(Date.now()) + 90_000n) * 1_000_000n);
+    const queued: VaultState = {
+      ...vault,
+      queue: [
+        {
+          id: "7",
+          chain: "Bitcoin",
+          payments: [{ asset: "Btc", to: [1, 2], amount: "250000" }],
+          fee: "141",
+          queued_at: "0",
+          executable_at: executableAt,
+        },
+      ],
+    };
+    const html = renderToString(
+      <Dashboard accountId="v" status={{ kind: "ready", vault: queued }} />,
+    ).replaceAll("<!-- -->", "");
+    expect(html).toContain("250000 sats of BTC to 0102");
+    expect(html).toMatch(/(89|90) s/);
+    expect(html).toContain("make veto");
+  });
+
+  it("marks refused spends in the log and links each to NEAR", () => {
+    const logged: VaultState = {
+      ...vault,
+      activity: [
+        { event: "spend_rejected", error: "OutputNotWhitelisted", chain: "Bitcoin", payments: [], txHash: "2ZKGhLm1abc", at: 0 },
+        { event: "spend_signed", chain: "Evm", payments: [], txHash: "GpZoGLLmabc", at: 0 },
+      ],
+    };
+    const html = renderToString(
+      <Dashboard accountId="v" status={{ kind: "ready", vault: logged }} />,
+    ).replaceAll("<!-- -->", "");
+    expect(html).toContain("Refused: OutputNotWhitelisted");
+    expect(html).toContain("Signed");
+    expect(html).toContain('class="stopped"');
+    expect(html).toContain("https://testnet.nearblocks.io/txns/2ZKGhLm1abc");
+  });
+
+  it("says when the activity log can't be read", () => {
+    const html = renderToString(
+      <Dashboard accountId="v" status={{ kind: "ready", vault: { ...vault, activity: null } }} />,
+    );
+    expect(html).toContain("Unavailable");
   });
 
   it("shows balances and spend, and says when a chain can't be read", () => {

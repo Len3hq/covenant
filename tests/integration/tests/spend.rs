@@ -204,21 +204,6 @@ async fn sign_failure_releases_reservation() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
-async fn spend_needing_the_veto_window_is_refused_until_the_queue_exists() -> anyhow::Result<()> {
-    let cap = BtcCap {
-        per_tx: 100_000,
-        per_24h: 500_000,
-        queue_at: PAYMENT,
-    };
-    let s = setup(&cap).await?;
-    let failure = format!("{:?}", propose(&s, honest_spend(1)).await?.into_result());
-    assert!(failure.contains("queue not implemented"), "{failure}");
-    assert_eq!(signer_calls(&s).await?, 0);
-    assert_eq!(spent(&s, json!("Btc")).await?, "0");
-    Ok(())
-}
-
-#[tokio::test]
 async fn only_the_vault_can_call_on_signed() -> anyhow::Result<()> {
     let s = setup(&ROOMY).await?;
     propose(&s, honest_spend(1)).await?.into_result()?;

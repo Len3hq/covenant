@@ -549,6 +549,7 @@ dependencies = [
  "covenant-policy",
  "hex",
  "near-sdk",
+ "proptest",
 ]
 
 [[package]]
@@ -558,6 +559,7 @@ dependencies = [
  "covenant-policy",
  "hex",
  "near-sdk",
+ "proptest",
 ]
 
 [[package]]

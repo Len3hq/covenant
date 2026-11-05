@@ -65,10 +65,12 @@ These block work, so settle them at today's standup. Each has a recommended answ
 | D2 | ~~Was the pre-1 Nov signing spike run?~~ | Resolved: run on 3 Nov and passed. See [SPIKE.md](SPIKE.md). | Lead | Done |
 | D3 | The repo is private, but the spec needs a public repo. | Renamed to `Len3hq/covenant` on 3 Nov. Go public by M11 at the latest, after a gitleaks run. | Lead | 12 Nov (public) |
 | D4 | ~~Final vault account name~~ | Resolved: `covenant.len3hq.testnet`, confirmed on 3 Nov. Don't rename it, because the vault addresses derive from it (see C7). | Lead | Done |
-| D5 | How judges run `make demo` without our keys (see C8) | Commit no key. `make demo` uses a shared agent key sent through the submission form if the form allows it, and otherwise plays the recorded run. Check the form today. | Lead | 4 Nov |
-| D6 | Keep or remove the contract's full-access key? | Keep it through the build so we can redeploy. Remove it, or hand it to the owner multisig, before the final recorded run. Say which in SECURITY.md. | Lead | 6 Nov |
+| D5 | How judges run `make demo` without our keys (see C8) | Checked on 5 Nov: the form has no private field, and Claude Code and Codex screen each project by running it against the README. Recommended: `make demo` runs the real contract in the sandbox with the mock signer, labelled as such, and needs no keys. Live evidence is linked beside it. Awaiting Frank's decision. | Lead | 6 Nov |
+| D6 | Keep or remove the contract's full-access key? | Keep it through the build so we can redeploy. Recommended change: remove it on 13 Nov after the fresh-clone test, not before the 11 Nov run, so a late bug can still be fixed. Removal can't be undone. Say which in SECURITY.md. Awaiting Frank's decision. | Lead | 6 Nov |
 | D7 | LLM provider | NEAR AI Cloud if its API works by 8 Nov. Otherwise any tool-calling model behind `LLM_BASE_URL`. | B | 8 Nov |
-| D8 | Prize split and payout wallet | Agree in writing, as the form requires. | Lead | 12 Nov |
+| D8 | Prize split and payout wallet | Prizes are paid in NEAR to the wallet on the form, so use a mainnet account. | Lead | 12 Nov |
+| D10 | Which of the 13 tracks to enter | Recommended: AI Security & Defense, plus Agent Economy. | Lead | 12 Nov |
+| D11 | How the real Sputnik DAO guardian works | Recommended: the owner swaps it in with `set_guardian` (built at M5), using the `sputnikv2.testnet` factory. The 120 s demo vetoes as owner, with one recorded DAO action as proof, since a DAO vote may not fit the window. | Lead | 6 Nov |
 | D9 | ~~Cut the real Sputnik DAO guardian and dashboard policy editing up front, since Frank works alone?~~ | Resolved on 3 Nov: no. Both stay in scope. | Lead | Done |
 
 ## Spec corrections
@@ -243,12 +245,14 @@ Passed on 4 Nov, on `cc83f80`. A spend reaching `queue_at` stays refused until M
 
 *Goal: humans can stop the agent.*
 
-- [ ] **Lead:** queue with `QueueFull`, `execute` with its re-check, `veto` (with C6 and C13)
-- [ ] **Lead:** complete the freeze and guardian rules (with C11), and settle D6
-- [ ] **Lead:** tests `queued_spend_not_executable_before_delay`, `vetoed_spend_cannot_execute`, `execute_rechecks_tightened_policy`, `execute_after_long_delay_respects_daily_cap`, `queue_full_rejects`, `frozen_blocks_propose_and_execute`
+- [x] **Lead:** queue with `QueueFull`, `execute` with its re-check, `veto` (with C6 and C13)
+- [x] **Lead:** complete the freeze and guardian rules (with C11), and add `set_guardian`
+- [ ] **Lead:** settle D6 and D11
+- [x] **Lead:** tests `queued_spend_not_executable_before_delay`, `vetoed_spend_cannot_execute`, `execute_rechecks_tightened_policy`, `execute_after_long_delay_respects_daily_cap`, `queue_full_rejects`, `frozen_blocks_propose_and_execute`
 - [x] **B:** tests `evm_rejects_eip7702_type4`, `evm_rejects_dirty_address_padding`, `evm_rejects_non_canonical_rlp` (done early, with the M1 parser)
-- [ ] **B:** tests `prop_evm_only_two_shapes_sign`, `prop_mutated_allowed_tx_never_changes_payments_silently`
-- [ ] **C:** queue and activity panels; implement `make veto` and `make freeze`
+- [x] **B:** tests `prop_evm_only_two_shapes_sign`, `prop_mutated_allowed_tx_never_changes_payments_silently`
+- [x] **C:** queue and activity panels; implement `make veto` and `make freeze`
+- [ ] **Lead:** redeploy, then veto a queued spend on the live vault
 
 **Exit check:** integration suite green in CI.
 
@@ -261,6 +265,8 @@ Passed on 4 Nov, on `cc83f80`. A spend reaching `queue_at` stays refused until M
 - [ ] **Lead:** test `agent_key_cannot_call_set_policy`, with a real restricted key in the sandbox
 - [ ] **B:** implement `make testnet-smoke`, then add a nightly CI workflow for it
 - [ ] **C:** freeze and veto actions through a NEAR wallet in the dashboard
+- [ ] **C:** policy editing through a NEAR wallet in the dashboard (D9)
+- [ ] **Lead:** create the Sputnik DAO guardian and call `set_guardian` (D9, D11)
 
 **Exit check:** a confirmed USDC tx in EVIDENCE.md.
 
@@ -275,6 +281,7 @@ Passed on 4 Nov, on `cc83f80`. A spend reaching `queue_at` stays refused until M
 - [ ] **B:** Bitcoin build (with C2 and C9) and EVM build, following the spec's build steps
 - [ ] **B:** idempotent `spends.json`, 3 retries with backoff, polling after 60 s, and JSON logs
 - [ ] **B:** implement `make demo-pay`
+- [ ] **B:** finish queued spends: keep the raw transaction in `spends.json`, call `execute`, attach the signatures and broadcast
 - [ ] **C:** Bitcoin attack suite in `tests/attacks/`
 - [ ] **Lead:** review and fix contract findings
 
@@ -342,9 +349,9 @@ Passed on 4 Nov, on `cc83f80`. A spend reaching `queue_at` stays refused until M
 *Goal: submit early. Submissions can't be edited.*
 
 - [ ] **Lead:** tag `v1.0.0-hackathon`; confirm CI is green and gitleaks is clean
-- [ ] **Lead:** update the 1,735-character description to match what shipped
-- [ ] **Lead:** X post saying "Built at NEAR HACKATHON", with the video, repo link and @NEARProtocol
-- [ ] **Lead:** submit at nearhackathon.com/#apply **by 20:00 UTC**, and save a confirmation screenshot
+- [ ] **Lead:** update the description to match what shipped (the form allows 20 to 2,000 characters)
+- [ ] **Lead:** X post saying "Built at NEAR HACKATHON", with the video, repo link, @NEARProtocol and #NEARHackathon
+- [ ] **Lead:** submit at nearhackathon.com/#apply **by 20:00 UTC** (the site's own limit is 23:59 UTC; 20:00 is our margin), and save a confirmation screenshot
 - [ ] **All:** during judging on 16 to 18 Nov, keep the vault funded and the demo key valid. Rotate keys only after judging (C8)
 
 **Exit check:** confirmation screenshot saved. 100%.
@@ -398,24 +405,24 @@ The spec's target is 40 or more named tests. Tick each one when it passes in CI.
 
 **Property**
 
-- [ ] `prop_mutated_allowed_tx_never_changes_payments_silently`
+- [x] `prop_mutated_allowed_tx_never_changes_payments_silently`
 - [x] `prop_daily_cap_never_exceeded`
-- [ ] `prop_evm_only_two_shapes_sign`
+- [x] `prop_evm_only_two_shapes_sign`
 
 **Integration**
 
 - [ ] `agent_key_cannot_call_set_policy`
 - [x] `non_agent_cannot_propose`
-- [ ] `frozen_blocks_propose_and_execute`
+- [x] `frozen_blocks_propose_and_execute`
 - [x] `guardian_can_freeze_not_unfreeze`
-- [ ] `queued_spend_not_executable_before_delay`
-- [ ] `vetoed_spend_cannot_execute`
-- [ ] `execute_rechecks_tightened_policy`
-- [ ] `execute_after_long_delay_respects_daily_cap` (new, C6)
+- [x] `queued_spend_not_executable_before_delay`
+- [x] `vetoed_spend_cannot_execute`
+- [x] `execute_rechecks_tightened_policy`
+- [x] `execute_after_long_delay_respects_daily_cap` (new, C6; a vault unit test, because the sandbox can't skip 24 h)
 - [x] `sign_failure_releases_reservation`
 - [x] `concurrent_proposals_respect_daily_cap`
 - [x] `rejection_emits_event_without_state_change`
-- [ ] `queue_full_rejects`
+- [x] `queue_full_rejects`
 
 ## If we fall behind
 

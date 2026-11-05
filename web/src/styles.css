@@ -77,3 +77,8 @@ dd {
   margin: 0;
   overflow-wrap: anywhere;
 }
+
+tr.stopped td {
+  color: #b42318;
+  font-weight: 600;
+}
