@@ -2,7 +2,7 @@
 
 This is the plan we follow from an empty repo to a submitted entry by **20:00 UTC on Sat 14 Nov 2026**. Work through milestones M0 to M13 in order of date, and tick boxes as you finish them. [SPEC.md](SPEC.md) holds the detail behind each task.
 
-**Where we are on 4 Nov: 46%.** M0 to M4 have passed their exit checks, with M4 finished a day early. All remaining gates keep their dates.
+**Where we are on 5 Nov: 54%.** M0 to M5 have passed their exit checks, with M5 finished a day early. All remaining gates keep their dates. D5, D6, D10 and D11 await Frank's decision.
 
 ## How to use this plan
 
@@ -252,9 +252,11 @@ Passed on 4 Nov, on `cc83f80`. A spend reaching `queue_at` stays refused until M
 - [x] **B:** tests `evm_rejects_eip7702_type4`, `evm_rejects_dirty_address_padding`, `evm_rejects_non_canonical_rlp` (done early, with the M1 parser)
 - [x] **B:** tests `prop_evm_only_two_shapes_sign`, `prop_mutated_allowed_tx_never_changes_payments_silently`
 - [x] **C:** queue and activity panels; implement `make veto` and `make freeze`
-- [ ] **Lead:** redeploy, then veto a queued spend on the live vault
+- [x] **Lead:** redeploy, then veto a queued spend on the live vault ([EVIDENCE.md](../EVIDENCE.md))
 
 **Exit check:** integration suite green in CI.
+
+Passed on 5 Nov, on `279fad9`. D6 and D11 stay open, and the agent can't finish a queued spend until M7, so `execute` is proven in the sandbox only.
 
 ### M6: Gate 2, USDC signed by the contract (to 64%), Sat 7 Nov
 

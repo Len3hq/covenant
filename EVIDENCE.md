@@ -17,4 +17,7 @@ Filled in from real testnet runs.
 | Rejected BTC attack (`OutputNotWhitelisted`) | NEAR | [2ZKGhLm1…](https://testnet.nearblocks.io/txns/2ZKGhLm1ye6KwCKrxHs8zeCRmNoG3b8zXRukeowUJGpS) | None: never signed |
 | Rejected ETH payment to an unlisted address (`OutputNotWhitelisted`) | NEAR | [D9Y2SYED…](https://testnet.nearblocks.io/txns/D9Y2SYEDrHjVx5xKhKWt1XFy34HLU2yD7dugmicPYMxP) | None: never signed |
 | Rejected EVM approve (`CalldataNotAllowed`) | NEAR | Pending | None: never signed |
-| Vetoed spend (`spend_vetoed`) | NEAR | Pending | None: never signed |
+| Large BTC spend queued (`spend_queued`, 260,000 sats) | NEAR | [FGxhcEgh…](https://testnet.nearblocks.io/txns/FGxhcEgh7vqBtFoJ8YQ2jawsuGSV4wJkNVz3N6LEJdc7) | None: never signed |
+| That spend vetoed by the guardian (`spend_vetoed`) | NEAR | [BzEN28qd…](https://testnet.nearblocks.io/txns/BzEN28qduEkrBbFNBHy5Uoo3ZgrjvmtZAGeQP3bJdQex) | None: never signed |
+| Vault frozen by the guardian (`frozen`) | NEAR | [CxUjq6NZ…](https://testnet.nearblocks.io/txns/CxUjq6NZyCvb831XxdFceQdP2Vpvdsmxi8qGUm1ZdshT) | None |
+| Vault unfrozen by the owner (`unfrozen`) | NEAR | [6NkUuBH9…](https://testnet.nearblocks.io/txns/6NkUuBH9sSgSoSkqdEDdtean8sy382PDyduwqkAcyvYC) | None |
