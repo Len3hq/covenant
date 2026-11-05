@@ -1,12 +1,16 @@
 use base64::{engine::general_purpose::STANDARD, Engine};
-use near_workspaces::types::NearToken;
-use near_workspaces::{Account, Contract};
+use near_workspaces::network::Sandbox;
+use near_workspaces::types::{AccessKey, KeyType, NearToken, SecretKey};
+use near_workspaces::{Account, Contract, Worker};
 use serde_json::{json, Value};
 use std::path::Path;
 
+/// What the live agent prepays. The 1 NEAR allowance must cover this at a pessimistic gas price.
+const AGENT_GAS: near_workspaces::types::Gas = near_workspaces::types::Gas::from_tgas(300);
 const WASM: &str = "../../target/near/covenant_vault/covenant_vault.wasm";
 
 struct Vault {
+    worker: Worker<Sandbox>,
     contract: Contract,
     owner: Account,
     guardian: Account,
@@ -42,6 +46,7 @@ async fn vault() -> anyhow::Result<Vault> {
         .await?
         .into_result()?;
     Ok(Vault {
+        worker,
         contract,
         owner,
         guardian,
@@ -88,7 +93,7 @@ async fn assert_refused(
     let outcome = caller
         .call(vault.id(), method)
         .args_json(args)
-        .max_gas()
+        .gas(AGENT_GAS)
         .transact()
         .await?;
     let failure = format!("{:?}", outcome.into_result().unwrap_err());
@@ -102,6 +107,100 @@ async fn assert_refused(
 
 fn proposal() -> Value {
     json!({ "chain": "Evm", "tx": "", "meta": "Evm" })
+}
+
+/// The same key the live agent holds: its account signs, but the chain limits what it can sign.
+#[tokio::test]
+async fn agent_key_cannot_call_set_policy() -> anyhow::Result<()> {
+    let v = vault().await?;
+    let secret = SecretKey::from_random(KeyType::ED25519);
+    let access = AccessKey::function_call_access(
+        v.contract.id(),
+        &["propose_spend", "execute"],
+        Some(NearToken::from_near(1)),
+    );
+    v.agent
+        .batch(v.agent.id())
+        .add_key(secret.public_key(), access)
+        .transact()
+        .await?
+        .into_result()?;
+    let restricted = Account::from_secret_key(v.agent.id().clone(), secret, &v.worker);
+
+    let owner_args: [(&str, Value); 6] = [
+        ("set_policy", json!({ "policy": policy(1) })),
+        ("set_guardian", json!({ "guardian": restricted.id() })),
+        ("freeze", json!({})),
+        ("unfreeze", json!({})),
+        ("veto", json!({ "id": "0" })),
+        ("on_signed", json!({})),
+    ];
+    let before: Value = v.contract.view("get_policy").await?.json()?;
+    for (method, args) in owner_args {
+        let outcome = restricted
+            .call(v.contract.id(), method)
+            .args_json(args)
+            .gas(AGENT_GAS)
+            .transact()
+            .await;
+        let failure = format!("{outcome:?}");
+        assert!(
+            failure.contains("MethodNameMismatch"),
+            "{method}: {failure}"
+        );
+    }
+    assert_eq!(
+        v.contract.view("get_policy").await?.json::<Value>()?,
+        before
+    );
+
+    // It can't touch the vault's money or reach any other contract.
+    let moved = restricted
+        .transfer_near(v.stranger.id(), NearToken::from_yoctonear(1))
+        .await;
+    assert!(
+        format!("{moved:?}").contains("RequiresFullAccess"),
+        "{moved:?}"
+    );
+    let paid = restricted
+        .call(v.contract.id(), "propose_spend")
+        .args_json(proposal())
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(AGENT_GAS)
+        .transact()
+        .await;
+    assert!(
+        format!("{paid:?}").contains("DepositWithFunctionCall"),
+        "{paid:?}"
+    );
+    let elsewhere = restricted
+        .call(v.stranger.id(), "propose_spend")
+        .args_json(proposal())
+        .gas(AGENT_GAS)
+        .transact()
+        .await;
+    assert!(
+        format!("{elsewhere:?}").contains("ReceiverMismatch"),
+        "{elsewhere:?}"
+    );
+
+    // What it is allowed to call reaches the contract, which then applies its own checks.
+    assert_refused(
+        &restricted,
+        &v.contract,
+        "propose_spend",
+        proposal(),
+        "MalformedTx",
+    )
+    .await?;
+    assert_refused(
+        &restricted,
+        &v.contract,
+        "execute",
+        json!({ "id": "0" }),
+        "UnknownSpend",
+    )
+    .await
 }
 
 #[tokio::test]

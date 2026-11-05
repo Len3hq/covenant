@@ -2,7 +2,7 @@
 
 This is the plan we follow from an empty repo to a submitted entry by **20:00 UTC on Sat 14 Nov 2026**. Work through milestones M0 to M13 in order of date, and tick boxes as you finish them. [SPEC.md](SPEC.md) holds the detail behind each task.
 
-**Where we are on 5 Nov: 54%.** M0 to M5 have passed their exit checks, with M5 finished a day early. All remaining gates keep their dates. D5, D6, D10 and D11 await Frank's decision.
+**Where we are on 5 Nov: 64%.** M0 to M6 have passed their exit checks, with M5 a day early and M6 two days early. All remaining gates keep their dates. D5, D6, D10 and D11 were decided on 5 Nov.
 
 ## How to use this plan
 
@@ -65,12 +65,12 @@ These block work, so settle them at today's standup. Each has a recommended answ
 | D2 | ~~Was the pre-1 Nov signing spike run?~~ | Resolved: run on 3 Nov and passed. See [SPIKE.md](SPIKE.md). | Lead | Done |
 | D3 | The repo is private, but the spec needs a public repo. | Renamed to `Len3hq/covenant` on 3 Nov. Go public by M11 at the latest, after a gitleaks run. | Lead | 12 Nov (public) |
 | D4 | ~~Final vault account name~~ | Resolved: `covenant.len3hq.testnet`, confirmed on 3 Nov. Don't rename it, because the vault addresses derive from it (see C7). | Lead | Done |
-| D5 | How judges run `make demo` without our keys (see C8) | Checked on 5 Nov: the form has no private field, and Claude Code and Codex screen each project by running it against the README. Recommended: `make demo` runs the real contract in the sandbox with the mock signer, labelled as such, and needs no keys. Live evidence is linked beside it. Awaiting Frank's decision. | Lead | 6 Nov |
-| D6 | Keep or remove the contract's full-access key? | Keep it through the build so we can redeploy. Recommended change: remove it on 13 Nov after the fresh-clone test, not before the 11 Nov run, so a late bug can still be fixed. Removal can't be undone. Say which in SECURITY.md. Awaiting Frank's decision. | Lead | 6 Nov |
+| D5 | How judges run `make demo` without our keys (see C8) | Checked on 5 Nov: the form has no private field, and Claude Code and Codex screen each project by running it against the README. Decided on 5 Nov: `make demo` runs the real contract in the sandbox with the mock signer, labelled as such, and needs no keys. Live evidence is linked beside it. A `--live` mode uses the real signer for anyone holding a key. | Lead | Done |
+| D6 | Keep or remove the contract's full-access key? | Decided on 5 Nov: keep it through the build, and remove it on 13 Nov after the fresh-clone test, not before the 11 Nov run, so a late bug can still be fixed. Removal can't be undone, so confirm once more on the day. Say so in SECURITY.md. | Lead | Done |
 | D7 | LLM provider | NEAR AI Cloud if its API works by 8 Nov. Otherwise any tool-calling model behind `LLM_BASE_URL`. | B | 8 Nov |
 | D8 | Prize split and payout wallet | Prizes are paid in NEAR to the wallet on the form, so use a mainnet account. | Lead | 12 Nov |
-| D10 | Which of the 13 tracks to enter | Recommended: AI Security & Defense, plus Agent Economy. | Lead | 12 Nov |
-| D11 | How the real Sputnik DAO guardian works | Recommended: the owner swaps it in with `set_guardian` (built at M5), using the `sputnikv2.testnet` factory. The 120 s demo vetoes as owner, with one recorded DAO action as proof, since a DAO vote may not fit the window. | Lead | 6 Nov |
+| D10 | Which of the 13 tracks to enter | Decided on 5 Nov: AI Security & Defense, plus Agent Economy. | Lead | Done |
+| D11 | How the real Sputnik DAO guardian works | Done on 5 Nov: `covenant-guardian.sputnikv2.testnet` is the live guardian, with one council member. A DAO veto took 23 s, inside the 120 s window, so the demo can use it. | Lead | Done |
 | D9 | ~~Cut the real Sputnik DAO guardian and dashboard policy editing up front, since Frank works alone?~~ | Resolved on 3 Nov: no. Both stay in scope. | Lead | Done |
 
 ## Spec corrections
@@ -247,7 +247,7 @@ Passed on 4 Nov, on `cc83f80`. A spend reaching `queue_at` stays refused until M
 
 - [x] **Lead:** queue with `QueueFull`, `execute` with its re-check, `veto` (with C6 and C13)
 - [x] **Lead:** complete the freeze and guardian rules (with C11), and add `set_guardian`
-- [ ] **Lead:** settle D6 and D11
+- [x] **Lead:** settle D6 and D11
 - [x] **Lead:** tests `queued_spend_not_executable_before_delay`, `vetoed_spend_cannot_execute`, `execute_rechecks_tightened_policy`, `execute_after_long_delay_respects_daily_cap`, `queue_full_rejects`, `frozen_blocks_propose_and_execute`
 - [x] **B:** tests `evm_rejects_eip7702_type4`, `evm_rejects_dirty_address_padding`, `evm_rejects_non_canonical_rlp` (done early, with the M1 parser)
 - [x] **B:** tests `prop_evm_only_two_shapes_sign`, `prop_mutated_allowed_tx_never_changes_payments_silently`
@@ -262,15 +262,19 @@ Passed on 5 Nov, on `279fad9`. D6 and D11 stay open, and the agent can't finish 
 
 *Goal: the second chain works, and the agent's key is locked down.*
 
-- [ ] **B:** contract-signed USDC transfer confirmed on Base Sepolia, using viem for serialization and broadcast
-- [ ] **Lead:** create the agent's function-call key (`propose_spend` and `execute` only, 1 NEAR allowance)
-- [ ] **Lead:** test `agent_key_cannot_call_set_policy`, with a real restricted key in the sandbox
-- [ ] **B:** implement `make testnet-smoke`, then add a nightly CI workflow for it
-- [ ] **C:** freeze and veto actions through a NEAR wallet in the dashboard
-- [ ] **C:** policy editing through a NEAR wallet in the dashboard (D9)
-- [ ] **Lead:** create the Sputnik DAO guardian and call `set_guardian` (D9, D11)
+- [x] **B:** contract-signed USDC transfer confirmed on Base Sepolia, using viem for serialization and broadcast
+- [x] **Lead:** create the agent's function-call key (`propose_spend` and `execute` only, 1 NEAR allowance)
+- [x] **Lead:** test `agent_key_cannot_call_set_policy`, with a real restricted key in the sandbox
+- [x] **B:** implement `make testnet-smoke`, then add a nightly CI workflow for it. The workflow stays off until Frank approves storing the agent key as a GitHub secret. ETH, USDC passed live; the Bitcoin half hasn't run, because mempool.space was unreachable
+- [x] **C:** freeze and veto actions through a NEAR wallet in the dashboard. The buttons and picker work in a browser; nobody has signed through a wallet yet
+- [x] **C:** policy editing through a NEAR wallet in the dashboard (D9), with the same limit
+- [x] **Lead:** create the Sputnik DAO guardian and call `set_guardian` (D9, D11)
+- [ ] **Lead:** sign a veto through a real wallet in the browser
+- [ ] **Lead:** run `make testnet-smoke` in full
 
 **Exit check:** a confirmed USDC tx in EVIDENCE.md.
+
+Passed on 5 Nov: [`0xe5ba350b…`](https://sepolia.basescan.org/tx/0xe5ba350b3621cdc7f5dc86affa7b270ec76e69f5655e371652f528db14f2eb97), block 54801922. The key's allowance must stay above about 0.3 NEAR for a 300 Tgas call to pass, and a spend uses about 0.0013 NEAR, so 1 NEAR covers roughly 500 spends. The agent account still holds a full-access key on Frank's machine; remove it with D6.
 
 **If missed by tonight:** ship Bitcoin-only. EVM stays tested and undeployed, and the video says so.
 
@@ -297,7 +301,8 @@ Passed on 5 Nov, on `279fad9`. D6 and D11 stay open, and the agent can't finish 
 - [ ] **B:** `--replay` mode against live testnet; implement `make demo-attack` and `make demo-queue`
 - [ ] **C:** EVM attack suite in `tests/attacks/`
 - [ ] **Lead:** SECURITY.md trust model, including C11 and the spec's limitations
-- [ ] **Lead:** size caps and funding for judge runs (C10), and settle the D5 mechanics
+- [ ] **Lead:** size caps and funding for live runs (C10)
+- [ ] **B:** make `make demo` run keyless in the sandbox, with a `--live` mode (D5)
 
 **Exit check:** all three scenarios pass in replay mode with no LLM key set.
 
@@ -316,7 +321,7 @@ Passed on 5 Nov, on `279fad9`. D6 and D11 stay open, and the agent can't finish 
 
 *Goal: every claim has an explorer link.*
 
-- [ ] **All:** apply D6 first, then run all scenarios on testnet and record the run as the video's fallback footage
+- [ ] **All:** run all scenarios on testnet and record the run as the video's fallback footage (D6 now comes at M12)
 - [ ] **C:** implement `scripts/record-evidence`, and fill EVIDENCE.md: BTC payment, USDC payment, rejected BTC attack, rejected EVM approve, vetoed spend
 - [ ] **C:** count named tests, and put the real number in EVIDENCE.md and the README
 - [ ] **Lead:** multi-input Bitcoin, only if M2's gas numbers allow it
@@ -341,7 +346,8 @@ Passed on 5 Nov, on `279fad9`. D6 and D11 stay open, and the agent can't finish 
 *Goal: someone with none of our setup can run it.*
 
 - [ ] **D or C:** finish the README, and record two video takes. Edit to 2:00 or less, with captions and the real test count
-- [ ] **All:** fresh clone on a clean machine: `make setup && make demo-pay`, with `make demo` under 5 minutes
+- [ ] **All:** fresh clone on a clean machine, with no `.env`: `make setup && make demo`, under 5 minutes (D5)
+- [ ] **Lead:** after that test, apply D6: confirm with Frank, remove the vault's and the agent account's full-access keys, and record the transaction in EVIDENCE.md and SECURITY.md
 - [ ] **Lead:** walk through the [submission checklist](SPEC.md#submission-checklist-1314-nov) and flag gaps
 
 **Exit check:** video exported; fresh clone passes on a machine that has never built this repo.
@@ -413,7 +419,7 @@ The spec's target is 40 or more named tests. Tick each one when it passes in CI.
 
 **Integration**
 
-- [ ] `agent_key_cannot_call_set_policy`
+- [x] `agent_key_cannot_call_set_policy`
 - [x] `non_agent_cannot_propose`
 - [x] `frozen_blocks_propose_and_execute`
 - [x] `guardian_can_freeze_not_unfreeze`

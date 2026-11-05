@@ -40,22 +40,28 @@ export function requireEnv(name: string): string {
   return value;
 }
 
-/** Calls a method on the deployed vault through the NEAR CLI, which holds the signer's key. */
-export function callVault(signer: string, method: string, args: unknown): void {
+/** Calls a contract method through the NEAR CLI, which holds the signer's key. */
+export function callContract(
+  signer: string,
+  contract: string,
+  method: string,
+  args: unknown,
+  options: { gas?: string; deposit?: string } = {},
+): void {
   execFileSync(
     "near",
     [
       "contract",
       "call-function",
       "as-transaction",
-      requireEnv("VAULT_ACCOUNT_ID"),
+      contract,
       method,
       "json-args",
       JSON.stringify(args),
       "prepaid-gas",
-      "30 Tgas",
+      options.gas ?? "30 Tgas",
       "attached-deposit",
-      "0 NEAR",
+      options.deposit ?? "0 NEAR",
       "sign-as",
       signer,
       "network-config",
@@ -65,4 +71,8 @@ export function callVault(signer: string, method: string, args: unknown): void {
     ],
     { stdio: "inherit" },
   );
+}
+
+export function callVault(signer: string, method: string, args: unknown): void {
+  callContract(signer, requireEnv("VAULT_ACCOUNT_ID"), method, args);
 }

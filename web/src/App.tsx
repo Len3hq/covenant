@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   defaultConfig,
   describeActivity,
   describeAsset,
   describePayee,
   describePayment,
+  isShownInLog,
   loadVault,
   secondsUntil,
   vetoDelaySeconds,
@@ -14,6 +15,16 @@ import {
   type Policy,
   type VaultState,
 } from "./vault";
+import {
+  canStop,
+  connectedAccount,
+  parsePolicy,
+  roleOf,
+  send,
+  transactionsFor,
+  walletConnector,
+  type Role,
+} from "./wallet";
 
 const REFRESH_MS = 5_000;
 
@@ -21,6 +32,90 @@ export type VaultStatus =
   | { kind: "loading" }
   | { kind: "error"; message: string }
   | { kind: "ready"; vault: VaultState };
+
+/** What the page can ask a connected wallet to do. Absent when rendering without one. */
+export interface Controls {
+  account: string | null;
+  role: Role;
+  message: string | null;
+  connect(): void;
+  disconnect(): void;
+  act(method: string, args: object): void;
+}
+
+function ControlsBar({ controls, vault }: { controls: Controls; vault: VaultState }) {
+  const { account, role, message } = controls;
+  return (
+    <section className="wide controls">
+      {account ? (
+        <p>
+          Signed in as {account}: {roleLabel(role)}.{" "}
+          <button onClick={controls.disconnect}>Sign out</button>
+        </p>
+      ) : (
+        <p>
+          Read-only. <button onClick={controls.connect}>Connect a NEAR wallet</button> to veto or
+          freeze.
+        </p>
+      )}
+      {canStop(role) && !vault.frozen && (
+        <button className="danger" onClick={() => controls.act("freeze", {})}>
+          Freeze all chains
+        </button>
+      )}
+      {role === "owner" && vault.frozen && (
+        <button onClick={() => controls.act("unfreeze", {})}>Unfreeze</button>
+      )}
+      {role === "council" && (
+        <p>As a council member you propose and vote, so your wallet asks for two signatures.</p>
+      )}
+      {message && <p role="status">{message}</p>}
+    </section>
+  );
+}
+
+function roleLabel(role: Role): string {
+  switch (role) {
+    case "owner":
+      return "owner, so you can set policy, veto, freeze and unfreeze";
+    case "guardian":
+      return "guardian, so you can veto and freeze";
+    case "council":
+      return "guardian DAO council, so you can veto and freeze by vote";
+    case "none":
+      return "no role on this vault";
+  }
+}
+
+function PolicyEditor({ policy, controls }: { policy: Policy; controls: Controls }) {
+  const [text, setText] = useState(() => JSON.stringify(policy, null, 2));
+  const [problem, setProblem] = useState<string | null>(null);
+  return (
+    <details>
+      <summary>Edit policy</summary>
+      <p>The contract checks every rule again, and refuses anything it doesn't accept.</p>
+      <textarea
+        aria-label="Policy JSON"
+        rows={16}
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+      />
+      <button
+        onClick={() => {
+          try {
+            controls.act("set_policy", { policy: parsePolicy(text) });
+            setProblem(null);
+          } catch (error) {
+            setProblem(String(error));
+          }
+        }}
+      >
+        Save policy
+      </button>
+      {problem && <p role="alert">{problem}</p>}
+    </details>
+  );
+}
 
 function VaultPanel({ vault }: { vault: VaultState }) {
   return (
@@ -34,6 +129,13 @@ function VaultPanel({ vault }: { vault: VaultState }) {
         <dd>{vault.btcAddress}</dd>
         <dt>Base Sepolia</dt>
         <dd>{vault.evmAddress}</dd>
+        <dt>Owner</dt>
+        <dd>{vault.roles.owner}</dd>
+        <dt>Guardian</dt>
+        <dd>
+          {vault.roles.guardian ?? "None"}
+          {vault.guardianDao && " (Sputnik DAO)"}
+        </dd>
       </dl>
     </section>
   );
@@ -69,7 +171,7 @@ function BalancesPanel({ balances }: { balances: Balance[] }) {
   );
 }
 
-function PolicyPanel({ policy }: { policy: Policy }) {
+function PolicyPanel({ policy, controls }: { policy: Policy; controls?: Controls }) {
   return (
     <section className="wide">
       <h2>Policy</h2>
@@ -116,11 +218,23 @@ function PolicyPanel({ policy }: { policy: Policy }) {
         <dt>Veto delay</dt>
         <dd>{vetoDelaySeconds(policy)} s</dd>
       </dl>
+      {controls?.role === "owner" && <PolicyEditor policy={policy} controls={controls} />}
     </section>
   );
 }
 
-function QueuePanel({ queue, policy, now }: { queue: Pending[]; policy: Policy; now: number }) {
+function QueuePanel({
+  queue,
+  policy,
+  now,
+  controls,
+}: {
+  queue: Pending[];
+  policy: Policy;
+  now: number;
+  controls?: Controls;
+}) {
+  const canVeto = controls ? canStop(controls.role) : false;
   return (
     <section className="wide">
       <h2>Queue</h2>
@@ -134,6 +248,7 @@ function QueuePanel({ queue, policy, now }: { queue: Pending[]; policy: Policy; 
               <th>Chain</th>
               <th>Payments</th>
               <th>Executable in</th>
+              {canVeto && <th>Stop it</th>}
             </tr>
           </thead>
           <tbody>
@@ -147,14 +262,22 @@ function QueuePanel({ queue, policy, now }: { queue: Pending[]; policy: Policy; 
                   ))}
                 </td>
                 <td>{secondsUntil(spend.executable_at, now)} s</td>
+                {canVeto && (
+                  <td>
+                    <button
+                      className="danger"
+                      onClick={() => controls?.act("veto", { id: spend.id })}
+                    >
+                      Veto
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
         </table>
       )}
-      <p>
-        The owner or guardian can stop any of these with <code>make veto ID=&lt;spend&gt;</code>.
-      </p>
+      <p>The owner or guardian can veto any of these until they execute.</p>
     </section>
   );
 }
@@ -177,13 +300,16 @@ function ActivityPanel({ activity, policy }: { activity: Activity[] | null; poli
             </tr>
           </thead>
           <tbody>
-            {activity.map((entry, index) => {
-              const { outcome, stopped } = describeActivity(entry);
+            {activity.filter(isShownInLog).map((entry, index) => {
+              const { outcome, stopped, signed } = describeActivity(entry);
+              const tone = stopped ? "stopped" : signed ? "signed" : undefined;
               return (
-                <tr key={`${entry.txHash}-${index}`} className={stopped ? "stopped" : undefined}>
-                  <td>{new Date(entry.at).toISOString().slice(0, 19).replace("T", " ")}</td>
+                <tr key={`${entry.txHash}-${index}`} className={tone}>
+                  <td className="nowrap">
+                    {new Date(entry.at).toISOString().slice(0, 19).replace("T", " ")}
+                  </td>
                   <td>{outcome}</td>
-                  <td>{entry.chain ?? ""}</td>
+                  <td className="nowrap">{entry.chain ?? ""}</td>
                   <td>
                     {entry.payments.map((payment) => (
                       <div key={payment.to.join()}>{describePayment(payment, policy)}</div>
@@ -204,7 +330,15 @@ function ActivityPanel({ activity, policy }: { activity: Activity[] | null; poli
   );
 }
 
-export function Dashboard({ accountId, status }: { accountId: string; status: VaultStatus }) {
+export function Dashboard({
+  accountId,
+  status,
+  controls,
+}: {
+  accountId: string;
+  status: VaultStatus;
+  controls?: Controls;
+}) {
   return (
     <main>
       <header>
@@ -215,14 +349,22 @@ export function Dashboard({ accountId, status }: { accountId: string; status: Va
             Couldn't read {accountId}: {status.message}
           </p>
         )}
-        {status.kind === "ready" && <p>Connected to {accountId}, read-only.</p>}
+        {status.kind === "ready" && <p>Connected to {accountId}.</p>}
       </header>
       <div className="panels">
+        {status.kind === "ready" && controls && (
+          <ControlsBar controls={controls} vault={status.vault} />
+        )}
         {status.kind === "ready" && <VaultPanel vault={status.vault} />}
         {status.kind === "ready" && <BalancesPanel balances={status.vault.balances} />}
-        {status.kind === "ready" && <PolicyPanel policy={status.vault.policy} />}
+        {status.kind === "ready" && <PolicyPanel policy={status.vault.policy} controls={controls} />}
         {status.kind === "ready" && (
-          <QueuePanel queue={status.vault.queue} policy={status.vault.policy} now={Date.now()} />
+          <QueuePanel
+            queue={status.vault.queue}
+            policy={status.vault.policy}
+            now={Date.now()}
+            controls={controls}
+          />
         )}
         {status.kind === "ready" && (
           <ActivityPanel activity={status.vault.activity} policy={status.vault.policy} />
@@ -234,10 +376,31 @@ export function Dashboard({ accountId, status }: { accountId: string; status: Va
 
 export function App() {
   const [status, setStatus] = useState<VaultStatus>({ kind: "loading" });
+  const [account, setAccount] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const { accountId, rpcUrl } = defaultConfig;
 
   useEffect(() => {
     let current = true;
+    void connectedAccount(rpcUrl).then((connected) => {
+      if (current) setAccount(connected);
+    });
+    void walletConnector(rpcUrl).then((connector) => {
+      connector.on("wallet:signIn", ({ accounts }) => setAccount(accounts[0]?.accountId ?? null));
+      connector.on("wallet:signOut", () => setAccount(null));
+    });
+    return () => {
+      current = false;
+    };
+  }, [rpcUrl]);
+
+  useEffect(() => {
+    let current = true;
+    let loading = false;
     const refresh = () => {
+      // A slow service mustn't stack up requests behind the timer.
+      if (loading) return;
+      loading = true;
       loadVault()
         .then((vault) => {
           if (current) setStatus({ kind: "ready", vault });
@@ -249,6 +412,9 @@ export function App() {
               last.kind === "ready" ? last : { kind: "error", message: String(error) },
             );
           }
+        })
+        .finally(() => {
+          loading = false;
         });
     };
     refresh();
@@ -259,5 +425,32 @@ export function App() {
     };
   }, []);
 
-  return <Dashboard accountId={defaultConfig.accountId} status={status} />;
+  const vault = status.kind === "ready" ? status.vault : null;
+  const role = vault ? roleOf(account, vault) : "none";
+  const act = useCallback(
+    (method: string, args: object) => {
+      if (!vault) return;
+      setMessage(`Waiting for your wallet to sign ${method}…`);
+      send(rpcUrl, transactionsFor(role, accountId, vault, method, args))
+        .then(() => setMessage(`${method} sent. The page updates within a few seconds.`))
+        .catch((error: unknown) => setMessage(`${method} failed: ${String(error)}`));
+    },
+    [accountId, role, rpcUrl, vault],
+  );
+  const controls: Controls = {
+    account,
+    role,
+    message,
+    connect: () => {
+      void walletConnector(rpcUrl)
+        .then((connector) => connector.connect())
+        .catch((error: unknown) => setMessage(`Couldn't connect: ${String(error)}`));
+    },
+    disconnect: () => {
+      void walletConnector(rpcUrl).then((connector) => connector.disconnect());
+    },
+    act,
+  };
+
+  return <Dashboard accountId={accountId} status={status} controls={controls} />;
 }

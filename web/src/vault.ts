@@ -15,13 +15,16 @@ const USDC_BASE_SEPOLIA = "036cbd53842c5426634e7929541ec2318f3dcf7e";
 const BALANCE_OF = "70a08231";
 
 export const defaultConfig: VaultConfig = {
-  rpcUrl: import.meta.env.VITE_NEAR_RPC_URL ?? "https://rpc.testnet.near.org",
+  rpcUrl: import.meta.env.VITE_NEAR_RPC_URL ?? "https://rpc.testnet.fastnear.com",
   accountId: import.meta.env.VITE_VAULT_ACCOUNT_ID ?? "covenant.len3hq.testnet",
   btcApiUrl: import.meta.env.VITE_BTC_API_URL ?? "https://mempool.space/testnet4/api",
   evmRpcUrl: import.meta.env.VITE_EVM_RPC_URL ?? "https://sepolia.base.org",
   evmChainId: 84532,
   txApiUrl: import.meta.env.VITE_NEAR_TX_API_URL ?? "https://tx.test.fastnear.com",
 };
+
+/** An outside service that hangs costs its own row, not the whole dashboard. */
+const OUTSIDE_TIMEOUT_MS = 5_000;
 
 /** Transactions read per refresh. The API takes up to this many hashes at once. */
 const ACTIVITY_LIMIT = 20;
@@ -94,7 +97,23 @@ export interface Activity {
   at: number;
 }
 
+export interface Roles {
+  owner: string;
+  guardian: string | null;
+  agent: string;
+}
+
+/** Set when the guardian is a Sputnik DAO, whose council votes on the guardian's actions. */
+export interface GuardianDao {
+  accountId: string;
+  council: string[];
+  proposalBond: string;
+  nextProposalId: number;
+}
+
 export interface VaultState {
+  roles: Roles;
+  guardianDao: GuardianDao | null;
   frozen: boolean;
   btcAddress: string;
   evmAddress: string;
@@ -151,7 +170,9 @@ export function btcAddress(pubkeyHex: string): string {
 }
 
 async function btcBalance(config: VaultConfig, address: string, fetcher: typeof fetch) {
-  const response = await fetcher(`${config.btcApiUrl}/address/${address}`);
+  const response = await fetcher(`${config.btcApiUrl}/address/${address}`, {
+    signal: AbortSignal.timeout(OUTSIDE_TIMEOUT_MS),
+  });
   if (!response.ok) throw new Error(`BTC API returned ${response.status}`);
   interface Stats {
     funded_txo_sum: number;
@@ -175,6 +196,7 @@ async function evmRead(
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", id: method, method, params }),
+    signal: AbortSignal.timeout(OUTSIDE_TIMEOUT_MS),
   });
   if (!response.ok) throw new Error(`EVM RPC returned ${response.status}`);
   const { result } = (await response.json()) as { result?: string };
@@ -224,6 +246,7 @@ async function postJson<T>(url: string, body: unknown, fetcher: typeof fetch): P
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(OUTSIDE_TIMEOUT_MS),
   });
   if (!response.ok) throw new Error(`${url} returned ${response.status}`);
   return (await response.json()) as T;
@@ -292,17 +315,41 @@ export async function loadActivity(
     .sort((a, b) => b.at - a.at);
 }
 
+/** Null for a guardian that's a plain account, which has no DAO methods to answer. */
+async function loadGuardianDao(
+  config: VaultConfig,
+  guardian: string | null,
+  fetcher: typeof fetch,
+): Promise<GuardianDao | null> {
+  if (!guardian) return null;
+  const dao = { ...config, accountId: guardian };
+  try {
+    const [policy, nextProposalId] = await Promise.all([
+      view<{ roles: { kind: unknown }[]; proposal_bond: string }>(dao, "get_policy", fetcher),
+      view<number>(dao, "get_last_proposal_id", fetcher),
+    ]);
+    const council = policy.roles.flatMap(({ kind }) =>
+      typeof kind === "object" && kind && "Group" in kind ? (kind.Group as string[]) : [],
+    );
+    return { accountId: guardian, council, proposalBond: policy.proposal_bond, nextProposalId };
+  } catch {
+    return null;
+  }
+}
+
 export async function loadVault(
   config: VaultConfig = defaultConfig,
   fetcher: typeof fetch = fetch,
 ): Promise<VaultState> {
-  const [frozen, addresses, policy, queue, activity] = await Promise.all([
+  const [roles, frozen, addresses, policy, queue, activity] = await Promise.all([
+    view<Roles>(config, "get_roles", fetcher),
     view<boolean>(config, "is_frozen", fetcher),
     view<Addresses>(config, "get_addresses", fetcher),
     view<Policy>(config, "get_policy", fetcher),
     view<Pending[]>(config, "get_queue", fetcher),
     loadActivity(config, fetcher).catch(() => null),
   ]);
+  const guardianDao = await loadGuardianDao(config, roles.guardian, fetcher);
   const btc = btcAddress(addresses.btc_pubkey);
   const balances = await Promise.all(
     policy.caps.map((cap) =>
@@ -310,6 +357,8 @@ export async function loadVault(
     ),
   );
   return {
+    roles,
+    guardianDao,
     frozen,
     btcAddress: btc,
     evmAddress: addresses.evm_address,
@@ -357,19 +406,24 @@ export function secondsUntil(timestampNs: string, nowMs: number): number {
   return left > 0n ? Number(left) : 0;
 }
 
+/** Every proposal ends in another event, so listing it too would only double the rows. */
+export const isShownInLog = (entry: Activity) => entry.event !== "spend_proposed";
+
 /** Plain words for the log, so a screenshot shows what went through and what was stopped. */
-export function describeActivity(entry: Activity): { outcome: string; stopped: boolean } {
+export function describeActivity(entry: Activity): {
+  outcome: string;
+  stopped: boolean;
+  signed?: boolean;
+} {
   switch (entry.event) {
     case "spend_signed":
-      return { outcome: "Signed", stopped: false };
+      return { outcome: "Signed", stopped: false, signed: true };
     case "spend_rejected":
       return { outcome: `Refused: ${entry.error ?? "unknown"}`, stopped: true };
     case "spend_queued":
       return { outcome: "Queued for veto window", stopped: false };
     case "spend_vetoed":
       return { outcome: "Vetoed", stopped: true };
-    case "spend_proposed":
-      return { outcome: "Proposed", stopped: false };
     case "frozen":
       return { outcome: `Frozen by ${entry.by ?? "unknown"}`, stopped: true };
     case "unfrozen":

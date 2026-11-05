@@ -26,6 +26,7 @@ const views: Record<string, unknown> = {
   get_addresses: { btc_pubkey: PUBKEY, evm_address: "0xabc" },
   get_policy: { caps: [], payees: [] },
   get_queue: [],
+  get_roles: { owner: "o", guardian: null, agent: "a" },
 };
 
 /** Answers like a NEAR RPC node: the return value is JSON, as an array of bytes. */
@@ -37,6 +38,20 @@ const rpc: typeof fetch = async (_url, init) => {
   const bytes = new TextEncoder().encode(JSON.stringify(views[params.method_name]));
   return new Response(JSON.stringify({ result: { result: [...bytes] } }));
 };
+
+describe("a service that hangs", () => {
+  it("is given a time limit on every outside request", async () => {
+    const seen: string[] = [];
+    const hanging: typeof fetch = async (url, init) => {
+      if (url === config.rpcUrl) return rpc(url, init);
+      seen.push(`${String(url)} ${init?.signal ? "limited" : "unlimited"}`);
+      throw new Error("offline");
+    };
+    await loadVault(config, hanging);
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every((line) => line.endsWith("limited") && !line.endsWith("unlimited"))).toBe(true);
+  });
+});
 
 describe("loadActivity", () => {
   const log = (event: string, data: unknown) =>
@@ -113,6 +128,8 @@ describe("secondsUntil", () => {
 describe("loadVault", () => {
   it("reads the frozen state, addresses and policy", async () => {
     await expect(loadVault(config, rpc)).resolves.toEqual({
+      roles: { owner: "o", guardian: null, agent: "a" },
+      guardianDao: null,
       frozen: false,
       btcAddress: "tb1qddd2cgvedtlfgvgvx6f93rt9te77zsu9ccmcw9",
       evmAddress: "0xabc",

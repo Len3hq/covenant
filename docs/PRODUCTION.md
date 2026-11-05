@@ -94,6 +94,8 @@ Requires Node 22 or later and pnpm.
 The dashboard is a static site. Anything named `VITE_*` ends up in the public bundle, so **never give it
 a secret**.
 
+- [ ] Use a NEAR RPC that allows browser requests for `VITE_NEAR_RPC_URL`. `rpc.testnet.near.org` doesn't,
+      so the default is `rpc.testnet.fastnear.com`.
 - [ ] Set `VITE_NEAR_RPC_URL`, `VITE_VAULT_ACCOUNT_ID`, `VITE_BTC_API_URL`, `VITE_EVM_RPC_URL` and `VITE_NEAR_TX_API_URL`.
 - [ ] Publish the output of `pnpm --filter @covenant/web build` to a public URL.
 

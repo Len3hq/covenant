@@ -4,7 +4,7 @@ VAULT_MANIFEST := contracts/covenant-vault/Cargo.toml
 MOCK_SIGNER_MANIFEST := tests/mock-signer/Cargo.toml
 
 .DEFAULT_GOAL := help
-.PHONY: help setup fmt lint wasm test build check addresses deploy set-policy pay-btc pay-eth demo demo-pay demo-attack demo-queue veto freeze unfreeze set-guardian testnet-smoke
+.PHONY: help setup fmt lint wasm test build check addresses deploy set-policy pay-btc pay-eth demo demo-pay demo-attack demo-queue agent-key veto freeze unfreeze set-guardian dao-freeze dao-veto pay-usdc testnet-smoke
 
 help: ## List the targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-15s %s\n", $$1, $$2}'
@@ -42,6 +42,9 @@ addresses: ## Print the vault's Bitcoin and EVM addresses
 deploy: wasm ## Deploy the vault to NEAR testnet (needs the near CLI and the vault's key)
 	node --env-file=.env scripts/src/deploy.ts
 
+agent-key: ## Create the agent's restricted key and save it to .env (needs the agent account's full key)
+	node --env-file=.env scripts/src/create-agent-key.ts
+
 set-policy: ## Apply scripts/policy.testnet.json to the deployed vault (needs the owner's key)
 	node --env-file=.env scripts/src/set-policy.ts
 
@@ -52,6 +55,10 @@ pay-btc: ## Pay from the vault: make pay-btc TO=<address> SATS=<amount> (needs A
 pay-eth: ## Pay from the vault: make pay-eth TO=<address> WEI=<amount> (needs AGENT_PRIVATE_KEY)
 	pnpm --filter @covenant/agent build
 	node --env-file=.env agent/dist/pay-eth.js $(TO) $(WEI)
+
+pay-usdc: ## Pay USDC from the vault: make pay-usdc TO=<address> AMOUNT=<base units> (needs AGENT_PRIVATE_KEY)
+	pnpm --filter @covenant/agent build
+	node --env-file=.env agent/dist/pay-usdc.js $(TO) $(AMOUNT)
 
 demo: demo-pay demo-attack demo-queue ## Run all three judge scenarios
 
@@ -73,8 +80,15 @@ freeze: ## Freeze the vault: make freeze [AS=<guardian account>]
 unfreeze: ## Unfreeze the vault, which only the owner can do
 	node --env-file=.env scripts/src/admin.ts unfreeze
 
+dao-freeze: ## Freeze the vault through the guardian DAO, proposing and voting as its council member
+	node --env-file=.env scripts/src/dao.ts freeze
+
+dao-veto: ## Veto through the guardian DAO: make dao-veto ID=<spend id>
+	node --env-file=.env scripts/src/dao.ts veto $(ID)
+
 set-guardian: ## Replace the guardian: make set-guardian GUARDIAN=<account>
 	node --env-file=.env scripts/src/admin.ts set-guardian $(GUARDIAN)
 
-testnet-smoke: ## Propose one tiny spend on each chain (milestone M6)
-	@echo "testnet-smoke: not implemented yet, see M6 in docs/BUILD_PLAN.md" >&2; exit 1
+testnet-smoke: ## Pay tiny amounts on both chains and check a live refusal (needs AGENT_PRIVATE_KEY)
+	pnpm --filter @covenant/agent build
+	node --env-file=.env agent/dist/smoke.js

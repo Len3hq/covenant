@@ -11,7 +11,7 @@ import {
 import { publicKeyToAddress } from "viem/accounts";
 import { describe, expect, it, vi } from "vitest";
 import type { SpendOutcome, VaultClient } from "../vault.js";
-import { evmSignature, payEth, type EvmChain, type EvmSignature } from "./pay.js";
+import { evmSignature, payEth, payToken, type EvmChain, type EvmSignature } from "./pay.js";
 
 const SECRET = new Uint8Array(32).fill(7);
 const point = secp256k1.getPublicKey(SECRET, false);
@@ -52,6 +52,7 @@ function setup(sign: (hash: Hex) => SpendOutcome) {
     chainId: 84532,
     pendingNonce: async () => 4,
     fees: async () => ({ maxFeePerGas: 6_000_000n, maxPriorityFeePerGas: 1_000_000n }),
+    estimateGas: async () => 50_000n,
     broadcast,
   };
   return { deps: { vault, chain }, broadcast, proposed };
@@ -62,6 +63,32 @@ const signedBy =
   (hash: Hex): SpendOutcome => ({
     Signed: { id: "0", signatures: [mpcSign(hash, secret, highS)] },
   });
+
+describe("payToken", () => {
+  const TOKEN: Address = `0x${"03".repeat(20)}`;
+
+  it("proposes an exact transfer to the token contract, with no value and a gas margin", async () => {
+    const run = setup(signedBy());
+    await payToken(run.deps, TOKEN, PAYEE, 1_000_000n);
+    const tx = parseTransaction(bytesToHex(run.proposed[0] as Uint8Array));
+    expect(tx.to).toBe(TOKEN);
+    expect(tx.value).toBeUndefined();
+    expect(tx.gas).toBe(60_000n);
+    expect(tx.data).toBe(`0xa9059cbb${"00".repeat(12)}${"aa".repeat(20)}${(1_000_000).toString(16).padStart(64, "0")}`);
+    expect(run.broadcast).toHaveBeenCalledOnce();
+    const signed = run.broadcast.mock.calls[0]?.[0] as Hex;
+    await expect(
+      recoverTransactionAddress({ serializedTransaction: signed as never }),
+    ).resolves.toBe(VAULT);
+  });
+
+  it("doesn't broadcast a refused spend", async () => {
+    const run = setup(() => ({ Rejected: "OutputNotWhitelisted" }));
+    const result = await payToken(run.deps, TOKEN, PAYEE, 1n);
+    expect(result.status).toBe("not_signed");
+    expect(run.broadcast).not.toHaveBeenCalled();
+  });
+});
 
 describe("payEth", () => {
   it("proposes the contract's accepted shape: type 2, plain transfer, empty access list", async () => {

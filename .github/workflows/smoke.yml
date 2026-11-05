@@ -1,0 +1,34 @@
+name: Testnet smoke
+
+# Spends tiny amounts from the live vault every night. It stays off until the repo variable
+# SMOKE_ENABLED is 'true' and the secret AGENT_PRIVATE_KEY holds the agent's restricted key.
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    if: vars.SMOKE_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    env:
+      NEAR_RPC_URL: https://rpc.testnet.near.org
+      VAULT_ACCOUNT_ID: covenant.len3hq.testnet
+      AGENT_ACCOUNT_ID: agent.len3hq.testnet
+      AGENT_PRIVATE_KEY: ${{ secrets.AGENT_PRIVATE_KEY }}
+      BTC_API_URL: https://mempool.space/testnet4/api
+      EVM_RPC_URL: https://sepolia.base.org
+      EVM_CHAIN_ID: "84532"
+      USDC_ADDRESS: "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
+      SMOKE_BTC_PAYEE: tb1ql3d46g8n2ua8ulj8nu8fq8ulpm7vxfl6tjfxgs
+      SMOKE_EVM_PAYEE: "0x8A6d5c011A9A1480a89b20EB1482bBE89BAEf829"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @covenant/agent build
+      - run: node agent/dist/smoke.js

@@ -15,6 +15,7 @@ const result = await payEth(
       pendingNonce: (address) =>
         client.getTransactionCount({ address, blockTag: "pending" }),
       fees: () => client.estimateFeesPerGas({ chain: null, type: "eip1559" }),
+      estimateGas: ({ from, to, data }) => client.estimateGas({ account: from, to, data }),
       broadcast: (serializedTransaction) => client.sendRawTransaction({ serializedTransaction }),
     },
   },

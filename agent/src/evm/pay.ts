@@ -1,5 +1,7 @@
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import {
+  encodeFunctionData,
+  erc20Abi,
   hexToBytes,
   isAddressEqual,
   keccak256,
@@ -12,12 +14,16 @@ import {
 import type { SpendOutcome, VaultClient } from "../vault.js";
 
 const TRANSFER_GAS = 21_000n;
+/** A token transfer can cost more by the time it lands, and running out of gas wastes the fee. */
+const GAS_MARGIN_PERCENT = 120n;
 const ORDER = secp256k1.Point.Fn.ORDER;
 
 export interface EvmChain {
   chainId: number;
   pendingNonce(address: Address): Promise<number>;
   fees(): Promise<{ maxFeePerGas: bigint; maxPriorityFeePerGas: bigint }>;
+  /** Estimated gas for a call the vault would make. */
+  estimateGas(call: { from: Address; to: Address; data: Hex }): Promise<bigint>;
   /** Returns the transaction hash. */
   broadcast(serialized: Hex): Promise<Hex>;
 }
@@ -56,25 +62,22 @@ export async function evmSignature(signature: EvmSignature, hash: Hex, expected:
   return parsed;
 }
 
-/** Builds a native transfer, has the contract sign it, and broadcasts only if the signature verifies. */
-export async function payEth(
+/** Proposes a transaction, and broadcasts it only if the contract's signature verifies. */
+async function signAndBroadcast(
   deps: { vault: VaultClient; chain: EvmChain },
-  to: Address,
-  value: bigint,
+  from: Address,
+  call: { to: Address; value: bigint; gas: bigint; data?: Hex },
 ): Promise<EvmPayResult> {
   const { vault, chain } = deps;
-  const from = (await vault.evmAddress()) as Address;
   const fees = await chain.fees();
   const tx: TransactionSerializableEIP1559 = {
     type: "eip1559",
     chainId: chain.chainId,
     nonce: await chain.pendingNonce(from),
-    gas: TRANSFER_GAS,
     maxFeePerGas: fees.maxFeePerGas,
     maxPriorityFeePerGas: fees.maxPriorityFeePerGas,
-    to,
-    value,
     accessList: [],
+    ...call,
   };
   const unsigned = serializeTransaction(tx);
 
@@ -88,4 +91,28 @@ export async function payEth(
   const parsed = await evmSignature(signature, keccak256(unsigned), from);
   const hash = await chain.broadcast(serializeTransaction(tx, parsed));
   return { status: "broadcast", id: outcome.Signed.id, nearTx, hash };
+}
+
+/** Pays native ETH from the vault. */
+export async function payEth(
+  deps: { vault: VaultClient; chain: EvmChain },
+  to: Address,
+  value: bigint,
+): Promise<EvmPayResult> {
+  const from = (await deps.vault.evmAddress()) as Address;
+  return signAndBroadcast(deps, from, { to, value, gas: TRANSFER_GAS });
+}
+
+/** Pays an ERC-20 from the vault. `amount` is in the token's base units. */
+export async function payToken(
+  deps: { vault: VaultClient; chain: EvmChain },
+  token: Address,
+  to: Address,
+  amount: bigint,
+): Promise<EvmPayResult> {
+  const from = (await deps.vault.evmAddress()) as Address;
+  const data = encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [to, amount] });
+  const estimate = await deps.chain.estimateGas({ from, to: token, data });
+  const gas = (estimate * GAS_MARGIN_PERCENT) / 100n;
+  return signAndBroadcast(deps, from, { to: token, value: 0n, gas, data });
 }
