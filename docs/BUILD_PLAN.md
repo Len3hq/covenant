@@ -2,7 +2,7 @@
 
 This is the plan we follow from an empty repo to a submitted entry by **20:00 UTC on Sat 14 Nov 2026**. Work through milestones M0 to M13 in order of date, and tick boxes as you finish them. [SPEC.md](SPEC.md) holds the detail behind each task.
 
-**Where we are on 5 Nov: 64%.** M0 to M6 have passed their exit checks, with M5 a day early and M6 two days early. All remaining gates keep their dates. D5, D6, D10 and D11 were decided on 5 Nov.
+**Where we are on 5 Nov: 72%.** M0 to M7 have passed their exit checks, with M7 three days early. All remaining gates keep their dates. D5, D6, D10 and D11 were decided on 5 Nov.
 
 ## How to use this plan
 
@@ -67,7 +67,7 @@ These block work, so settle them at today's standup. Each has a recommended answ
 | D4 | ~~Final vault account name~~ | Resolved: `covenant.len3hq.testnet`, confirmed on 3 Nov. Don't rename it, because the vault addresses derive from it (see C7). | Lead | Done |
 | D5 | How judges run `make demo` without our keys (see C8) | Checked on 5 Nov: the form has no private field, and Claude Code and Codex screen each project by running it against the README. Decided on 5 Nov: `make demo` runs the real contract in the sandbox with the mock signer, labelled as such, and needs no keys. Live evidence is linked beside it. A `--live` mode uses the real signer for anyone holding a key. | Lead | Done |
 | D6 | Keep or remove the contract's full-access key? | Decided on 5 Nov: keep it through the build, and remove it on 13 Nov after the fresh-clone test, not before the 11 Nov run, so a late bug can still be fixed. Removal can't be undone, so confirm once more on the day. Say so in SECURITY.md. | Lead | Done |
-| D7 | LLM provider | NEAR AI Cloud if its API works by 8 Nov. Otherwise any tool-calling model behind `LLM_BASE_URL`. | B | 8 Nov |
+| D7 | LLM provider | Decided on 5 Nov: OpenAI, with `gpt-5.4-mini`. A `claude-*` model name switches to Anthropic's SDK, and any other OpenAI-compatible API, such as NEAR AI Cloud, needs only `LLM_BASE_URL`. | B | Done |
 | D8 | Prize split and payout wallet | Prizes are paid in NEAR to the wallet on the form, so use a mainnet account. | Lead | 12 Nov |
 | D10 | Which of the 13 tracks to enter | Decided on 5 Nov: AI Security & Defense, plus Agent Economy. | Lead | Done |
 | D11 | How the real Sputnik DAO guardian works | Done on 5 Nov: `covenant-guardian.sputnikv2.testnet` is the live guardian, with one council member. A DAO veto took 23 s, inside the 120 s window, so the demo can use it. | Lead | Done |
@@ -102,6 +102,7 @@ Those additions are in the [test tracker](#named-test-tracker). They also give t
 | C12 | The scope says the agent key only calls `propose_spend`, while the key spec also allows `execute`. | The key spec is right. Use "`propose_spend` and `execute`" everywhere. | M6 |
 | C13 | Queue entries are specified as "raw tx ≤ 2 KB", but `execute` also needs each input's amounts, which come from prev txs that could be far larger. | Store the parsed payments, fee and signing hashes in `Pending`, and re-check those. Don't store prev txs. The current `Pending` struct is a placeholder. | M5 |
 | C14 | The Makefile list has no `demo` target, though the done-check runs `make demo`. | Added. It runs all three scenarios. | Done |
+| C16 | The spec has the agent spend confirmed coins only. Testnet4 blocks are about 20 minutes apart and each payment's change is unconfirmed, so a second payment in that window finds nothing to spend. | The agent also spends unconfirmed change from the vault's own payments, and still refuses anyone else's unconfirmed coins. | Done |
 | C15 | `ChangeNotToVault` can't fire under Bitcoin rule 3. Nothing in a transaction marks an output as change, so change sent to a foreign script is just an unlisted output. | That case returns `OutputNotWhitelisted`, and `btc_rejects_change_to_foreign_script` asserts it. Say so in the README and video. The variant stays unused. | Done |
 
 ### Already changed in the scaffold
@@ -265,12 +266,12 @@ Passed on 5 Nov, on `279fad9`. D6 and D11 stay open, and the agent can't finish 
 - [x] **B:** contract-signed USDC transfer confirmed on Base Sepolia, using viem for serialization and broadcast
 - [x] **Lead:** create the agent's function-call key (`propose_spend` and `execute` only, 1 NEAR allowance)
 - [x] **Lead:** test `agent_key_cannot_call_set_policy`, with a real restricted key in the sandbox
-- [x] **B:** implement `make testnet-smoke`, then add a nightly CI workflow for it. The workflow stays off until Frank approves storing the agent key as a GitHub secret. ETH, USDC passed live; the Bitcoin half hasn't run, because mempool.space was unreachable
+- [x] **B:** implement `make testnet-smoke`, then add a nightly CI workflow for it. The workflow stays off until Frank approves storing the agent key as a GitHub secret. 
 - [x] **C:** freeze and veto actions through a NEAR wallet in the dashboard. The buttons and picker work in a browser; nobody has signed through a wallet yet
 - [x] **C:** policy editing through a NEAR wallet in the dashboard (D9), with the same limit
 - [x] **Lead:** create the Sputnik DAO guardian and call `set_guardian` (D9, D11)
 - [ ] **Lead:** sign a veto through a real wallet in the browser
-- [ ] **Lead:** run `make testnet-smoke` in full
+- [x] **Lead:** run `make testnet-smoke` in full: passed on 5 Nov
 
 **Exit check:** a confirmed USDC tx in EVIDENCE.md.
 
@@ -282,16 +283,18 @@ Passed on 5 Nov: [`0xe5ba350b…`](https://sepolia.basescan.org/tx/0xe5ba350b362
 
 *Goal: an LLM drives a real payment through the contract.*
 
-- [ ] **B:** tools `get_balances`, `list_payees`, `pay`, `evm_call`, `spend_status`, `execute_queued`, with zod inputs
-- [ ] **B:** LLM loop and provider config (settle D7), plus chain routing
-- [ ] **B:** Bitcoin build (with C2 and C9) and EVM build, following the spec's build steps
-- [ ] **B:** idempotent `spends.json`, 3 retries with backoff, polling after 60 s, and JSON logs
-- [ ] **B:** implement `make demo-pay`
-- [ ] **B:** finish queued spends: keep the raw transaction in `spends.json`, call `execute`, attach the signatures and broadcast
-- [ ] **C:** Bitcoin attack suite in `tests/attacks/`
-- [ ] **Lead:** review and fix contract findings
+- [x] **B:** tools `get_balances`, `list_payees`, `pay`, `evm_call`, `spend_status`, `execute_queued`, with zod inputs
+- [x] **B:** LLM loop and provider config (settle D7), plus chain routing
+- [x] **B:** Bitcoin build (with C2 and C9) and EVM build, following the spec's build steps
+- [x] **B:** idempotent `spends.json`, 3 retries with backoff, polling after 60 s, and JSON logs
+- [x] **B:** implement `make demo-pay`
+- [x] **B:** finish queued spends: keep the raw transaction in `spends.json`, call `execute`, attach the signatures and broadcast
+- [x] **C:** Bitcoin attack suite in `tests/attacks/`: 13 attacks, none reached the signer
+- [x] **Lead:** review and fix contract findings: none in the contract
 
 **Exit check:** the `pay` scenario produces two signed payments and two explorer links.
+
+Passed on 5 Nov ([EVIDENCE.md](../EVIDENCE.md)). Rerunning a run with `--run <id>` paid nothing new. The Claude path is tested against a fake API only, because no Claude key has been used.
 
 ### M8: Attack, queue and replay (to 79%), Mon 9 Nov
 

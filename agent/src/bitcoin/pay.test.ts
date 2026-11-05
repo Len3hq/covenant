@@ -1,7 +1,8 @@
+import { Mempool } from "./mempool.js";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { hex } from "@scure/base";
 import { address, networks, payments, Transaction } from "bitcoinjs-lib";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SpendOutcome, VaultClient } from "../vault.js";
 import { payBitcoin, type PayDeps } from "./pay.js";
 import { contractVsize, hash160, p2wpkhScript, stripWitness } from "./tx.js";
@@ -79,7 +80,7 @@ function deps(sign: (tx: Transaction, values: bigint[]) => SpendOutcome): {
     deps: {
       vault,
       mempool: {
-        confirmedUtxos: async () =>
+        spendableUtxos: async () =>
           PREVS.map((tx) => ({
             txid: tx.getId(),
             vout: 0,
@@ -238,5 +239,32 @@ describe("payBitcoin", () => {
 
   it("refuses a spend the coins can't fund", async () => {
     await expect(payBitcoin(run.deps, payeeAddress, 759_051n)).rejects.toThrow("can't fund");
+  });
+});
+
+describe("Mempool.spendableUtxos", () => {
+  const VAULT = "tb1qvault";
+  const utxo = (txid: string, value: number, confirmed: boolean) => ({
+    txid,
+    vout: 1,
+    value,
+    status: { confirmed },
+  });
+  const origin = { change: VAULT, gift: "tb1qsomeoneelse" };
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("keeps confirmed coins and the vault's own change, and leaves out others' unconfirmed coins", async () => {
+    vi.stubGlobal("fetch", async (url: string) => {
+      if (url.endsWith("/utxo")) {
+        return new Response(
+          JSON.stringify([utxo("confirmed", 1, true), utxo("change", 2, false), utxo("gift", 3, false)]),
+        );
+      }
+      const txid = url.split("/").pop() as keyof typeof origin;
+      return new Response(JSON.stringify({ vin: [{ prevout: { scriptpubkey_address: origin[txid] } }] }));
+    });
+    const coins = await new Mempool("https://api.example").spendableUtxos(VAULT);
+    expect(coins.map((coin) => coin.txid)).toEqual(["confirmed", "change"]);
   });
 });

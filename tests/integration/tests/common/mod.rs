@@ -55,11 +55,11 @@ pub fn wasm(path: &str) -> anyhow::Result<Vec<u8>> {
         .map_err(|e| anyhow::anyhow!("{path}: {e}. Run `make wasm` first."))
 }
 
-fn double_sha256(bytes: &[u8]) -> [u8; 32] {
+pub fn double_sha256(bytes: &[u8]) -> [u8; 32] {
     Sha256::digest(Sha256::digest(bytes)).into()
 }
 
-fn own_script() -> Vec<u8> {
+pub fn own_script() -> Vec<u8> {
     let hash = Ripemd160::digest(Sha256::digest(PUBKEY));
     [vec![0x00, 0x14], hash.to_vec()].concat()
 }
@@ -72,7 +72,7 @@ pub fn stranger_script() -> Vec<u8> {
     [vec![0x00, 0x14], vec![0xbb; 20]].concat()
 }
 
-fn output(amount: u64, script: &[u8]) -> Vec<u8> {
+pub fn output(amount: u64, script: &[u8]) -> Vec<u8> {
     let mut bytes = amount.to_le_bytes().to_vec();
     if script.len() < 0xfd {
         bytes.push(script.len() as u8);
@@ -85,7 +85,7 @@ fn output(amount: u64, script: &[u8]) -> Vec<u8> {
 }
 
 /// A previous transaction of about `size` bytes paying the vault one coin at output 0.
-fn prev_tx(salt: u8, size: usize) -> Vec<u8> {
+pub fn prev_tx(salt: u8, size: usize) -> Vec<u8> {
     let mut tx = vec![2, 0, 0, 0, 1];
     tx.extend([salt; 32]);
     tx.extend([0; 4]);

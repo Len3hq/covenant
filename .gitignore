@@ -5,6 +5,7 @@ dist/
 .env.*
 !.env.example
 agent/spends.json
+agent/spends.json.tmp
 *.log
 .DS_Store
 .vscode/

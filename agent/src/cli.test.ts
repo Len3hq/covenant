@@ -10,6 +10,11 @@ describe("parseArgs", () => {
     expect(parseArgs(["queue"]).replay).toBe(false);
   });
 
+  it("reads a run to resume, wherever the flag sits", () => {
+    expect(parseArgs(["--run", "abc", "pay"])).toEqual({ scenario: "pay", replay: false, run: "abc" });
+    expect(parseArgs(["pay", "--run", "abc"]).run).toBe("abc");
+  });
+
   it("refuses an unknown scenario", () => {
     expect(() => parseArgs(["drain"])).toThrow();
   });

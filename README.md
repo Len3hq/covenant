@@ -8,7 +8,7 @@ decides what gets signed.
 > **Status: in active build.** The vault on NEAR testnet now parses, checks and signs real spends,
 > with confirmed payments on Bitcoin testnet4 and Base Sepolia ([EVIDENCE.md](EVIDENCE.md)). Live payments now
 > include USDC, sent with the agent's restricted key. Large spends wait in a veto queue, which the
-> owner or guardian DAO can clear, and the agent finishes a queued spend from M7. Progress
+> owner or guardian DAO can clear, and an LLM agent can now drive payments through the contract. Progress
 > is tracked in [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md).
 
 ## How a spend works
@@ -29,7 +29,7 @@ make test    # build the wasm, then run Rust, sandbox and TypeScript tests
 make help    # list every target
 ```
 
-The `demo-*` targets exit with an error naming the
+The `demo`, `demo-attack` and `demo-queue` targets exit with an error naming the
 milestone that delivers them.
 
 ## Gas

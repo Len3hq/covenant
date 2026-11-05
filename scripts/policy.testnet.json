@@ -76,7 +76,7 @@
         39,
         250
       ],
-      "label": "Test payee"
+      "label": "Acme Hosting"
     },
     {
       "chain": "Evm",
@@ -102,7 +102,7 @@
         248,
         41
       ],
-      "label": "Test payee"
+      "label": "DesignCo"
     }
   ],
   "btc_max_fee_rate": 50,

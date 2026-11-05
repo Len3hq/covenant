@@ -1,4 +1,4 @@
-import { connectVault, type VaultClient } from "./vault.js";
+import { connectVault, type AgentVault } from "./vault.js";
 
 export function requireEnv(name: string): string {
   const value = process.env[name];
@@ -6,7 +6,7 @@ export function requireEnv(name: string): string {
   return value;
 }
 
-export function connectVaultFromEnv(): VaultClient {
+export function connectVaultFromEnv(): AgentVault {
   return connectVault({
     rpcUrl: requireEnv("NEAR_RPC_URL"),
     vault: requireEnv("VAULT_ACCOUNT_ID"),

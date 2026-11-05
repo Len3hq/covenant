@@ -62,8 +62,9 @@ pay-usdc: ## Pay USDC from the vault: make pay-usdc TO=<address> AMOUNT=<base un
 
 demo: demo-pay demo-attack demo-queue ## Run all three judge scenarios
 
-demo-pay: ## Honest payment on both chains (milestone M7)
-	@echo "demo-pay: not implemented yet, see M7 in docs/BUILD_PLAN.md" >&2; exit 1
+demo-pay: ## An LLM pays on both chains, live (needs AGENT_PRIVATE_KEY and the LLM_* settings)
+	pnpm --filter @covenant/agent build
+	node --env-file=.env agent/dist/index.js pay
 
 demo-attack: ## Prompt-injected attack, refused by the contract (milestone M8)
 	@echo "demo-attack: not implemented yet, see M8 in docs/BUILD_PLAN.md" >&2; exit 1

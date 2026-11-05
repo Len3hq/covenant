@@ -13,7 +13,8 @@ const UNLISTED_EVM = "0x000000000000000000000000000000000000dEaD";
 const UNLISTED_BTC = "tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx";
 
 function report(check: string, result: object): void {
-  console.log(JSON.stringify({ check, ...result }));
+  const printable = (_: string, value: unknown) => (typeof value === "bigint" ? `${value}` : value);
+  console.log(JSON.stringify({ check, ...result }, printable));
 }
 
 function expectBroadcast<T extends { status: string }>(check: string, result: T): T {

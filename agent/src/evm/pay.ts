@@ -5,6 +5,7 @@ import {
   hexToBytes,
   isAddressEqual,
   keccak256,
+  parseTransaction,
   recoverAddress,
   serializeTransaction,
   type Address,
@@ -16,6 +17,8 @@ import type { SpendOutcome, VaultClient } from "../vault.js";
 const TRANSFER_GAS = 21_000n;
 /** A token transfer can cost more by the time it lands, and running out of gas wastes the fee. */
 const GAS_MARGIN_PERCENT = 120n;
+/** For a call the node can't estimate, such as one that would revert. The contract still checks it. */
+const FALLBACK_CALL_GAS = 100_000n;
 const ORDER = secp256k1.Point.Fn.ORDER;
 
 export interface EvmChain {
@@ -62,15 +65,14 @@ export async function evmSignature(signature: EvmSignature, hash: Hex, expected:
   return parsed;
 }
 
-/** Proposes a transaction, and broadcasts it only if the contract's signature verifies. */
-async function signAndBroadcast(
-  deps: { vault: VaultClient; chain: EvmChain },
+/** Serializes an unsigned type-2 transaction from the vault, with today's fees and nonce. */
+export async function prepareEvm(
+  chain: EvmChain,
   from: Address,
   call: { to: Address; value: bigint; gas: bigint; data?: Hex },
-): Promise<EvmPayResult> {
-  const { vault, chain } = deps;
+): Promise<Hex> {
   const fees = await chain.fees();
-  const tx: TransactionSerializableEIP1559 = {
+  return serializeTransaction({
     type: "eip1559",
     chainId: chain.chainId,
     nonce: await chain.pendingNonce(from),
@@ -78,20 +80,51 @@ async function signAndBroadcast(
     maxPriorityFeePerGas: fees.maxPriorityFeePerGas,
     accessList: [],
     ...call,
-  };
-  const unsigned = serializeTransaction(tx);
+  } satisfies TransactionSerializableEIP1559);
+}
 
+/** Adds the signature, checked against the vault's address, and returns what to broadcast. */
+export async function signEvm(
+  unsigned: Hex,
+  signatures: EvmSignature[],
+  from: Address,
+): Promise<{ signedHex: Hex; chainTx: Hex }> {
+  const [signature] = signatures;
+  if (!signature || signatures.length !== 1) {
+    throw new Error(`expected 1 signature, got ${signatures.length}`);
+  }
+  const parsed = await evmSignature(signature, keccak256(unsigned), from);
+  const signedHex = serializeTransaction(
+    parseTransaction(unsigned) as TransactionSerializableEIP1559,
+    parsed,
+  );
+  return { signedHex, chainTx: keccak256(signedHex) };
+}
+
+/** Proposes a transaction, and broadcasts it only if the contract's signature verifies. */
+async function signAndBroadcast(
+  deps: { vault: VaultClient; chain: EvmChain },
+  from: Address,
+  call: { to: Address; value: bigint; gas: bigint; data?: Hex },
+): Promise<EvmPayResult> {
+  const { vault, chain } = deps;
+  const unsigned = await prepareEvm(chain, from, call);
   const { outcome, nearTx } = await vault.proposeEvm(hexToBytes(unsigned));
   if (!("Signed" in outcome)) return { status: "not_signed", outcome, nearTx };
-  const [signature] = outcome.Signed.signatures;
-  if (!signature || outcome.Signed.signatures.length !== 1) {
-    throw new Error(`expected 1 signature, got ${outcome.Signed.signatures.length}`);
-  }
-
-  const parsed = await evmSignature(signature, keccak256(unsigned), from);
-  const hash = await chain.broadcast(serializeTransaction(tx, parsed));
+  const { signedHex } = await signEvm(unsigned, outcome.Signed.signatures, from);
+  const hash = await chain.broadcast(signedHex);
   return { status: "broadcast", id: outcome.Signed.id, nearTx, hash };
 }
+
+/** A call to a contract, with an estimated gas limit. */
+export async function contractCall(chain: EvmChain, from: Address, to: Address, data: Hex, value = 0n) {
+  const estimate = await chain.estimateGas({ from, to, data }).catch(() => FALLBACK_CALL_GAS);
+  return { to, value, gas: (estimate * GAS_MARGIN_PERCENT) / 100n, data };
+}
+
+/** The call data for an ERC-20 transfer. */
+export const transferData = (to: Address, amount: bigint): Hex =>
+  encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [to, amount] });
 
 /** Pays native ETH from the vault. */
 export async function payEth(
@@ -111,8 +144,6 @@ export async function payToken(
   amount: bigint,
 ): Promise<EvmPayResult> {
   const from = (await deps.vault.evmAddress()) as Address;
-  const data = encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [to, amount] });
-  const estimate = await deps.chain.estimateGas({ from, to: token, data });
-  const gas = (estimate * GAS_MARGIN_PERCENT) / 100n;
-  return signAndBroadcast(deps, from, { to: token, value: 0n, gas, data });
+  const call = await contractCall(deps.chain, from, token, transferData(to, amount));
+  return signAndBroadcast(deps, from, call);
 }

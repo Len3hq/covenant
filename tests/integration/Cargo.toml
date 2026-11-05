@@ -13,3 +13,7 @@ base64 = "0.22"
 serde_json = "1"
 sha2 = "0.10"
 ripemd = "0.1"
+
+[[test]]
+name = "attacks_bitcoin"
+path = "../attacks/bitcoin.rs"
