@@ -2,5 +2,3 @@ packages:
   - agent
   - web
   - scripts
-minimumReleaseAgeExclude:
-  - '@anthropic-ai/sdk@1.5.0'
