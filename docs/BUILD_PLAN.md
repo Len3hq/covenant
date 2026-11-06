@@ -294,7 +294,7 @@ Passed on 5 Nov: [`0xe5ba350b…`](https://sepolia.basescan.org/tx/0xe5ba350b362
 
 **Exit check:** the `pay` scenario produces two signed payments and two explorer links.
 
-Passed on 5 Nov ([EVIDENCE.md](../EVIDENCE.md)). Rerunning a run with `--run <id>` paid nothing new. The Claude path is tested against a fake API only, because no Claude key has been used.
+Passed on 5 Nov ([EVIDENCE.md](../EVIDENCE.md)). Rerunning a run with `--run <id>` paid nothing new. The Claude path also ran live on 6 Nov with `claude-opus-5-5`: it listed payees and had a payment to an unlisted address refused.
 
 ### M8: Attack, queue and replay (to 79%), Mon 9 Nov
 
