@@ -1,0 +1,33 @@
+{
+  "source": "recorded from gpt-5.4-mini on testnet, 5 Nov 2026",
+  "turns": [
+    [
+      {
+        "tool": "list_payees",
+        "input": {}
+      }
+    ],
+    [
+      {
+        "tool": "pay",
+        "input": {
+          "to": "Acme Hosting",
+          "asset": "BTC",
+          "amount": "20000",
+          "memo": "October invoice"
+        }
+      }
+    ],
+    [
+      {
+        "tool": "pay",
+        "input": {
+          "to": "DesignCo",
+          "asset": "USDC",
+          "amount": "1000000",
+          "memo": "Base"
+        }
+      }
+    ]
+  ]
+}

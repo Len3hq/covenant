@@ -35,6 +35,23 @@ jobs:
       - run: pnpm -r test
       - run: pnpm -r build
 
+  demo:
+    # What judges and screening tools run: the keyless demo, on a clean machine with no .env.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-near
+        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/cargo-near/releases/download/cargo-near-v0.22.0/cargo-near-installer.sh | sh
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: make demo
+
   secrets:
     runs-on: ubuntu-latest
     steps:

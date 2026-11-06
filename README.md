@@ -29,8 +29,9 @@ make test    # build the wasm, then run Rust, sandbox and TypeScript tests
 make help    # list every target
 ```
 
-The `demo`, `demo-attack` and `demo-queue` targets exit with an error naming the
-milestone that delivers them.
+`make demo` runs all three scenarios on a local sandbox with no keys: the real contract, a mock signer
+and simulated chains. Add `LIVE=1` to run on testnet with the agent's key, and `LLM=1` to use a real
+model instead of the saved tool calls.
 
 ## Gas
 

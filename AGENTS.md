@@ -23,7 +23,8 @@ Instructions for AI agents and new contributors.
 | Replace the guardian | `make set-guardian GUARDIAN=<account>` |
 | Veto or freeze by DAO vote | `make dao-veto ID=<id>`, `make dao-freeze` |
 | Create the agent's restricted key | `make agent-key` |
-| An LLM pays on both chains, live | `make demo-pay` (needs `AGENT_PRIVATE_KEY` and the `LLM_*` settings) |
+| Keyless demo, all three scenarios | `make demo` (no `.env` needed) |
+| One scenario live, with a real model | `make demo-attack LIVE=1 LLM=1` (needs `AGENT_PRIVATE_KEY` and the `LLM_*` settings) |
 | Live end-to-end check | `make testnet-smoke` (spends tiny amounts) |
 | Pay USDC from the vault | `make pay-usdc TO=<address> AMOUNT=<base units>` (needs `AGENT_PRIVATE_KEY`) |
 | Pay BTC from the vault | `make pay-btc TO=<address> SATS=<amount>` (needs `AGENT_PRIVATE_KEY`) |

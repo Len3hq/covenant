@@ -37,14 +37,20 @@ export function links(record: Pick<SpendRecord, "prepared" | "nearTx" | "chainTx
   };
 }
 
-export const report = (record: SpendRecord): SpendReport => ({
+export const report = (record: SpendRecord, linker = links): SpendReport => ({
   status: record.status,
   ...(record.id ? { id: record.id } : {}),
   ...(record.executableAt ? { executableAt: record.executableAt } : {}),
   ...(record.error ? { error: record.error } : {}),
   ...(record.chainTx ? { chainTx: record.chainTx } : {}),
-  links: links(record),
+  links: linker(record),
 });
+
+/** Turns signatures into a broadcastable transaction. Live, this checks each signature first. */
+export type Assemble = (
+  prepared: Prepared,
+  signatures: (MpcSignature & EvmSignature)[],
+) => Promise<{ signedHex: string; chainTx: string }>;
 
 export interface Broadcasters {
   bitcoin(signedHex: string): Promise<string>;
@@ -60,12 +66,28 @@ export class Payer {
   private readonly store: SpendStore;
   private readonly broadcast: Broadcasters;
   private readonly log: Log;
+  private readonly assembleWith?: Assemble;
+  private readonly linker: typeof links;
 
-  constructor(deps: { vault: AgentVault; store: SpendStore; broadcast: Broadcasters; log: Log }) {
+  constructor(deps: {
+    vault: AgentVault;
+    store: SpendStore;
+    broadcast: Broadcasters;
+    log: Log;
+    /** Replaces the live assembly; the sandbox's mock signatures can't be checked. */
+    assemble?: Assemble;
+    links?: typeof links;
+  }) {
     this.vault = deps.vault;
     this.store = deps.store;
     this.broadcast = deps.broadcast;
     this.log = deps.log;
+    if (deps.assemble) this.assembleWith = deps.assemble;
+    this.linker = deps.links ?? links;
+  }
+
+  private report(record: SpendRecord): SpendReport {
+    return report(record, this.linker);
   }
 
   async spend(
@@ -104,7 +126,7 @@ export class Payer {
       case "signed":
         return this.send(record);
       default:
-        return report(record);
+        return this.report(record);
     }
   }
 
@@ -139,7 +161,7 @@ export class Payer {
       };
       this.store.put(failed);
       this.log("spend_failed", { key: record.key, error: failed.error });
-      return report(failed);
+      return this.report(failed);
     }
     const { outcome, nearTx } = proposed;
     const base: SpendRecord = { ...record, nearTx };
@@ -154,14 +176,14 @@ export class Payer {
       };
       this.store.put(next);
       this.log("spend_rejected", { id: next.id, chain, error: outcome.Rejected, nearTx });
-      return report(next);
+      return this.report(next);
     }
     if ("Queued" in outcome) {
       const { id, executable_at: executableAt } = outcome.Queued;
       const next: SpendRecord = { ...base, status: "queued", id, executableAt };
       this.store.put(next);
       this.log("spend_queued", { id, chain, executableAt, nearTx });
-      return report(next);
+      return this.report(next);
     }
     const { id, signatures } = outcome.Signed;
     const assembled = await this.assemble(record.prepared, signatures);
@@ -176,6 +198,7 @@ export class Payer {
     prepared: Prepared,
     signatures: (MpcSignature & EvmSignature)[],
   ): Promise<{ signedHex: string; chainTx: string }> {
+    if (this.assembleWith) return this.assembleWith(prepared, signatures);
     if (prepared.chain === "Bitcoin") {
       return signBitcoin(prepared satisfies BitcoinPrepared, signatures, await this.vault.btcPubkey());
     }
@@ -194,7 +217,7 @@ export class Payer {
     const sent: SpendRecord = { ...record, status: "broadcast" };
     this.store.put(sent);
     this.log("spend_broadcast", { id: sent.id, chainTx: sent.chainTx });
-    return report(sent);
+    return this.report(sent);
   }
 }
 

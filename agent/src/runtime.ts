@@ -1,78 +1,58 @@
 import { readFileSync } from "node:fs";
-import { networks, payments } from "bitcoinjs-lib";
-import { createPublicClient, erc20Abi, getAddress, http, type Address } from "viem";
-import { Mempool } from "./bitcoin/mempool.js";
-import { connectVaultFromEnv, requireEnv } from "./env.js";
+import type { PayDeps } from "./bitcoin/pay.js";
 import type { EvmChain } from "./evm/pay.js";
 import { jsonLog } from "./log.js";
-import { Payer, type SpendReport } from "./payer.js";
+import { Payer, type Assemble, type Broadcasters, type links, type SpendReport } from "./payer.js";
 import { SpendStore } from "./store.js";
-import { createTools } from "./tools.js";
+import { createTools, type ChainReads } from "./tools.js";
+import type { AgentVault } from "./vault.js";
 
 const SCENARIOS = new URL("../scenarios/", import.meta.url);
 export const scenarioText = (name: string) => readFileSync(new URL(name, SCENARIOS), "utf8").trim();
 
 export interface Spend {
   asset: string;
+  to: string;
   report: SpendReport;
 }
 
-/** The agent's tools, wired to the live vault and chains from the environment. */
-export function createRuntime(runId: string) {
-  const vault = connectVaultFromEnv();
-  const client = createPublicClient({ transport: http(requireEnv("EVM_RPC_URL")) });
-  const mempool = new Mempool(requireEnv("BTC_API_URL"));
-  const usdc = getAddress(requireEnv("USDC_ADDRESS"));
-  const chain: EvmChain = {
-    chainId: Number(requireEnv("EVM_CHAIN_ID")),
-    pendingNonce: (address) => client.getTransactionCount({ address, blockTag: "pending" }),
-    fees: () => client.estimateFeesPerGas({ chain: null, type: "eip1559" }),
-    estimateGas: ({ from, to, data }) => client.estimateGas({ account: from, to, data }),
-    broadcast: (serializedTransaction) => client.sendRawTransaction({ serializedTransaction }),
-  };
-  const evmAddress = async () => (await vault.evmAddress()) as Address;
+/** Where the agent runs: the live testnets, or a local sandbox with simulated chains. */
+export interface World {
+  name: "live" | "sandbox";
+  vault: AgentVault;
+  mempool: PayDeps["mempool"];
+  chain: EvmChain;
+  reads: ChainReads;
+  broadcast: Broadcasters;
+  usdc: `0x${string}`;
+  spendsFile: string;
+  assemble?: Assemble;
+  links?: typeof links;
+  /** Removes a queued spend as its owner, where the world holds that key. */
+  veto?: (id: string) => Promise<void>;
+  stop(): void;
+}
 
+/** The agent's tools for one run, and the spends they make. */
+export function createRuntime(world: World, runId: string) {
   const spends: Spend[] = [];
   const payer = new Payer({
-    vault,
-    store: new SpendStore(process.env.SPENDS_FILE || "agent/spends.json"),
+    vault: world.vault,
+    store: new SpendStore(world.spendsFile),
     log: jsonLog,
-    broadcast: {
-      bitcoin: (signedHex) => mempool.broadcast(signedHex),
-      evm: async (signedHex) => {
-        const hash = await chain.broadcast(signedHex);
-        // Confirmed before the next payment, so its nonce can't collide with this one.
-        await client.waitForTransactionReceipt({ hash });
-        return hash;
-      },
-    },
+    broadcast: world.broadcast,
+    ...(world.assemble ? { assemble: world.assemble } : {}),
+    ...(world.links ? { links: world.links } : {}),
   });
-
   const tools = createTools({
-    vault,
+    vault: world.vault,
     payer,
-    chain,
-    usdc,
+    chain: world.chain,
+    usdc: world.usdc,
     runId,
-    bitcoin: { vault, mempool },
-    onSpend: (asset, report) => spends.push({ asset, report }),
-    reads: {
-      async btcBalance() {
-        const pubkey = await vault.btcPubkey();
-        const own = payments.p2wpkh({ pubkey, network: networks.testnet }).address;
-        if (!own) throw new Error("could not derive the vault address");
-        const coins = await mempool.spendableUtxos(own);
-        return coins.reduce((total, coin) => total + coin.value, 0n);
-      },
-      ethBalance: async () => client.getBalance({ address: await evmAddress() }),
-      tokenBalance: async () =>
-        client.readContract({
-          address: usdc,
-          abi: erc20Abi,
-          functionName: "balanceOf",
-          args: [await evmAddress()],
-        }),
-    },
+    bitcoin: { vault: world.vault, mempool: world.mempool },
+    reads: world.reads,
+    onSpend: (asset, to, report) => spends.push({ asset, to, report }),
   });
   return { tools, spends };
 }

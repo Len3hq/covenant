@@ -30,7 +30,7 @@ export interface ToolDeps {
   /** Scopes a spend's identity, so one run's retry is the same spend and a new run's isn't. */
   runId: string;
   /** Every spend the tools made, for the caller to check and print. */
-  onSpend?: (asset: string, report: SpendReport) => void;
+  onSpend?: (asset: string, to: string, report: SpendReport) => void;
 }
 
 export interface Tool {
@@ -130,7 +130,7 @@ export function createTools(deps: ToolDeps): Tool[] {
           const from = (await vault.evmAddress()) as Address;
           return evmPrepared(await contractCall(chain, from, usdc, transferData(payee, value)));
         });
-        deps.onSpend?.(asset, result);
+        deps.onSpend?.(asset, destination, result);
         return result;
       },
     ),
@@ -149,7 +149,7 @@ export function createTools(deps: ToolDeps): Tool[] {
           const from = (await vault.evmAddress()) as Address;
           return evmPrepared(await contractCall(chain, from, target, data as Hex, BigInt(value)));
         });
-        deps.onSpend?.("EVM call", result);
+        deps.onSpend?.("EVM call", target, result);
         return result;
       },
     ),
@@ -161,7 +161,7 @@ export function createTools(deps: ToolDeps): Tool[] {
     }),
     tool("execute_queued", "Signs and broadcasts a queued spend whose veto window has passed.", z.object({ id: z.string() }), async ({ id }) => {
       const result = await payer.execute(id);
-      deps.onSpend?.("queued spend", result);
+      deps.onSpend?.("queued spend", `spend ${id}`, result);
       return result;
     }),
   ];

@@ -10,7 +10,7 @@ const SATS = 1_000n;
 const WEI = 1_000n;
 const USDC_BASE_UNITS = 1n;
 const UNLISTED_EVM = "0x000000000000000000000000000000000000dEaD";
-const UNLISTED_BTC = "tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx";
+const UNLISTED_BTC = "tb1qh2at4w46h2at4w46h2at4w46h2at4w46jvgsm3";
 
 function report(check: string, result: object): void {
   const printable = (_: string, value: unknown) => (typeof value === "bigint" ? `${value}` : value);

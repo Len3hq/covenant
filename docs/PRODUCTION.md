@@ -101,10 +101,21 @@ a secret**.
 
 ### Funding
 
-- [ ] Base Sepolia: top up to about 0.05 ETH, and keep at least 20 USDC.
-- [ ] Testnet4: keep enough BTC for the demo payments and fees.
-- [ ] NEAR: keep the vault funded, because it pays the `sign` deposit. Watch the agent key's allowance too.
-- [ ] Size all of this for at least 10 full judge runs (C10).
+Judges and screening tools run `make demo`, which spends nothing. Only live runs spend, and each
+live `pay` scenario costs about 20,141 sats, 1 USDC, 0.0000004 ETH in gas and 0.001 NEAR of the agent
+key's allowance. Measured on 6 Nov, the vault holds enough for:
+
+| Asset | Held on 6 Nov | Live `pay` runs it covers | Daily cap allows |
+| --- | --- | --- | --- |
+| BTC | 657,782 sats | About 30 | About 99 a day |
+| USDC | 18 USDC | 17 | 200 a day |
+| ETH (gas) | 0.0000962 ETH | About 240 | Not the limit |
+| Agent allowance | 0.97 NEAR | About 650 spends, keeping 0.3 NEAR spare | Not a cap |
+
+- [ ] Base Sepolia: top up to about 0.05 ETH and 20 USDC before the recorded run.
+- [ ] NEAR: the vault holds 4 NEAR, which covers its storage and the 1 yoctoNEAR per `sign`.
+- [ ] A transaction needs about 0.3 NEAR of allowance left to pass the pessimistic gas check, so
+      replace the agent key before its allowance falls to that.
 
 ### Going public
 

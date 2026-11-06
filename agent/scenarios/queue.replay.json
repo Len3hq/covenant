@@ -1,0 +1,22 @@
+{
+  "source": "scripted: one payment above the 250,000-sat queue threshold",
+  "turns": [
+    [
+      {
+        "tool": "list_payees",
+        "input": {}
+      }
+    ],
+    [
+      {
+        "tool": "pay",
+        "input": {
+          "to": "Acme Hosting",
+          "asset": "BTC",
+          "amount": "300000",
+          "memo": "annual hosting contract"
+        }
+      }
+    ]
+  ]
+}

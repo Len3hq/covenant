@@ -17,3 +17,7 @@ ripemd = "0.1"
 [[test]]
 name = "attacks_bitcoin"
 path = "../attacks/bitcoin.rs"
+
+[[test]]
+name = "attacks_evm"
+path = "../attacks/evm.rs"

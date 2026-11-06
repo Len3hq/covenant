@@ -2,7 +2,7 @@
 
 This is the plan we follow from an empty repo to a submitted entry by **20:00 UTC on Sat 14 Nov 2026**. Work through milestones M0 to M13 in order of date, and tick boxes as you finish them. [SPEC.md](SPEC.md) holds the detail behind each task.
 
-**Where we are on 5 Nov: 72%.** M0 to M7 have passed their exit checks, with M7 three days early. All remaining gates keep their dates. D5, D6, D10 and D11 were decided on 5 Nov.
+**Where we are on 6 Nov: 79%.** M0 to M8 have passed their exit checks, with M8 three days early. All remaining gates keep their dates. D5, D6, D10 and D11 were decided on 5 Nov.
 
 ## How to use this plan
 
@@ -300,14 +300,16 @@ Passed on 5 Nov ([EVIDENCE.md](../EVIDENCE.md)). Rerunning a run with `--run <id
 
 *Goal: the demo runs repeatably, and without an LLM key.*
 
-- [ ] **B:** `agent/scenarios/`: `pay`, `invoice-poisoned.txt` attack, `queue`
-- [ ] **B:** `--replay` mode against live testnet; implement `make demo-attack` and `make demo-queue`
-- [ ] **C:** EVM attack suite in `tests/attacks/`
-- [ ] **Lead:** SECURITY.md trust model, including C11 and the spec's limitations
-- [ ] **Lead:** size caps and funding for live runs (C10)
-- [ ] **B:** make `make demo` run keyless in the sandbox, with a `--live` mode (D5)
+- [x] **B:** `agent/scenarios/`: `pay`, `invoice-poisoned.txt` attack, `queue`
+- [x] **B:** replay mode, keyless in the sandbox by default and on testnet with `LIVE=1`; implement `make demo-attack` and `make demo-queue`
+- [x] **C:** EVM attack suite in `tests/attacks/`: 14 attacks, none reached the signer
+- [x] **Lead:** SECURITY.md trust model, including C11 and the spec's limitations
+- [x] **Lead:** size caps and funding for live runs (C10): see PRODUCTION.md
+- [x] **B:** make `make demo` run keyless in the sandbox, with a `--live` mode (D5)
 
 **Exit check:** all three scenarios pass in replay mode with no LLM key set.
+
+Passed on 6 Nov: `make demo` passes all three with no `.env` at all, in about 8 s after the build. Live, `gpt-5.4-mini` ignored the poisoned invoice, while `gpt-4o-mini` followed it and was refused twice. The attack replay is that `gpt-4o-mini` recording.
 
 ### M9: Dashboard live, bug bash (to 85%), Tue 10 Nov
 

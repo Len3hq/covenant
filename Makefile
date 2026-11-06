@@ -60,17 +60,27 @@ pay-usdc: ## Pay USDC from the vault: make pay-usdc TO=<address> AMOUNT=<base un
 	pnpm --filter @covenant/agent build
 	node --env-file=.env agent/dist/pay-usdc.js $(TO) $(AMOUNT)
 
-demo: demo-pay demo-attack demo-queue ## Run all three judge scenarios
+DEMO_FLAGS = $(if $(LIVE),--live) $(if $(LLM),--llm) $(if $(RECORD),--record)
+DEMO_ENV = $(if $(wildcard .env),--env-file=.env)
 
-demo-pay: ## An LLM pays on both chains, live (needs AGENT_PRIVATE_KEY and the LLM_* settings)
+demo: wasm ## All three scenarios on a local sandbox, with no keys. LIVE=1 for testnet, LLM=1 for a real model
 	pnpm --filter @covenant/agent build
-	node --env-file=.env agent/dist/index.js pay
+	node $(DEMO_ENV) agent/dist/index.js all $(DEMO_FLAGS)
 
-demo-attack: ## Prompt-injected attack, refused by the contract (milestone M8)
-	@echo "demo-attack: not implemented yet, see M8 in docs/BUILD_PLAN.md" >&2; exit 1
+demo-pay: wasm ## Honest payments on both chains (same flags as demo)
+	pnpm --filter @covenant/agent build
+	node $(DEMO_ENV) agent/dist/index.js pay $(DEMO_FLAGS)
 
-demo-queue: ## Large spend queued for veto (milestone M8)
-	@echo "demo-queue: not implemented yet, see M8 in docs/BUILD_PLAN.md" >&2; exit 1
+demo-attack: wasm ## A poisoned invoice the contract refuses (same flags as demo)
+	pnpm --filter @covenant/agent build
+	node $(DEMO_ENV) agent/dist/index.js attack $(DEMO_FLAGS)
+
+demo-queue: wasm ## A large spend queued, then vetoed (same flags as demo)
+	pnpm --filter @covenant/agent build
+	node $(DEMO_ENV) agent/dist/index.js queue $(DEMO_FLAGS)
+
+
+
 
 veto: ## Veto a queued spend: make veto ID=<spend id> [AS=<guardian account>]
 	node --env-file=.env scripts/src/admin.ts veto $(ID)

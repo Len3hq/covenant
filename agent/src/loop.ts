@@ -17,13 +17,16 @@ export async function runAgent(args: {
   user: string;
   tools: Tool[];
   log: Log;
+  /** Sees each turn's calls, so a live run can be saved as a replay. */
+  onTurn?: (calls: { tool: string; input: unknown }[]) => void;
 }): Promise<string> {
-  const { llm, system, user, tools, log } = args;
+  const { llm, system, user, tools, log, onTurn } = args;
   const conversation = llm.start(system, user, tools.map((tool) => tool.spec));
   let results: ToolResult[] = [];
   for (let turn = 0; turn < MAX_TURNS; turn += 1) {
     const { text, calls } = await conversation.next(results);
     if (calls.length === 0) return text;
+    onTurn?.(calls.map(({ name, input }) => ({ tool: name, input })));
     results = [];
     for (const { id, name, input } of calls) {
       log("tool_call", { tool: name, input });
