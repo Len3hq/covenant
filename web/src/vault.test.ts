@@ -7,7 +7,9 @@ import {
   describePayee,
   loadActivity,
   loadVault,
+  payeeAddress,
   secondsUntil,
+  warnings,
 } from "./vault";
 
 const config = {
@@ -114,7 +116,44 @@ describe("describeActivity", () => {
   it("names the error on a refusal and marks it as stopped", () => {
     expect(
       describeActivity({ event: "spend_rejected", error: "FeeTooHigh", payments: [], txHash: "", at: 0 }),
-    ).toEqual({ outcome: "Refused: FeeTooHigh", stopped: true });
+    ).toEqual({ outcome: "Refused, because its fee rate was above the cap (FeeTooHigh)", stopped: true });
+  });
+});
+
+describe("warnings", () => {
+  const base = {
+    nearBalance: "2000000000000000000000000",
+    agentAllowance: "900000000000000000000000",
+    policy: { caps: [{ asset: "Btc", per_tx: "500000", per_24h: "1", queue_at: "1" }], payees: [] },
+    balances: [{ name: "BTC", unit: "sats", balance: "600000", spent24h: "0", per24h: "1" }],
+  } as unknown as Parameters<typeof warnings>[0];
+
+  it("is quiet when everything is funded", () => {
+    expect(warnings(base)).toEqual([]);
+  });
+
+  it("names each thing that needs topping up", () => {
+    const low = warnings({
+      ...base,
+      nearBalance: "500000000000000000000000",
+      agentAllowance: "300000000000000000000000",
+      balances: [{ name: "BTC", unit: "sats", balance: "1000", spent24h: "0", per24h: "1" }],
+    });
+    expect(low).toHaveLength(3);
+    expect(low[0]).toContain("0.50 NEAR");
+    expect(low[2]).toContain("under a tenth");
+  });
+
+  it("says nothing about a balance it couldn't read", () => {
+    expect(warnings({ ...base, nearBalance: null, agentAllowance: null })).toEqual([]);
+  });
+});
+
+describe("payeeAddress", () => {
+  it("shows a Bitcoin payee as its address, and an EVM payee as hex", () => {
+    const script = [0, 20, ...hex.decode("fc5b5d20f3573a7e7e479f0e901f9f0efcc327fa")];
+    expect(payeeAddress("Bitcoin", script)).toBe("tb1ql3d46g8n2ua8ulj8nu8fq8ulpm7vxfl6tjfxgs");
+    expect(payeeAddress("Evm", [0xab, 0xcd])).toBe("0xabcd");
   });
 });
 
@@ -137,6 +176,8 @@ describe("loadVault", () => {
       balances: [],
       queue: [],
       activity: null,
+      nearBalance: null,
+      agentAllowance: null,
     });
   });
 
@@ -228,8 +269,8 @@ describe("formatting", () => {
     expect(describeAsset({ Erc20: { chain_id: 84532, token: [...USDC] } }).name).toBe("USDC");
   });
 
-  it("prefixes EVM payees only", () => {
-    expect(describePayee({ chain: "Evm", to: [171], label: "a" })).toBe("a (Evm): 0xab");
+  it("names each payee's chain and shows a Bitcoin script it can't decode as hex", () => {
+    expect(describePayee({ chain: "Evm", to: [171], label: "a" })).toBe("a (Base): 0xab");
     expect(describePayee({ chain: "Bitcoin", to: [171], label: "b" })).toBe("b (Bitcoin): ab");
   });
 });

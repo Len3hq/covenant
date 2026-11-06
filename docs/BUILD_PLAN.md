@@ -315,9 +315,10 @@ Passed on 6 Nov: `make demo` passes all three with no `.env` at all, in about 8 
 
 *Goal: a stranger can read the result from one screenshot.*
 
-- [ ] **C:** activity log polish, low-balance warning, and a static deploy linked from the README
-- [ ] **All:** bug bash: each person tries to break another owner's area, and files findings as issues
-- [ ] **Lead:** NEAR_FEATURES.md with `file:line` links
+- [x] **C:** activity log polish (plain-English refusals, a chain filter, readable addresses) and low-balance warnings
+- [ ] **C:** static deploy linked from the README. The Pages workflow is ready, but GitHub serves Pages only from public repos on the free plan, so it waits for the repo to go public
+- [x] **All:** bug bash: two fixed (a DAO vote could approve someone else's proposal; a later payment could take a queued Bitcoin spend's coins), five minor ones filed as issues #2 to #6
+- [x] **Lead:** NEAR_FEATURES.md with `file:line` links
 - [ ] **All:** show the activity log screenshot to someone outside the team, as the spec's done-check requires
 
 **Exit check:** dashboard live at a public URL, and no open critical bugs.

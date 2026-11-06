@@ -36,9 +36,10 @@ export interface World {
 /** The agent's tools for one run, and the spends they make. */
 export function createRuntime(world: World, runId: string) {
   const spends: Spend[] = [];
+  const store = new SpendStore(world.spendsFile);
   const payer = new Payer({
     vault: world.vault,
-    store: new SpendStore(world.spendsFile),
+    store,
     log: jsonLog,
     broadcast: world.broadcast,
     ...(world.assemble ? { assemble: world.assemble } : {}),
@@ -52,6 +53,7 @@ export function createRuntime(world: World, runId: string) {
     runId,
     bitcoin: { vault: world.vault, mempool: world.mempool },
     reads: world.reads,
+    heldCoins: () => store.heldCoins(),
     onSpend: (asset, to, report) => spends.push({ asset, to, report }),
   });
   return { tools, spends };

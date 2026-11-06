@@ -29,6 +29,8 @@ export interface ToolDeps {
   usdc: Address;
   /** Scopes a spend's identity, so one run's retry is the same spend and a new run's isn't. */
   runId: string;
+  /** Coins promised to unfinished spends, which a new payment must not use. */
+  heldCoins?: () => Set<string>;
   /** Every spend the tools made, for the caller to check and print. */
   onSpend?: (asset: string, to: string, report: SpendReport) => void;
 }
@@ -123,7 +125,19 @@ export function createTools(deps: ToolDeps): Tool[] {
         const description = `${amount} ${asset} to ${destination}: ${memo}`;
         const result = await payer.spend(key, description, async () => {
           if (asset === "BTC") {
-            return (await prepareBitcoin(deps.bitcoin, destination, value)).prepared;
+            const held = deps.heldCoins?.() ?? new Set<string>();
+            const { mempool } = deps.bitcoin;
+            const free: PayDeps = {
+              ...deps.bitcoin,
+              mempool: {
+                ...mempool,
+                spendableUtxos: async (address) =>
+                  (await mempool.spendableUtxos(address)).filter(
+                    (coin) => !held.has(`${coin.txid}:${coin.vout}`),
+                  ),
+              },
+            };
+            return (await prepareBitcoin(free, destination, value)).prepared;
           }
           const payee = getAddress(destination);
           if (asset === "ETH") return evmPrepared({ to: payee, value, gas: TRANSFER_GAS });

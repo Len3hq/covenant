@@ -122,6 +122,45 @@ export interface VaultState {
   queue: Pending[];
   /** Null when the transaction API couldn't be read. */
   activity: Activity[] | null;
+  /** The vault account's NEAR, in yoctoNEAR. It pays for storage and the `sign` deposits. */
+  nearBalance: string | null;
+  /** The smallest allowance left on the agent's function-call keys, in yoctoNEAR. */
+  agentAllowance: string | null;
+}
+
+const YOCTO = 10n ** 24n;
+/** Below this the vault may not cover its storage as the queue grows. */
+const LOW_VAULT_NEAR = YOCTO;
+/** A 300 Tgas call needs about 0.3 NEAR of allowance left to pass the pessimistic gas check. */
+const LOW_ALLOWANCE = (YOCTO * 4n) / 10n;
+const LOW_BALANCE_SHARE = 10n;
+
+/** What needs topping up, in plain words. Empty when nothing does. */
+export function warnings(vault: VaultState): string[] {
+  const found: string[] = [];
+  if (vault.nearBalance !== null && BigInt(vault.nearBalance) < LOW_VAULT_NEAR) {
+    found.push(`The vault has ${formatNear(vault.nearBalance)} NEAR left; keep it above 1 NEAR.`);
+  }
+  if (vault.agentAllowance !== null && BigInt(vault.agentAllowance) < LOW_ALLOWANCE) {
+    found.push(
+      `The agent's key has ${formatNear(vault.agentAllowance)} NEAR of allowance left. Below about 0.3 it can't send a spend, so replace the key.`,
+    );
+  }
+  for (const cap of vault.policy.caps) {
+    const { name, unit } = describeAsset(cap.asset);
+    const row = vault.balances.find((balance) => balance.name === name);
+    // A tenth of the largest payment the policy allows: low enough that live runs will soon fail.
+    if (row?.balance != null && BigInt(row.balance) * LOW_BALANCE_SHARE < BigInt(cap.per_tx)) {
+      found.push(`${name} is low: ${row.balance} ${unit}, under a tenth of the ${cap.per_tx} ${unit} payment cap.`);
+    }
+  }
+  return found;
+}
+
+/** NEAR to two decimal places, from yoctoNEAR. */
+export function formatNear(yocto: string): string {
+  const hundredths = BigInt(yocto) / (YOCTO / 100n);
+  return `${hundredths / 100n}.${(hundredths % 100n).toString().padStart(2, "0")}`;
 }
 
 interface Addresses {
@@ -315,6 +354,65 @@ export async function loadActivity(
     .sort((a, b) => b.at - a.at);
 }
 
+async function rpcQuery<T>(config: VaultConfig, params: object, fetcher: typeof fetch): Promise<T> {
+  const response = await fetcher(config.rpcUrl, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: "query", method: "query", params: { finality: "final", ...params } }),
+  });
+  const body = (await response.json()) as { result?: T };
+  if (!body.result) throw new Error("query: no result");
+  return body.result;
+}
+
+async function nearBalance(config: VaultConfig, fetcher: typeof fetch): Promise<string | null> {
+  try {
+    const { amount } = await rpcQuery<{ amount?: unknown }>(
+      config,
+      { request_type: "view_account", account_id: config.accountId },
+      fetcher,
+    );
+    return typeof amount === "string" ? amount : null;
+  } catch {
+    return null;
+  }
+}
+
+async function agentAllowance(config: VaultConfig, agent: string, fetcher: typeof fetch): Promise<string | null> {
+  try {
+    const { keys } = await rpcQuery<{
+      keys: { access_key: { permission: unknown } }[];
+    }>(config, { request_type: "view_access_key_list", account_id: agent }, fetcher);
+    const allowances = keys.flatMap(({ access_key: { permission } }) => {
+      if (typeof permission !== "object" || !permission || !("FunctionCall" in permission)) return [];
+      const call = (permission as { FunctionCall: { allowance: string | null; receiver_id: string } }).FunctionCall;
+      return call.receiver_id === config.accountId && call.allowance ? [BigInt(call.allowance)] : [];
+    });
+    if (allowances.length === 0) return null;
+    return allowances.reduce((low, value) => (value < low ? value : low)).toString();
+  } catch {
+    return null;
+  }
+}
+
+/** The id of the proposal with this proposer and description, searching from `from`. */
+export async function findProposal(
+  config: VaultConfig,
+  dao: string,
+  from: number,
+  proposer: string,
+  description: string,
+  fetcher: typeof fetch = fetch,
+): Promise<number | null> {
+  const proposals = await view<{ id: number; proposer: string; description: string }[]>(
+    { ...config, accountId: dao },
+    "get_proposals",
+    fetcher,
+    { from_index: from, limit: 50 },
+  );
+  return proposals.find((p) => p.proposer === proposer && p.description === description)?.id ?? null;
+}
+
 /** Null for a guardian that's a plain account, which has no DAO methods to answer. */
 async function loadGuardianDao(
   config: VaultConfig,
@@ -349,7 +447,11 @@ export async function loadVault(
     view<Pending[]>(config, "get_queue", fetcher),
     loadActivity(config, fetcher).catch(() => null),
   ]);
-  const guardianDao = await loadGuardianDao(config, roles.guardian, fetcher);
+  const [guardianDao, near, allowance] = await Promise.all([
+    loadGuardianDao(config, roles.guardian, fetcher),
+    nearBalance(config, fetcher),
+    agentAllowance(config, roles.agent, fetcher),
+  ]);
   const btc = btcAddress(addresses.btc_pubkey);
   const balances = await Promise.all(
     policy.caps.map((cap) =>
@@ -366,6 +468,8 @@ export async function loadVault(
     balances,
     queue,
     activity,
+    nearBalance: near,
+    agentAllowance: allowance,
   };
 }
 
@@ -388,16 +492,55 @@ export function describeAsset(asset: Asset): { name: string; unit: string } {
   return { name: `SPL ${bytesToHex(asset.Spl.mint)}`, unit: "base units" };
 }
 
-export function describePayee(payee: Payee): string {
-  const prefix = payee.chain === "Evm" ? "0x" : "";
-  return `${payee.label} (${payee.chain}): ${prefix}${bytesToHex(payee.to)}`;
+/** The testnet address for a P2WPKH output script, or its raw bytes for anything else. */
+export function scriptAddress(script: number[]): string {
+  const [version, length, ...program] = script;
+  if (version === 0 && length === 20 && program.length === 20) {
+    return bech32.encode("tb", [0, ...bech32.toWords(Uint8Array.from(program))]);
+  }
+  return bytesToHex(script);
 }
+
+/** Where a payment goes, as a person would read it. */
+export function payeeAddress(chain: Payee["chain"], to: number[]): string {
+  return chain === "Bitcoin" ? scriptAddress(to) : `0x${bytesToHex(to)}`;
+}
+
+export function describePayee(payee: Payee): string {
+  return `${payee.label} (${payee.chain === "Evm" ? "Base" : payee.chain}): ${payeeAddress(payee.chain, payee.to)}`;
+}
+
+/** What each refusal means, for someone who has never seen the error names. */
+const REFUSALS: Record<string, string> = {
+  OutputNotWhitelisted: "it paid an address that isn't on the payee list",
+  CalldataNotAllowed: "it was a contract call other than a plain token transfer",
+  TokenNotAllowed: "it moved a token the policy doesn't allow",
+  ValueWithTokenCall: "it sent ETH along with a token call",
+  WrongChainId: "it was signed for another chain",
+  GasCostTooHigh: "its gas could cost more than the cap",
+  FeeTooHigh: "its fee rate was above the cap",
+  PerTxCapExceeded: "it was larger than one payment may be",
+  DailyCapExceeded: "it would pass the 24-hour limit",
+  AssetNotCapped: "the policy sets no limit for that asset",
+  PrevTxMismatch: "it lied about a coin's value",
+  InputNotOwned: "it spent a coin the vault doesn't own",
+  TooManyInputs: "it used more coins than one spend may",
+  UnsupportedScript: "it used an output type the vault refuses",
+  NotYetExecutable: "it was still in its veto window",
+  QueueFull: "the veto queue was full",
+  SignFailed: "the signer failed, so the budget was returned",
+  MalformedTx: "the transaction was malformed",
+};
+
+export const explainRefusal = (error: string | undefined) =>
+  (error && REFUSALS[error]) ?? "the contract refused it";
 
 /** Names a payment's destination from the policy, or shows its raw bytes if it's since been removed. */
 export function describePayment(payment: Payment, policy: Policy): string {
   const { unit, name } = describeAsset(payment.asset);
   const payee = policy.payees.find((p) => bytesToHex(p.to) === bytesToHex(payment.to));
-  return `${payment.amount} ${unit} of ${name} to ${payee?.label ?? bytesToHex(payment.to)}`;
+  const chain = "Btc" === payment.asset ? "Bitcoin" : "Evm";
+  return `${payment.amount} ${unit} of ${name} to ${payee?.label ?? payeeAddress(chain, payment.to)}`;
 }
 
 /** Whole seconds until a nanosecond timestamp from the contract, never below zero. */
@@ -419,7 +562,10 @@ export function describeActivity(entry: Activity): {
     case "spend_signed":
       return { outcome: "Signed", stopped: false, signed: true };
     case "spend_rejected":
-      return { outcome: `Refused: ${entry.error ?? "unknown"}`, stopped: true };
+      return {
+        outcome: `Refused, because ${explainRefusal(entry.error)} (${entry.error ?? "unknown"})`,
+        stopped: true,
+      };
     case "spend_queued":
       return { outcome: "Queued for veto window", stopped: false };
     case "spend_vetoed":

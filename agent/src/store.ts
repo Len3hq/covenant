@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { Transaction } from "bitcoinjs-lib";
 import type { SpendOutcome } from "./vault.js";
 
 /** Enough to finish a spend after a restart, without proposing it again. */
@@ -49,6 +50,22 @@ export class SpendStore {
 
   byId(id: string): SpendRecord | undefined {
     return [...this.records.values()].find((record) => record.id === id);
+  }
+
+  /**
+   * Coins that an unfinished Bitcoin spend will use, as `txid:vout`. A new payment must leave them
+   * alone, or the queued spend would be signed and charged but couldn't land.
+   */
+  heldCoins(): Set<string> {
+    const finished = new Set(["broadcast", "rejected", "failed"]);
+    const held = new Set<string>();
+    for (const { status, prepared } of this.records.values()) {
+      if (prepared.chain !== "Bitcoin" || finished.has(status)) continue;
+      for (const input of Transaction.fromHex(prepared.unsignedHex).ins) {
+        held.add(`${Buffer.from(input.hash).reverse().toString("hex")}:${input.index}`);
+      }
+    }
+    return held;
   }
 
   /** Written to a temporary file first, so a crash can't leave half a record behind. */

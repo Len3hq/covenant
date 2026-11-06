@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { VaultState } from "./vault";
-import { canStop, daoCall, parsePolicy, roleOf, transactionsFor, vaultCall } from "./wallet";
+import { act, canStop, daoProposal, parsePolicy, roleOf, vaultCall, type Transaction } from "./wallet";
 
 const vault = {
   roles: { owner: "owner.testnet", guardian: "dao.testnet", agent: "agent.testnet" },
@@ -18,31 +18,57 @@ describe("roleOf", () => {
   });
 });
 
-describe("transactionsFor", () => {
-  it("calls the vault directly for the owner, with no deposit", () => {
-    expect(transactionsFor("owner", "vault", vault, "veto", { id: "3" })).toEqual([
-      vaultCall("vault", "veto", { id: "3" }),
-    ]);
-    expect(vaultCall("vault", "veto", { id: "3" }).actions[0]?.params.deposit).toBe("0");
+describe("act", () => {
+  const run = (role: "owner" | "council", found: number | null) => {
+    const sent: Transaction[] = [];
+    const findProposal = vi.fn(async () => found);
+    const done = act({
+      rpcUrl: "rpc",
+      role,
+      account: "member.testnet",
+      vault: "vault",
+      state: vault,
+      method: "veto",
+      args: { id: "3" },
+      findProposal,
+      sendWith: async (_rpc, transaction) => {
+        sent.push(transaction);
+      },
+    });
+    return { done, sent, findProposal };
+  };
+
+  it("calls the vault directly for the owner, with no deposit", async () => {
+    const { done, sent } = run("owner", null);
+    await done;
+    expect(sent).toEqual([vaultCall("vault", "veto", { id: "3" })]);
+    expect(sent[0]?.actions[0]?.params.deposit).toBe("0");
   });
 
-  it("proposes and votes for a council member, using the DAO's bond and next id", () => {
-    const [propose, vote] = transactionsFor("council", "vault", vault, "veto", { id: "3" });
-    expect(propose?.receiverId).toBe("dao.testnet");
-    expect(propose?.actions[0]?.params.methodName).toBe("add_proposal");
-    expect(propose?.actions[0]?.params.deposit).toBe("7");
-    expect(vote?.actions[0]?.params.methodName).toBe("act_proposal");
-    expect(vote?.actions[0]?.params.args).toMatchObject({ id: 4, action: "VoteApprove" });
+  it("votes for the proposal it found by its own description, not the id it expected", async () => {
+    const { done, sent, findProposal } = run("council", 9);
+    await done;
+    const [propose, vote] = sent;
+    expect(propose?.actions[0]?.params).toMatchObject({ methodName: "add_proposal", deposit: "7" });
+    const { description } = (propose?.actions[0]?.params.args as { proposal: { description: string } }).proposal;
+    expect(findProposal).toHaveBeenCalledWith("dao.testnet", 4, "member.testnet", description);
+    expect(vote?.actions[0]?.params.args).toMatchObject({ id: 9, action: "VoteApprove" });
   });
 
-  it("encodes the vault's arguments as the DAO expects, and targets the vault", () => {
-    const [propose] = daoCall("vault", { accountId: "d", proposalBond: "1", nextProposalId: 0 }, "veto", { id: "3" });
-    const args = propose?.actions[0]?.params.args as {
-      proposal: { kind: { FunctionCall: { receiver_id: string; actions: { args: string }[] } } };
-    };
-    const { receiver_id, actions } = args.proposal.kind.FunctionCall;
-    expect(receiver_id).toBe("vault");
-    expect(JSON.parse(atob(actions[0]?.args ?? ""))).toEqual({ id: "3" });
+  it("votes for nothing when it can't find its own proposal", async () => {
+    const { done, sent } = run("council", null);
+    await expect(done).rejects.toThrow("nothing was voted on");
+    expect(sent).toHaveLength(1);
+  });
+});
+
+describe("daoProposal", () => {
+  it("targets the vault, encodes its arguments, and makes each description unique", () => {
+    const { kind, description } = daoProposal("vault", "veto", { id: "3" }, "n1");
+    const [action] = kind.FunctionCall.actions;
+    expect(kind.FunctionCall.receiver_id).toBe("vault");
+    expect(JSON.parse(atob(action?.args ?? ""))).toEqual({ id: "3" });
+    expect(description).not.toBe(daoProposal("vault", "veto", { id: "3" }, "n2").description);
   });
 });
 

@@ -1,7 +1,10 @@
+import { hex } from "@scure/base";
+import { networks, payments, Transaction } from "bitcoinjs-lib";
 import { describe, expect, it, vi } from "vitest";
 import type { LlmClient, LlmTurn, ToolResult } from "./llm/index.js";
 import { runAgent } from "./loop.js";
 import type { Payer } from "./payer.js";
+import type { Prepared } from "./store.js";
 import { createTools, spendKey, type ToolDeps } from "./tools.js";
 import type { AgentVault } from "./vault.js";
 
@@ -44,7 +47,7 @@ function setup() {
     if (!found) throw new Error(name);
     return found.run(input);
   };
-  return { run, spend, tools };
+  return { run, spend, tools, deps };
 }
 
 describe("tools", () => {
@@ -91,6 +94,47 @@ describe("tools", () => {
     const { run, spend } = setup();
     await run("evm_call", { to: `0x${"cc".repeat(20)}`, data: "0x095ea7b3", value: "0" });
     expect(spend).toHaveBeenCalledOnce();
+  });
+
+  it("won't spend a coin held by an unfinished spend", async () => {
+    const pubkey = hex.decode("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798");
+    const own = payments.p2wpkh({ pubkey, network: networks.testnet }).output as Uint8Array;
+    const funding = [500_000n, 90_000n].map((value, index) => {
+      const tx = new Transaction();
+      tx.addInput(new Uint8Array(32).fill(index + 1), 0);
+      tx.addOutput(own, value);
+      return tx;
+    });
+    const held = `${funding[0]?.getId()}:0`;
+    let used: string[] = [];
+    const deps = setup().deps;
+    const spend = vi.fn(async (_key: string, _description: string, prepare: () => Promise<Prepared>) => {
+      const prepared = await prepare();
+      if (prepared.chain === "Bitcoin") {
+        used = Transaction.fromHex(prepared.unsignedHex).ins.map(
+          (input) => `${Buffer.from(input.hash).reverse().toString("hex")}:${input.index}`,
+        );
+      }
+      return { status: "broadcast", links: {} };
+    });
+    const tools = createTools({
+      ...deps,
+      payer: { spend } as unknown as Payer,
+      vault: { ...deps.vault, btcPubkey: async () => pubkey, btcLimits: async () => ({ maxInputs: 3, maxFeeRate: 5n }) } as unknown as AgentVault,
+      heldCoins: () => new Set([held]),
+      bitcoin: {
+        vault: { btcPubkey: async () => pubkey, btcLimits: async () => ({ maxInputs: 3, maxFeeRate: 5n }) } as unknown as AgentVault,
+        mempool: {
+          spendableUtxos: async () => funding.map((tx, index) => ({ txid: tx.getId(), vout: 0, value: [500_000n, 90_000n][index] ?? 0n })),
+          txHex: async (txid: string) => funding.find((tx) => tx.getId() === txid)?.toHex() ?? "",
+          feeRate: async () => 2n,
+          broadcast: async () => "",
+        },
+      },
+    });
+    const pay = tools.find((tool) => tool.spec.name === "pay");
+    await pay?.run({ to: "Acme Hosting", asset: "BTC", amount: "20000", memo: "m" });
+    expect(used).toEqual([`${funding[1]?.getId()}:0`]);
   });
 
   it("reports the queue", async () => {

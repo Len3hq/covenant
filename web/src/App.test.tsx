@@ -25,6 +25,8 @@ const vault: VaultState = {
   ],
   queue: [],
   activity: [],
+  nearBalance: "3994411528526909700000000",
+  agentAllowance: "971854810593997600000000",
 };
 
 describe("App", () => {
@@ -82,7 +84,7 @@ describe("Dashboard", () => {
     const html = renderToString(
       <Dashboard accountId="v" status={{ kind: "ready", vault: logged }} />,
     ).replaceAll("<!-- -->", "");
-    expect(html).toContain("Refused: OutputNotWhitelisted");
+    expect(html).toContain("Refused, because it paid an address that isn&#x27;t on the payee list (OutputNotWhitelisted)");
     expect(html).toContain("Signed");
     expect(html).toContain('class="stopped"');
     expect(html).toContain('class="signed"');
@@ -142,6 +144,27 @@ describe("Dashboard", () => {
       expect(render(queued, "owner")).toContain("Edit policy");
       expect(render({ ...queued, frozen: true }, "owner")).toContain("Unfreeze</button>");
     });
+  });
+
+  it("shows the vault's NEAR and the agent's allowance, and warns when either runs low", () => {
+    const fine = renderToString(<Dashboard accountId="v" status={{ kind: "ready", vault }} />).replaceAll("<!-- -->", "");
+    expect(fine).toContain("3.99 NEAR");
+    expect(fine).toContain("0.97 NEAR");
+    expect(fine).not.toContain("Needs attention");
+    const low = renderToString(
+      <Dashboard
+        accountId="v"
+        status={{ kind: "ready", vault: { ...vault, agentAllowance: "250000000000000000000000" } }}
+      />,
+    );
+    expect(low).toContain("Needs attention");
+    expect(low).toContain("replace the key");
+  });
+
+  it("offers a chain filter on the activity log", () => {
+    const html = renderToString(<Dashboard accountId="v" status={{ kind: "ready", vault }} />);
+    expect(html).toContain("Bitcoin</button>");
+    expect(html).toContain("Base</button>");
   });
 
   it("says when the activity log can't be read", () => {

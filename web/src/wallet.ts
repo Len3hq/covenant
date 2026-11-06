@@ -37,13 +37,8 @@ export function vaultCall(vault: string, method: string, args: object): Transact
   return { receiverId: vault, actions: [call(method, args)] };
 }
 
-/** The same call made by the guardian DAO: a council member proposes it, then votes it through. */
-export function daoCall(
-  vault: string,
-  dao: { accountId: string; proposalBond: string; nextProposalId: number },
-  method: string,
-  args: object,
-): Transaction[] {
+/** The DAO proposal for a guardian action, with a description that identifies it. */
+export function daoProposal(vault: string, method: string, args: object, nonce: string) {
   const kind = {
     FunctionCall: {
       receiver_id: vault,
@@ -57,33 +52,21 @@ export function daoCall(
       ],
     },
   };
-  const proposal = { description: `Guardian: ${method} on ${vault}`, kind };
-  return [
-    {
-      receiverId: dao.accountId,
-      actions: [call("add_proposal", { proposal }, CALL_GAS, dao.proposalBond)],
-    },
-    {
-      receiverId: dao.accountId,
-      actions: [
-        call("act_proposal", { id: dao.nextProposalId, action: "VoteApprove", proposal: kind }, VOTE_GAS),
-      ],
-    },
-  ];
+  return { kind, description: `Guardian: ${method} on ${vault} (${nonce})` };
 }
 
-/** The transactions that make `method` happen for this role, in order. */
-export function transactionsFor(
-  role: Role,
-  vault: string,
-  state: VaultState,
-  method: string,
-  args: object,
-): Transaction[] {
-  if (role === "council" && state.guardianDao) {
-    return daoCall(vault, state.guardianDao, method, args);
-  }
-  return [vaultCall(vault, method, args)];
+export function proposeCall(dao: { accountId: string; proposalBond: string }, proposal: object): Transaction {
+  return {
+    receiverId: dao.accountId,
+    actions: [call("add_proposal", { proposal }, CALL_GAS, dao.proposalBond)],
+  };
+}
+
+export function voteCall(dao: { accountId: string }, id: number, kind: object): Transaction {
+  return {
+    receiverId: dao.accountId,
+    actions: [call("act_proposal", { id, action: "VoteApprove", proposal: kind }, VOTE_GAS)],
+  };
 }
 
 /** Reads a policy someone typed. It only checks the shape; the contract validates the rules. */
@@ -119,10 +102,36 @@ export async function connectedAccount(rpcUrl: string): Promise<string | null> {
   }
 }
 
-export async function send(rpcUrl: string, transactions: Transaction[]): Promise<void> {
+export async function send(rpcUrl: string, transaction: Transaction): Promise<void> {
   const wallet = await (await walletConnector(rpcUrl)).wallet();
-  // One at a time, because a vote can only follow the proposal it votes on.
-  for (const transaction of transactions) {
-    await wallet.signAndSendTransaction(transaction);
+  await wallet.signAndSendTransaction(transaction);
+}
+
+/**
+ * Makes `method` happen for this role. A council member proposes, then votes for the proposal
+ * found by its own description and proposer. Anyone may add proposals, so guessing the next id
+ * could approve someone else's.
+ */
+export async function act(args: {
+  rpcUrl: string;
+  role: Role;
+  account: string;
+  vault: string;
+  state: VaultState;
+  method: string;
+  args: object;
+  findProposal: (dao: string, from: number, proposer: string, description: string) => Promise<number | null>;
+  sendWith?: typeof send;
+}): Promise<void> {
+  const sender = args.sendWith ?? send;
+  const dao = args.state.guardianDao;
+  if (args.role !== "council" || !dao) {
+    await sender(args.rpcUrl, vaultCall(args.vault, args.method, args.args));
+    return;
   }
+  const { kind, description } = daoProposal(args.vault, args.method, args.args, crypto.randomUUID());
+  await sender(args.rpcUrl, proposeCall(dao, { description, kind }));
+  const id = await args.findProposal(dao.accountId, dao.nextProposalId, args.account, description);
+  if (id === null) throw new Error("couldn't find the proposal just added, so nothing was voted on");
+  await sender(args.rpcUrl, voteCall(dao, id, kind));
 }

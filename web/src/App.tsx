@@ -5,10 +5,13 @@ import {
   describeAsset,
   describePayee,
   describePayment,
+  formatNear,
   isShownInLog,
+  findProposal,
   loadVault,
   secondsUntil,
   vetoDelaySeconds,
+  warnings,
   type Activity,
   type Balance,
   type Pending,
@@ -20,8 +23,7 @@ import {
   connectedAccount,
   parsePolicy,
   roleOf,
-  send,
-  transactionsFor,
+  act as runAction,
   walletConnector,
   type Role,
 } from "./wallet";
@@ -117,6 +119,21 @@ function PolicyEditor({ policy, controls }: { policy: Policy; controls: Controls
   );
 }
 
+function Warnings({ vault }: { vault: VaultState }) {
+  const found = warnings(vault);
+  if (found.length === 0) return null;
+  return (
+    <section className="wide warning" role="alert">
+      <h2>Needs attention</h2>
+      <ul>
+        {found.map((warning) => (
+          <li key={warning}>{warning}</li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function VaultPanel({ vault }: { vault: VaultState }) {
   return (
     <section>
@@ -135,6 +152,12 @@ function VaultPanel({ vault }: { vault: VaultState }) {
         <dd>
           {vault.roles.guardian ?? "None"}
           {vault.guardianDao && " (Sputnik DAO)"}
+        </dd>
+        <dt>Vault NEAR</dt>
+        <dd>{vault.nearBalance === null ? "Unavailable" : `${formatNear(vault.nearBalance)} NEAR`}</dd>
+        <dt>Agent key allowance</dt>
+        <dd>
+          {vault.agentAllowance === null ? "Unavailable" : `${formatNear(vault.agentAllowance)} NEAR`}
         </dd>
       </dl>
     </section>
@@ -282,10 +305,27 @@ function QueuePanel({
   );
 }
 
+const CHAINS = ["All", "Bitcoin", "Evm"] as const;
+
 function ActivityPanel({ activity, policy }: { activity: Activity[] | null; policy: Policy }) {
+  const [chain, setChain] = useState<(typeof CHAINS)[number]>("All");
+  const shown = activity?.filter(
+    (entry) => isShownInLog(entry) && (chain === "All" || entry.chain === chain),
+  );
   return (
     <section className="wide">
       <h2>Activity log</h2>
+      <p className="filters">
+        {CHAINS.map((option) => (
+          <button
+            key={option}
+            aria-pressed={chain === option}
+            onClick={() => setChain(option)}
+          >
+            {option === "Evm" ? "Base" : option}
+          </button>
+        ))}
+      </p>
       {activity === null && <p>Unavailable: the transaction API couldn't be read.</p>}
       {activity?.length === 0 && <p>Nothing has happened yet.</p>}
       {activity && activity.length > 0 && (
@@ -300,7 +340,7 @@ function ActivityPanel({ activity, policy }: { activity: Activity[] | null; poli
             </tr>
           </thead>
           <tbody>
-            {activity.filter(isShownInLog).map((entry, index) => {
+            {(shown ?? []).map((entry, index) => {
               const { outcome, stopped, signed } = describeActivity(entry);
               const tone = stopped ? "stopped" : signed ? "signed" : undefined;
               return (
@@ -355,6 +395,7 @@ export function Dashboard({
         {status.kind === "ready" && controls && (
           <ControlsBar controls={controls} vault={status.vault} />
         )}
+        {status.kind === "ready" && <Warnings vault={status.vault} />}
         {status.kind === "ready" && <VaultPanel vault={status.vault} />}
         {status.kind === "ready" && <BalancesPanel balances={status.vault.balances} />}
         {status.kind === "ready" && <PolicyPanel policy={status.vault.policy} controls={controls} />}
@@ -431,11 +472,21 @@ export function App() {
     (method: string, args: object) => {
       if (!vault) return;
       setMessage(`Waiting for your wallet to sign ${method}…`);
-      send(rpcUrl, transactionsFor(role, accountId, vault, method, args))
+      runAction({
+        rpcUrl,
+        role,
+        account: account ?? "",
+        vault: accountId,
+        state: vault,
+        method,
+        args,
+        findProposal: (dao, from, proposer, description) =>
+          findProposal(defaultConfig, dao, from, proposer, description),
+      })
         .then(() => setMessage(`${method} sent. The page updates within a few seconds.`))
         .catch((error: unknown) => setMessage(`${method} failed: ${String(error)}`));
     },
-    [accountId, role, rpcUrl, vault],
+    [account, accountId, role, rpcUrl, vault],
   );
   const controls: Controls = {
     account,

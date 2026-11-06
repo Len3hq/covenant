@@ -1,11 +1,13 @@
 // Acts as the guardian through its Sputnik DAO: a council member proposes a call to the vault and
 // votes it through. The bond comes back once the proposal passes.
+import { randomUUID } from "node:crypto";
 import { callContract, requireEnv, viewCall } from "./near.ts";
 
 const BOND = "1 NEAR";
 const PROPOSE_GAS = "30 Tgas";
 const VOTE_GAS = "150 Tgas";
 const ACTION_GAS = "50000000000000";
+const SEARCH_LIMIT = 50;
 
 const dao = requireEnv("GUARDIAN_DAO_ID");
 const member = requireEnv("GUARDIAN_ACCOUNT_ID");
@@ -27,14 +29,26 @@ async function act(method: string, args: unknown): Promise<void> {
       ],
     },
   };
-  const id = await viewCall<number>(rpcUrl, dao, "get_last_proposal_id", {});
+  const from = await viewCall<number>(rpcUrl, dao, "get_last_proposal_id", {});
+  // Anyone may add a proposal, so the vote must go to the one this call made, found by a unique
+  // description and its proposer. Guessing the next id could approve someone else's.
+  const description = `Guardian: ${method} on ${vault} (${randomUUID()})`;
   callContract(
     member,
     dao,
     "add_proposal",
-    { proposal: { description: `Guardian: ${method} on ${vault}`, kind } },
+    { proposal: { description, kind } },
     { gas: PROPOSE_GAS, deposit: BOND },
   );
+  const proposals = await viewCall<{ id: number; proposer: string; description: string }[]>(
+    rpcUrl,
+    dao,
+    "get_proposals",
+    { from_index: from, limit: SEARCH_LIMIT },
+  );
+  const mine = proposals.find((p) => p.proposer === member && p.description === description);
+  if (!mine) throw new Error("couldn't find the proposal just added, so nothing was voted on");
+  const { id } = mine;
   callContract(
     member,
     dao,

@@ -119,3 +119,14 @@ tr.signed td {
 td.nowrap {
   white-space: nowrap;
 }
+
+.warning {
+  border-color: #e7b416;
+  background: #fff8e1;
+}
+
+.filters button[aria-pressed="true"] {
+  color: #fff;
+  background: #16181d;
+  border-color: #16181d;
+}

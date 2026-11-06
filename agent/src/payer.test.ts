@@ -192,3 +192,21 @@ describe("Payer", () => {
     await expect(h.payer().execute("404")).rejects.toThrow("no record");
   });
 });
+
+describe("SpendStore.heldCoins", () => {
+  it("holds the coins of unfinished Bitcoin spends, and frees them once a spend is final", async () => {
+    const { Transaction } = await import("bitcoinjs-lib");
+    const tx = new Transaction();
+    tx.addInput(new Uint8Array(32).fill(1), 2);
+    tx.addOutput(new Uint8Array([0, 20, ...new Uint8Array(20)]), 1_000n);
+    const dir = mkdtempSync(join(tmpdir(), "covenant-"));
+    dirs.push(dir);
+    const store = new SpendStore(join(dir, "spends.json"));
+    const prepared: Prepared = { chain: "Bitcoin", unsignedHex: tx.toHex(), prevTxs: [], inputValues: ["1"] };
+    store.put({ key: "q", description: "", status: "queued", prepared });
+    const coin = `${"01".repeat(32)}:2`;
+    expect(store.heldCoins()).toEqual(new Set([coin]));
+    store.put({ key: "q", description: "", status: "broadcast", prepared });
+    expect(store.heldCoins().size).toBe(0);
+  });
+});
