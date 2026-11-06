@@ -101,6 +101,7 @@ describe("loadActivity", () => {
         payments: [],
         fee: "0",
         error: "OutputNotWhitelisted",
+        requested: [],
         txHash: "old",
         at: 1000,
       },

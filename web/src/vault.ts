@@ -1,6 +1,7 @@
 import { ripemd160 } from "@noble/hashes/legacy.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bech32, hex } from "@scure/base";
+import { requestedPayments } from "./decode";
 
 export interface VaultConfig {
   rpcUrl: string;
@@ -22,6 +23,40 @@ export const defaultConfig: VaultConfig = {
   evmChainId: 84532,
   txApiUrl: import.meta.env.VITE_NEAR_TX_API_URL ?? "https://tx.test.fastnear.com",
 };
+
+/** Public testnet RPCs that allow browser requests, tried in order when the one in use fails. */
+export const RPC_FALLBACKS = ["https://near-testnet.drpc.org", "https://rpc.testnet.near.org"];
+
+/**
+ * A fetch that moves to the next RPC when one is down or rate-limits, and stays on the one that
+ * answered. Public RPCs throttle by IP, and the page polls every few seconds.
+ */
+export function withRpcFallback(
+  primary: string,
+  fallbacks: string[] = RPC_FALLBACKS,
+  fetcher: typeof fetch = fetch,
+): typeof fetch {
+  const urls = [primary, ...fallbacks.filter((url) => url !== primary)];
+  let current = 0;
+  return async (input, init) => {
+    if (input !== primary) return fetcher(input, init);
+    let last: unknown = new Error("no RPC answered");
+    for (let tried = 0; tried < urls.length; tried++) {
+      const index = (current + tried) % urls.length;
+      try {
+        const response = await fetcher(urls[index] as string, init);
+        if (response.status !== 429 && response.status < 500) {
+          current = index;
+          return response;
+        }
+        last = new Error(`RPC returned ${response.status}`);
+      } catch (error) {
+        last = error;
+      }
+    }
+    throw last;
+  };
+}
 
 /** An outside service that hangs costs its own row, not the whole dashboard. */
 const OUTSIDE_TIMEOUT_MS = 5_000;
@@ -95,6 +130,11 @@ export interface Activity {
   txHash: string;
   /** Milliseconds since the epoch. */
   at: number;
+  /**
+   * What the agent asked to pay, decoded by the dashboard from its request, for display only. Set on
+   * a refusal whose event carries no payments, because the contract refused while parsing.
+   */
+  requested?: Payment[];
 }
 
 export interface Roles {
@@ -311,6 +351,17 @@ function parseEvents(logs: string[]): CovenantLog[] {
   });
 }
 
+function requestedOf(
+  actions: ({ FunctionCall?: { method_name: string; args: string } } | string)[] | undefined,
+): Payment[] {
+  for (const action of actions ?? []) {
+    if (typeof action === "object" && action.FunctionCall?.method_name === "propose_spend") {
+      return requestedPayments(action.FunctionCall.args);
+    }
+  }
+  return [];
+}
+
 /** Newest first. The contract keeps no history, so this reads its event logs from an indexer. */
 export async function loadActivity(
   config: VaultConfig = defaultConfig,
@@ -325,7 +376,10 @@ export async function loadActivity(
   if (recent.length === 0) return [];
   const { transactions } = await postJson<{
     transactions: {
-      transaction: { hash: string };
+      transaction: {
+        hash: string;
+        actions?: ({ FunctionCall?: { method_name: string; args: string } } | string)[];
+      };
       receipts: { execution_outcome: { outcome: { logs: string[] } } }[];
     }[];
   }>(
@@ -342,10 +396,14 @@ export async function loadActivity(
         .flatMap((receipt) => parseEvents(receipt.execution_outcome.outcome.logs))
         .map(({ event, data }): Activity => {
           const fields = (Array.isArray(data) ? data[0] : data) as Partial<Activity> | undefined;
+          const payments = fields?.payments ?? [];
           return {
             ...fields,
             event,
-            payments: fields?.payments ?? [],
+            payments,
+            ...(event === "spend_rejected" && payments.length === 0
+              ? { requested: requestedOf(transaction.actions) }
+              : {}),
             txHash: transaction.hash,
             at: times.get(transaction.hash) ?? 0,
           };
@@ -467,7 +525,13 @@ export async function loadVault(
     policy,
     balances,
     queue,
-    activity,
+    // Change back to the vault isn't a payment, so it's left out of what the agent asked for.
+    activity:
+      activity?.map((entry) =>
+        entry.requested
+          ? { ...entry, requested: entry.requested.filter((p) => p.asset !== "Btc" || scriptAddress(p.to) !== btc) }
+          : entry,
+      ) ?? null,
     nearBalance: near,
     agentAllowance: allowance,
   };

@@ -43,7 +43,7 @@ describe("Dashboard", () => {
     expect(html).toContain("Frozen");
     expect(html).toContain(vault.btcAddress);
     expect(html).toContain(vault.evmAddress);
-    expect(html).toContain("500000");
+    expect(html).toContain("Refuse any single BTC payment over 0.005 BTC");
     expect(html).toContain("sats");
     expect(html).toContain("120 s");
     expect(html).toContain("every payment is refused");
@@ -67,7 +67,8 @@ describe("Dashboard", () => {
     const html = renderToString(
       <Dashboard accountId="v" status={{ kind: "ready", vault: queued }} />,
     ).replaceAll("<!-- -->", "");
-    expect(html).toContain("250000 sats of BTC to 0102");
+    expect(html).toContain("0.0025 BTC");
+    expect(html).toContain("0102");
     expect(html).toMatch(/(89|90) s/);
     expect(html).toContain("can veto any of these");
   });
@@ -84,10 +85,11 @@ describe("Dashboard", () => {
     const html = renderToString(
       <Dashboard accountId="v" status={{ kind: "ready", vault: logged }} />,
     ).replaceAll("<!-- -->", "");
-    expect(html).toContain("Refused, because it paid an address that isn&#x27;t on the payee list (OutputNotWhitelisted)");
+    expect(html).toContain("Refused, because it paid an address that isn&#x27;t on the payee list");
+    expect(html).toContain("OutputNotWhitelisted");
     expect(html).toContain("Signed");
-    expect(html).toContain('class="stopped"');
-    expect(html).toContain('class="signed"');
+    expect(html).toContain('class="row row-blocked"');
+    expect(html).toContain('class="row row-signed"');
     expect(html).toContain("https://testnet.nearblocks.io/txns/2ZKGhLm1abc");
     expect(html).not.toContain("spend_proposed");
   });
@@ -176,10 +178,10 @@ describe("Dashboard", () => {
 
   it("shows balances and spend, and says when a chain can't be read", () => {
     const html = renderToString(<Dashboard accountId="v" status={{ kind: "ready", vault }} />);
-    expect(html).toContain("Balances");
-    expect(html).toContain("738910");
-    expect(html).toContain("20141");
-    expect(html).toContain("Unavailable");
+    expect(html).toContain("Budgets");
+    expect(html).toContain("0.0073891 BTC");
+    expect(html).toContain("20,141 sats");
+    expect(html).toContain("Balance unavailable");
   });
 
   it("shows a read failure instead of pretending to be connected", () => {
