@@ -8,7 +8,7 @@ import { networks, payments, Transaction } from "bitcoinjs-lib";
 import { Account, JsonRpcProvider, type KeyPairString } from "near-api-js";
 import { z } from "zod";
 import type { World } from "./runtime.js";
-import { connectVault } from "./vault.js";
+import { connectVault } from "@covenant/sdk";
 
 const USDC = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
 const BASE_SEPOLIA = 84532;

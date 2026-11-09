@@ -6,6 +6,8 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc* ./
 COPY web/package.json web/
 COPY agent/package.json agent/
 COPY scripts/package.json scripts/
+COPY sdk/package.json sdk/
+COPY mcp/package.json mcp/
 RUN pnpm install --frozen-lockfile --filter @covenant/web...
 COPY web web
 # Only VITE_* values reach the bundle, and they are public. Never pass a secret here.

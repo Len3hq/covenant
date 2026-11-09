@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { withRetry } from "../retry.js";
+import { withRetry } from "@covenant/sdk";
 import type { LlmClient, LlmConversation, LlmTurn, ToolResult, ToolSpec } from "./types.js";
 
 const REQUEST_TIMEOUT_MS = 120_000;

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { CreateVault } from "./CreateVault";
+import { Docs } from "./Docs";
 import {
   baseAmount,
   explorerFor,
@@ -62,6 +63,7 @@ const rpcFetch = withRpcFallback(defaultConfig.rpcUrl);
 const search = typeof location === "undefined" ? "" : location.search;
 const config = { ...defaultConfig, accountId: vaultFromUrl(search, defaultConfig.accountId) };
 const creating = new URLSearchParams(search).has("create");
+const reading = new URLSearchParams(search).has("docs");
 
 export type VaultStatus =
   | { kind: "loading" }
@@ -162,6 +164,9 @@ function TopBar({
       )}
       <span className="spacer" />
       <VaultPicker />
+      <a className="docs-link" href="?docs">
+        Docs
+      </a>
       <a className="create-link" href="?create">
         Create a vault
       </a>
@@ -867,7 +872,7 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (creating) return;
+    if (creating || reading) return;
     let current = true;
     let loading = false;
     const refresh = () => {
@@ -935,6 +940,16 @@ export function App() {
     act,
   };
 
+  if (reading) {
+    return (
+      <>
+        <TopBar vault={null} controls={controls} />
+        <main>
+          <Docs />
+        </main>
+      </>
+    );
+  }
   if (creating) {
     return (
       <>

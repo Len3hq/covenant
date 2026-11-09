@@ -57,34 +57,34 @@ set-policy: ## Apply scripts/policy.testnet.json to the deployed vault (needs th
 	node --env-file=.env scripts/src/set-policy.ts
 
 pay-btc: ## Pay from the vault: make pay-btc TO=<address> SATS=<amount> (needs AGENT_PRIVATE_KEY)
-	pnpm --filter @covenant/agent build
+	pnpm --filter "@covenant/agent..." build
 	node --env-file=.env agent/dist/pay-btc.js $(TO) $(SATS)
 
 pay-eth: ## Pay from the vault: make pay-eth TO=<address> WEI=<amount> (needs AGENT_PRIVATE_KEY)
-	pnpm --filter @covenant/agent build
+	pnpm --filter "@covenant/agent..." build
 	node --env-file=.env agent/dist/pay-eth.js $(TO) $(WEI)
 
 pay-usdc: ## Pay USDC from the vault: make pay-usdc TO=<address> AMOUNT=<base units> (needs AGENT_PRIVATE_KEY)
-	pnpm --filter @covenant/agent build
+	pnpm --filter "@covenant/agent..." build
 	node --env-file=.env agent/dist/pay-usdc.js $(TO) $(AMOUNT)
 
 DEMO_FLAGS = $(if $(LIVE),--live) $(if $(LLM),--llm) $(if $(RECORD),--record)
 DEMO_ENV = $(if $(wildcard .env),--env-file=.env)
 
 demo: wasm ## All three scenarios on a local sandbox, with no keys. LIVE=1 for testnet, LLM=1 for a real model
-	pnpm --filter @covenant/agent build
+	pnpm --filter "@covenant/agent..." build
 	node $(DEMO_ENV) agent/dist/index.js all $(DEMO_FLAGS)
 
 demo-pay: wasm ## Honest payments on both chains (same flags as demo)
-	pnpm --filter @covenant/agent build
+	pnpm --filter "@covenant/agent..." build
 	node $(DEMO_ENV) agent/dist/index.js pay $(DEMO_FLAGS)
 
 demo-attack: wasm ## A poisoned invoice the contract refuses (same flags as demo)
-	pnpm --filter @covenant/agent build
+	pnpm --filter "@covenant/agent..." build
 	node $(DEMO_ENV) agent/dist/index.js attack $(DEMO_FLAGS)
 
 demo-queue: wasm ## A large spend queued, then vetoed (same flags as demo)
-	pnpm --filter @covenant/agent build
+	pnpm --filter "@covenant/agent..." build
 	node $(DEMO_ENV) agent/dist/index.js queue $(DEMO_FLAGS)
 
 
@@ -109,5 +109,5 @@ set-guardian: ## Replace the guardian: make set-guardian GUARDIAN=<account>
 	node --env-file=.env scripts/src/admin.ts set-guardian $(GUARDIAN)
 
 testnet-smoke: ## Pay tiny amounts on both chains and check a live refusal (needs AGENT_PRIVATE_KEY)
-	pnpm --filter @covenant/agent build
+	pnpm --filter "@covenant/agent..." build
 	node --env-file=.env agent/dist/smoke.js

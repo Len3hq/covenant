@@ -1,4 +1,6 @@
 packages:
+  - sdk
   - agent
+  - mcp
   - web
   - scripts

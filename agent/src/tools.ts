@@ -1,24 +1,25 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { hex } from "@scure/base";
-import { address, networks } from "bitcoinjs-lib";
 import { getAddress, hexToBytes, type Address, type Hex } from "viem";
 import { z } from "zod";
-import { prepareBitcoin, type PayDeps } from "./bitcoin/pay.js";
-import { contractCall, prepareEvm, transferData, type EvmChain } from "./evm/pay.js";
+import {
+  payeeAddress,
+  prepareCall,
+  preparePayment,
+  resolvePayee,
+  type AgentVault,
+  type ChainReads,
+  type EvmChain,
+  type Payer,
+  type PayDeps,
+  type SpendReport,
+} from "@covenant/sdk";
 import type { ToolSpec } from "./llm/index.js";
-import type { Payer, SpendReport } from "./payer.js";
-import type { Prepared } from "./store.js";
-import type { AgentVault, PolicyPayee } from "./vault.js";
 
-const TRANSFER_GAS = 21_000n;
+export type { ChainReads };
+
 /** Integers only: sats, wei and token base units. */
 const baseUnits = z.string().regex(/^\d+$/, "a whole number of base units");
-
-export interface ChainReads {
-  btcBalance(): Promise<bigint>;
-  ethBalance(): Promise<bigint>;
-  tokenBalance(): Promise<bigint>;
-}
 
 export interface ToolDeps {
   vault: AgentVault;
@@ -52,37 +53,16 @@ function tool<S extends z.ZodType>(
   };
 }
 
-function payeeAddress(payee: PolicyPayee): string {
-  const bytes = Uint8Array.from(payee.to);
-  return payee.chain === "Bitcoin"
-    ? address.fromOutputScript(bytes, networks.testnet)
-    : getAddress(`0x${hex.encode(bytes)}`);
-}
-
 export const spendKey = (...parts: string[]) => hex.encode(sha256(new TextEncoder().encode(parts.join("|"))));
-
-const assets = { BTC: "Bitcoin", ETH: "Evm", USDC: "Evm" } as const;
 
 export function createTools(deps: ToolDeps): Tool[] {
   const { vault, payer, reads, chain, usdc, runId } = deps;
-
-  const resolve = async (to: string, asset: keyof typeof assets): Promise<string> => {
-    const payees = await vault.payees();
-    const listed = payees.find(
-      (payee) =>
-        payee.chain === assets[asset] && payee.label.toLowerCase() === to.trim().toLowerCase(),
-    );
-    return listed ? payeeAddress(listed) : to.trim();
-  };
-
-  const evmPrepared = async (call: {
-    to: Address;
-    value: bigint;
-    gas: bigint;
-    data?: Hex;
-  }): Promise<Prepared> => {
-    const from = (await vault.evmAddress()) as Address;
-    return { chain: "Evm", unsignedHex: await prepareEvm(chain, from, call) };
+  const prepareDeps = {
+    vault,
+    bitcoin: deps.bitcoin,
+    chain,
+    usdc,
+    ...(deps.heldCoins ? { heldCoins: deps.heldCoins } : {}),
   };
 
   return [
@@ -120,30 +100,12 @@ export function createTools(deps: ToolDeps): Tool[] {
       }),
       async ({ to, asset, amount, memo }) => {
         const value = BigInt(amount);
-        const destination = await resolve(to, asset);
+        const destination = await resolvePayee(vault, to, asset);
         const key = spendKey(runId, "pay", asset, destination, amount, memo);
         const description = `${amount} ${asset} to ${destination}: ${memo}`;
-        const result = await payer.spend(key, description, async () => {
-          if (asset === "BTC") {
-            const held = deps.heldCoins?.() ?? new Set<string>();
-            const { mempool } = deps.bitcoin;
-            const free: PayDeps = {
-              ...deps.bitcoin,
-              mempool: {
-                ...mempool,
-                spendableUtxos: async (address) =>
-                  (await mempool.spendableUtxos(address)).filter(
-                    (coin) => !held.has(`${coin.txid}:${coin.vout}`),
-                  ),
-              },
-            };
-            return (await prepareBitcoin(free, destination, value)).prepared;
-          }
-          const payee = getAddress(destination);
-          if (asset === "ETH") return evmPrepared({ to: payee, value, gas: TRANSFER_GAS });
-          const from = (await vault.evmAddress()) as Address;
-          return evmPrepared(await contractCall(chain, from, usdc, transferData(payee, value)));
-        });
+        const result = await payer.spend(key, description, () =>
+          preparePayment(prepareDeps, asset, destination, value),
+        );
         deps.onSpend?.(asset, destination, result);
         return result;
       },
@@ -159,10 +121,9 @@ export function createTools(deps: ToolDeps): Tool[] {
       async ({ to, data, value }) => {
         const target = getAddress(to);
         const key = spendKey(runId, "evm_call", target, data, value);
-        const result = await payer.spend(key, `call ${target} with ${data}`, async () => {
-          const from = (await vault.evmAddress()) as Address;
-          return evmPrepared(await contractCall(chain, from, target, data as Hex, BigInt(value)));
-        });
+        const result = await payer.spend(key, `call ${target} with ${data}`, () =>
+          prepareCall(prepareDeps, target, data as Hex, BigInt(value)),
+        );
         deps.onSpend?.("EVM call", target, result);
         return result;
       },

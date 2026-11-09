@@ -4,7 +4,7 @@ import { check } from "./checks.js";
 import { parseArgs, scenarios } from "./cli.js";
 import { liveWorld } from "./live.js";
 import { createLlm } from "./llm/index.js";
-import { jsonLog } from "./log.js";
+import { jsonLog } from "@covenant/sdk";
 import { runAgent } from "./loop.js";
 import { readReplay, replayLlm } from "./replay.js";
 import { createRuntime, scenarioText, type Spend, type World } from "./runtime.js";

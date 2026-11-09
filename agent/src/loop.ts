@@ -1,5 +1,5 @@
 import type { LlmClient, ToolResult } from "./llm/index.js";
-import type { Log } from "./log.js";
+import type { Log } from "@covenant/sdk";
 import type { Tool } from "./tools.js";
 
 const MAX_TURNS = 12;

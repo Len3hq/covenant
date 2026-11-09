@@ -29,6 +29,16 @@ factory gives you a separate vault with its own Bitcoin and Base addresses. You 
 be changed by anyone, and we hold no keys or funds. Any vault can be viewed at `?vault=<account>`.
 Testnet only, and unaudited.
 
+## Connect your own agent
+
+- **TypeScript SDK** ([sdk/](sdk/)): `Covenant.connect(...)`, then `wallet.pay({ asset, to, amount, reference })`.
+  It builds and proposes the transaction, broadcasts what the vault signs, and never pays the same
+  reference twice.
+- **MCP server** ([mcp/](mcp/)): gives Claude, Cursor or any MCP client `pay`, `list_payees`,
+  `get_balances` and more, with the vault still deciding every payment.
+
+The [docs](https://dashboard-production-65f1.up.railway.app/?docs) cover setup, both, and every error.
+
 ## Quick start
 
 Requires Rust (via rustup), Node 22, pnpm 11 and gitleaks. Testnet commands also need the

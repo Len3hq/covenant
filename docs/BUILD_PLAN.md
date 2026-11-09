@@ -73,6 +73,7 @@ These block work, so settle them at today's standup. Each has a recommended answ
 | D11 | How the real Sputnik DAO guardian works | Done on 5 Nov: `covenant-guardian.sputnikv2.testnet` is the live guardian, with one council member. A DAO veto took 23 s, inside the 120 s window, so the demo can use it. | Lead | Done |
 | D12 | Shared dashboard and vault factory | Decided on 9 Nov by Frank, ahead of the original plan: build both now. The dashboard takes `?vault=` and `?create`. The factory creates keyless vaults on one global contract, separately from the live vault, which it doesn't touch. | Lead | Done |
 | D13 | Where the dashboard is hosted | Decided on 9 Nov by Frank: Railway, which builds from this folder, so hosting doesn't wait for the repo to go public (D3). Live at https://dashboard-production-65f1.up.railway.app. GitHub Pages stays off. | Lead | Done |
+| D14 | SDK and MCP server | Decided on 9 Nov by Frank: build both before the freeze. The agent's payment code moved into `@covenant/sdk`, which the agent now uses, so every agent test also covers the SDK. `@covenant/mcp` wraps it. Not published to npm. Docs live at `?docs` on the dashboard. | Lead | Done |
 | D9 | ~~Cut the real Sputnik DAO guardian and dashboard policy editing up front, since Frank works alone?~~ | Resolved on 3 Nov: no. Both stay in scope. | Lead | Done |
 
 ## Spec corrections

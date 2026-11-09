@@ -1,7 +1,7 @@
 // Pays USDC from the vault: `node --env-file=.env agent/dist/pay-usdc.js <address> <base units>`.
 import { createPublicClient, getAddress, http } from "viem";
 import { connectVaultFromEnv, requireEnv } from "./env.js";
-import { payToken } from "./evm/pay.js";
+import { payToken } from "@covenant/sdk";
 
 const [to, amount] = process.argv.slice(2);
 if (!to || !amount) throw new Error("usage: pay-usdc <address> <base units>");

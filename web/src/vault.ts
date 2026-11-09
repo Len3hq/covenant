@@ -626,7 +626,7 @@ export function describePayee(payee: Payee): string {
 }
 
 /** What each refusal means, for someone who has never seen the error names. */
-const REFUSALS: Record<string, string> = {
+export const REFUSALS: Record<string, string> = {
   OutputNotWhitelisted: "it paid an address that isn't on the payee list",
   CalldataNotAllowed: "it was a contract call other than a plain token transfer",
   TokenNotAllowed: "it moved a token the policy doesn't allow",

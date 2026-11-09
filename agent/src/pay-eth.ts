@@ -1,7 +1,7 @@
 // Pays an EVM address from the vault: `node --env-file=.env agent/dist/pay-eth.js <address> <wei>`.
 import { createPublicClient, getAddress, http } from "viem";
 import { connectVaultFromEnv, requireEnv } from "./env.js";
-import { payEth } from "./evm/pay.js";
+import { payEth } from "@covenant/sdk";
 
 const [to, wei] = process.argv.slice(2);
 if (!to || !wei) throw new Error("usage: pay-eth <address> <wei>");

@@ -225,3 +225,9 @@ describe("the shared dashboard", () => {
     expect(html).not.toContain("covenant.len3hq.testnet");
   });
 });
+
+describe("the docs", () => {
+  it("links to the docs from every page", () => {
+    expect(renderToString(<Dashboard accountId="v" status={{ kind: "ready", vault }} />)).toContain('href="?docs"');
+  });
+});
