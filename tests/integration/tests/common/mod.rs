@@ -127,7 +127,7 @@ pub fn evm_proposal() -> Value {
     json!({ "chain": "Evm", "tx": STANDARD.encode(tx), "meta": "Evm" })
 }
 
-fn policy(btc: &BtcCap) -> Value {
+pub fn policy(btc: &BtcCap) -> Value {
     let usdc = decode_hex(evm_vector()["token"].as_str().unwrap());
     json!({
         "caps": [

@@ -37,6 +37,15 @@ signed.
 | `execute` and `veto`, with today's policy re-checked at execution | [lib.rs:316](contracts/covenant-vault/src/lib.rs#L316), [lib.rs:361](contracts/covenant-vault/src/lib.rs#L361) |
 | NEP-297 events for every spend, refusal, veto and freeze, which the dashboard reads | [lib.rs:131](contracts/covenant-vault/src/lib.rs#L131) |
 
+## Global contracts and the factory
+
+| What | Where |
+| --- | --- |
+| Every vault runs one published copy of the code, by hash, so a vault stores about 700 bytes instead of 265 KB | [covenant-factory/src/lib.rs](contracts/covenant-factory/src/lib.rs) (`use_global_contract`) |
+| One batch creates the account, funds it, sets its code and initializes it, so none can happen alone | [covenant-factory/src/lib.rs](contracts/covenant-factory/src/lib.rs) (`on_keys`) |
+| Addresses derived on-chain through a cross-contract call to the signer's `derived_public_key` | [covenant-factory/src/lib.rs](contracts/covenant-factory/src/lib.rs) (`derive_key`) |
+| A vault with no access keys, so its code can't be replaced by anyone | `factory_vault_has_no_keys_and_runs_the_shared_code` |
+
 ## Sputnik DAO
 
 The guardian is a Sputnik DAO created with the `sputnikv2.testnet` factory. A council member proposes

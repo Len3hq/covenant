@@ -4,6 +4,7 @@ import type { Policy, VaultState } from "./vault";
 const CALL_GAS = "30000000000000";
 const VOTE_GAS = "150000000000000";
 const DAO_ACTION_GAS = "50000000000000";
+const CREATE_VAULT_GAS = "300000000000000";
 
 /** What the connected account can do. The contract enforces this; the page only hides buttons. */
 export type Role = "owner" | "guardian" | "council" | "none";
@@ -35,6 +36,11 @@ const call = (methodName: string, args: object, gas = CALL_GAS, deposit = "0"): 
 /** A call the vault receives directly from the signer. */
 export function vaultCall(vault: string, method: string, args: object): Transaction {
   return { receiverId: vault, actions: [call(method, args)] };
+}
+
+/** Asks the factory for a vault, with the caller as its owner. */
+export function createVaultCall(factory: string, args: object, deposit: string): Transaction {
+  return { receiverId: factory, actions: [call("create_vault", args, CREATE_VAULT_GAS, deposit)] };
 }
 
 /** The DAO proposal for a guardian action, with a description that identifies it. */

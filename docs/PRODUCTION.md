@@ -76,6 +76,20 @@ make deploy
       multisig, and say which in SECURITY.md. **If the key is removed, the contract can't be redeployed**,
       so this comes last.
 
+### Factory
+
+Run from the lead's machine with `FACTORY_ACCOUNT_ID` and `FACTORY_PUBLISHER_ACCOUNT_ID` set:
+
+```bash
+make deploy-factory
+```
+
+- [ ] Fund the publisher. Publishing the 265 KB vault code as a global contract burned 26.54 NEAR in the
+      sandbox. It's paid once per vault version, and it replaces paying about 2.65 NEAR per vault.
+- [ ] Create the factory account and fund it with about 2.5 NEAR for its 204 KB of code.
+- [ ] Set `VITE_FACTORY_ACCOUNT_ID` on the dashboard if it isn't the default.
+- [ ] A new vault version means a new factory. Existing vaults stay on the code they were made with.
+
 ### Agent server
 
 Requires Node 22 or later and pnpm.

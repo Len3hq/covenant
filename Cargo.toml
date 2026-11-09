@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "contracts/covenant-vault",
+    "contracts/covenant-factory",
     "contracts/policy",
     "contracts/adapters/bitcoin",
     "contracts/adapters/evm",

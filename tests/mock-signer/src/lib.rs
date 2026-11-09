@@ -2,7 +2,8 @@
 //! Signatures are deterministic and not valid. The response shape is copied from live responses
 //! recorded in docs/SPIKE.md.
 
-use near_sdk::{env, near, Gas, NearToken};
+use near_sdk::json_types::Base64VecU8;
+use near_sdk::{env, near, AccountId, Gas, NearToken, Promise};
 
 /// The live contract refuses less, despite its docs saying 10 Tgas. See docs/SPIKE.md.
 const MIN_SIGN_GAS: Gas = Gas::from_tgas(15);
@@ -65,6 +66,27 @@ impl MockSigner {
 
     pub fn get_calls(&self) -> u64 {
         self.calls
+    }
+
+    /// A per-account, per-path key, so vaults get different addresses. It isn't on the curve, which
+    /// nothing here needs: the factory's own tests pin the arithmetic to a real key.
+    pub fn derived_public_key(
+        &self,
+        path: String,
+        predecessor: AccountId,
+        domain_id: u32,
+    ) -> String {
+        if self.fail {
+            env::panic_str("mock signer: failing on demand");
+        }
+        let x = env::sha256(format!("{predecessor}/{path}/{domain_id}").as_bytes());
+        let point = [x.clone(), env::sha256(&x)].concat();
+        format!("secp256k1:{}", near_sdk::bs58::encode(point).into_string())
+    }
+
+    /// Publishes code as a global contract, which near-workspaces has no transaction for.
+    pub fn publish_global(&mut self, code: Base64VecU8) -> Promise {
+        Promise::new(env::current_account_id()).deploy_global_contract(code.0)
     }
 
     #[payable]

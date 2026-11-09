@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { CreateVault } from "./CreateVault";
 import {
   baseAmount,
   explorerFor,
@@ -33,8 +34,11 @@ import {
   secondsUntil,
   vetoDelaySeconds,
   warnings,
+  vaultFromUrl,
   withRpcFallback,
+  loadProvenance,
   type Activity,
+  type Provenance,
   type Balance,
   type Payment,
   type Pending,
@@ -55,6 +59,9 @@ const REFRESH_MS = 5_000;
 const REPO_URL = "https://github.com/Len3hq/covenant";
 const SIGNER = "v1.signer-prod.testnet";
 const rpcFetch = withRpcFallback(defaultConfig.rpcUrl);
+const search = typeof location === "undefined" ? "" : location.search;
+const config = { ...defaultConfig, accountId: vaultFromUrl(search, defaultConfig.accountId) };
+const creating = new URLSearchParams(search).has("create");
 
 export type VaultStatus =
   | { kind: "loading" }
@@ -113,22 +120,39 @@ function roleLabel(role: Role): string {
   }
 }
 
+function VaultPicker() {
+  const [value, setValue] = useState("");
+  return (
+    <form className="picker" action="" method="get">
+      <input
+        name="vault"
+        aria-label="Open a vault by its account name"
+        placeholder="Open a vault: name.testnet"
+        value={value}
+        onChange={(event) => setValue(event.target.value)}
+        required
+      />
+      <button className="ghost">Open</button>
+    </form>
+  );
+}
+
 function TopBar({
   accountId,
   vault,
   controls,
 }: {
-  accountId: string;
+  accountId?: string;
   vault: VaultState | null;
   controls?: Controls;
 }) {
   return (
     <header className="topbar">
-      <a className="brand" href={REPO_URL}>
+      <a className="brand" href="./">
         <Mark />
         <span>Covenant</span>
       </a>
-      <span className="chip mono">{accountId}</span>
+      {accountId && <span className="chip mono">{accountId}</span>}
       <span className="chip">NEAR testnet</span>
       {vault && (
         <span className={`pill ${vault.frozen ? "pill-frozen" : "pill-live"}`}>
@@ -137,6 +161,10 @@ function TopBar({
         </span>
       )}
       <span className="spacer" />
+      <VaultPicker />
+      <a className="create-link" href="?create">
+        Create a vault
+      </a>
       {controls &&
         (controls.account ? (
           <span className="who">
@@ -560,6 +588,7 @@ function RulesCard({ policy, rules, controls }: { policy: Policy; rules: Rule[];
       </ol>
       <details className="payees">
         <summary>Payee list ({policy.payees.length})</summary>
+        <p className="muted small">Each vault's owner chooses these names. Check the addresses.</p>
         {policy.payees.length === 0 ? (
           <p className="muted">None, so every payment is refused.</p>
         ) : (
@@ -611,7 +640,36 @@ function PolicyEditor({ policy, controls }: { policy: Policy; controls: Controls
   );
 }
 
-function PowersCard({ vault, controls }: { vault: VaultState; controls?: Controls }) {
+function ProvenanceLine({ provenance }: { provenance?: Provenance | null }) {
+  if (!provenance) return null;
+  if (provenance.standard) {
+    return (
+      <p className="provenance verified">
+        ✓ Standard vault: made by the factory, running its shared code, with no keys. Nobody can change
+        its code, including us.
+      </p>
+    );
+  }
+  return (
+    <p className="provenance">
+      Not a standard vault: it was deployed directly, not by the factory
+      {provenance.keys > 0
+        ? `, and ${provenance.keys} access ${provenance.keys === 1 ? "key" : "keys"} could replace its code`
+        : ""}
+      . Check its code before you trust it.
+    </p>
+  );
+}
+
+function PowersCard({
+  vault,
+  provenance,
+  controls,
+}: {
+  vault: VaultState;
+  provenance?: Provenance | null;
+  controls?: Controls;
+}) {
   const role = controls?.role ?? "none";
   const dao = vault.guardianDao;
   return (
@@ -619,6 +677,7 @@ function PowersCard({ vault, controls }: { vault: VaultState; controls?: Control
       <div className="card-head">
         <h2>Who can do what</h2>
       </div>
+      <ProvenanceLine provenance={provenance} />
       <dl className="powers">
         <dt>Agent</dt>
         <dd>
@@ -678,7 +737,7 @@ function PowersCard({ vault, controls }: { vault: VaultState; controls?: Control
   );
 }
 
-function Addresses({ vault }: { vault: VaultState }) {
+function Addresses({ accountId, vault }: { accountId: string; vault: VaultState }) {
   return (
     <footer className="footer">
       <div>
@@ -695,7 +754,7 @@ function Addresses({ vault }: { vault: VaultState }) {
       </div>
       <div>
         <p className="label">Both addresses are derived from</p>
-        <span className="mono">covenant.len3hq.testnet</span> <span className="muted">via NEAR Chain Signatures</span>
+        <span className="mono">{accountId}</span> <span className="muted">via NEAR Chain Signatures</span>
       </div>
       <div>
         <a href={REPO_URL}>Source and security tests ↗</a>
@@ -708,10 +767,12 @@ export function Dashboard({
   accountId,
   status,
   controls,
+  provenance,
 }: {
   accountId: string;
   status: VaultStatus;
   controls?: Controls;
+  provenance?: Provenance | null;
 }) {
   const now = useNow();
   const vault = status.kind === "ready" ? status.vault : null;
@@ -722,16 +783,30 @@ export function Dashboard({
         {status.kind === "loading" && <p className="loading">Reading {accountId}…</p>}
         {status.kind === "error" && (
           <p className="banner banner-frozen" role="alert">
-            Couldn't read {accountId}: {status.message}
+            Couldn't read {accountId}. Is it a Covenant vault? {status.message}
           </p>
         )}
-        {vault && <Ready vault={vault} now={now} controls={controls} />}
+        {vault && (
+          <Ready accountId={accountId} vault={vault} now={now} controls={controls} provenance={provenance} />
+        )}
       </main>
     </>
   );
 }
 
-function Ready({ vault, now, controls }: { vault: VaultState; now: number; controls?: Controls }) {
+function Ready({
+  accountId,
+  vault,
+  now,
+  controls,
+  provenance,
+}: {
+  accountId: string;
+  vault: VaultState;
+  now: number;
+  controls?: Controls;
+  provenance?: Provenance | null;
+}) {
   const rules = rulesOf(vault.policy);
   const latest = featured(vault.activity);
   return (
@@ -749,10 +824,10 @@ function Ready({ vault, now, controls }: { vault: VaultState; now: number; contr
           <QueueCard queue={vault.queue} policy={vault.policy} now={now} controls={controls} />
           <BudgetCard balances={vault.balances} policy={vault.policy} />
           <RulesCard policy={vault.policy} rules={rules} controls={controls} />
-          <PowersCard vault={vault} controls={controls} />
+          <PowersCard vault={vault} provenance={provenance} controls={controls} />
         </aside>
       </div>
-      <Addresses vault={vault} />
+      <Addresses accountId={accountId} vault={vault} />
     </>
   );
 }
@@ -761,7 +836,8 @@ export function App() {
   const [status, setStatus] = useState<VaultStatus>({ kind: "loading" });
   const [account, setAccount] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const { accountId, rpcUrl } = defaultConfig;
+  const [provenance, setProvenance] = useState<Provenance | null>(null);
+  const { accountId, rpcUrl } = config;
 
   useEffect(() => {
     let current = true;
@@ -777,14 +853,28 @@ export function App() {
     };
   }, [rpcUrl]);
 
+  // Once per page: what it checks can't change while the page is open, in any way that matters.
   useEffect(() => {
+    let current = true;
+    void loadProvenance(config, undefined, rpcFetch)
+      .then((found) => {
+        if (current) setProvenance(found);
+      })
+      .catch(() => undefined);
+    return () => {
+      current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (creating) return;
     let current = true;
     let loading = false;
     const refresh = () => {
       // A slow service mustn't stack up requests behind the timer.
       if (loading) return;
       loading = true;
-      loadVault(defaultConfig, rpcFetch)
+      loadVault(config, rpcFetch)
         .then((vault) => {
           if (current) setStatus({ kind: "ready", vault });
         })
@@ -823,7 +913,7 @@ export function App() {
         method,
         args,
         findProposal: (dao, from, proposer, description) =>
-          findProposal(defaultConfig, dao, from, proposer, description, rpcFetch),
+          findProposal(config, dao, from, proposer, description, rpcFetch),
       })
         .then(() => setMessage(`${method} sent. The page updates within a few seconds.`))
         .catch((error: unknown) => setMessage(`${method} failed: ${String(error)}`));
@@ -845,5 +935,15 @@ export function App() {
     act,
   };
 
-  return <Dashboard accountId={accountId} status={status} controls={controls} />;
+  if (creating) {
+    return (
+      <>
+        <TopBar vault={null} controls={controls} />
+        <main>
+          <CreateVault config={config} fetcher={rpcFetch} account={account} connect={controls.connect} />
+        </main>
+      </>
+    );
+  }
+  return <Dashboard accountId={accountId} status={status} controls={controls} provenance={provenance} />;
 }

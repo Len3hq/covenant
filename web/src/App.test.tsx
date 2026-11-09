@@ -192,3 +192,36 @@ describe("Dashboard", () => {
     expect(html).not.toContain("Connected");
   });
 });
+
+describe("the shared dashboard", () => {
+  const ready = { kind: "ready", vault } as const;
+
+  it("says a factory vault can't be changed", () => {
+    const html = renderToString(
+      <Dashboard accountId="v" status={ready} provenance={{ standard: true, keys: 0 }} />,
+    );
+    expect(html).toContain("Standard vault");
+    expect(html).toContain("Nobody can change");
+  });
+
+  it("warns about any other vault, and names its keys", () => {
+    const html = renderToString(
+      <Dashboard accountId="v" status={ready} provenance={{ standard: false, keys: 2 }} />,
+    ).replaceAll("<!-- -->", "");
+    expect(html).toContain("Not a standard vault");
+    expect(html).toContain("2 access keys");
+    expect(html).not.toContain("Nobody can change");
+  });
+
+  it("offers a way to open any vault and to create one", () => {
+    const html = renderToString(<Dashboard accountId="v" status={ready} />);
+    expect(html).toContain('name="vault"');
+    expect(html).toContain('href="?create"');
+  });
+
+  it("shows the vault it was asked for, not ours", () => {
+    const html = renderToString(<Dashboard accountId="acme.vaults.testnet" status={ready} />);
+    expect(html).toContain("acme.vaults.testnet");
+    expect(html).not.toContain("covenant.len3hq.testnet");
+  });
+});

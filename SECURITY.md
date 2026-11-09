@@ -17,6 +17,30 @@ get a signature for the vault's Bitcoin and EVM addresses, and it computes every
 | Owner | `owner.len3hq.testnet` | Set policy, veto, freeze, unfreeze, replace the guardian | Spend directly: it must go through the same checks |
 | Vault account | `covenant.len3hq.testnet` | Hold the contract | Nothing else, once its full-access key is removed (planned for 13 Nov) |
 
+### Vaults made by the factory
+
+Anyone can create their own vault at `<name>.<factory>` from the dashboard. The factory
+(`contracts/covenant-factory`) has no owner and no method that touches a vault after creating it.
+
+- **The caller is the owner.** Nobody else, including us, gets a role
+  (`factory_creates_a_working_vault_owned_by_the_caller`). The agent can't also be the owner or guardian
+  (`refuses_an_agent_that_is_also_the_owner`, `refuses_an_agent_that_is_also_the_guardian`).
+- **The code can't change.** The vault runs one global contract by hash and has no access keys
+  (`factory_vault_has_no_keys_and_runs_the_shared_code`). The cost is that a bug can't be patched: its
+  owner has to make a new vault and move the funds.
+- **The addresses come from the signer, not the caller,** so a form can't strand funds on an address
+  the vault can't spend from (`factory_gives_each_vault_its_own_addresses_from_the_signer`,
+  `derives_the_published_addresses_for_a_known_key`).
+- **A failed creation refunds the deposit** (`factory_refunds_when_the_name_is_taken`,
+  `factory_refunds_when_the_signer_fails`), and only the factory can call its callbacks
+  (`factory_callbacks_refuse_outside_callers`).
+- **Dashboard labels aren't verified.** Each owner names their own payees, so a hostile vault can call
+  an attacker "Acme". The dashboard says whether a vault is a standard one, but that says nothing about
+  whether its owner is honest.
+
+The factory's own full-access key is a remaining trust point until it's removed, as with the vault's
+key: its holder could change what *new* vaults get, but not vaults that already exist.
+
 ### What a hijacked agent can still do
 
 - **Pay listed payees, within the caps.** The policy allows these payments, so the contract can't
@@ -71,4 +95,5 @@ Each row moves to "Passing" when all of its named tests pass in CI.
 | Caps hold across proposals | `prop_daily_cap_never_exceeded`, `concurrent_proposals_respect_daily_cap`, `sign_failure_releases_reservation` | Passing |
 | Large spends wait out the veto window | `queued_spend_not_executable_before_delay`, `vetoed_spend_cannot_execute`, `execute_rechecks_tightened_policy` | Passing |
 | Agent can't escalate; freeze stops everything | `agent_key_cannot_call_set_policy`, `frozen_blocks_propose_and_execute`, `guardian_can_freeze_not_unfreeze` | Passing |
+| A factory vault belongs to its creator, can't change, and refunds on failure | the 7 tests in `tests/integration/tests/factory.rs`, and `derives_the_published_addresses_for_a_known_key` | Passing |
 | A hijacked agent's attacks never reach the signer | the 13 tests in `tests/attacks/bitcoin.rs` and 14 in `tests/attacks/evm.rs` | Passing |

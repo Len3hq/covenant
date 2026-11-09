@@ -18,6 +18,13 @@ decides what gets signed.
 3. The policy checks caps, payees, tokens, fees and chain ID.
 4. Rejected spends are logged, large ones wait out a veto window, and the rest go to the MPC signer.
 
+## Your own vault
+
+Open the dashboard with `?create`, connect a NEAR wallet, and fill in your payees and limits. The
+factory gives you a separate vault with its own Bitcoin and Base addresses. You own it, its code can't
+be changed by anyone, and we hold no keys or funds. Any vault can be viewed at `?vault=<account>`.
+Testnet only, and unaudited.
+
 ## Quick start
 
 Requires Rust (via rustup), Node 22, pnpm 11 and gitleaks. Testnet commands also need the

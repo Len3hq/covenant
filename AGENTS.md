@@ -17,6 +17,8 @@ Instructions for AI agents and new contributors.
 | Build the contracts | `make wasm` (output in `target/near/`) |
 | Show vault addresses | `make addresses` (needs `.env`) |
 | Deploy to testnet | `make deploy` (needs `.env`, the NEAR CLI and the vault's key) |
+| Publish the vault code and deploy the factory | `make deploy-factory` (needs `FACTORY_*` in `.env`, the NEAR CLI, and about 29 NEAR the first time) |
+| Run the dashboard | `pnpm --filter @covenant/web dev`, then add `?vault=<account>` or `?create` |
 | Update the live policy | `make set-policy` (needs the owner's key) |
 | Veto a queued spend as owner | `make veto ID=<id>` |
 | Freeze or unfreeze as owner | `make freeze`, `make unfreeze` |

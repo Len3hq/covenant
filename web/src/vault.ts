@@ -24,6 +24,14 @@ export const defaultConfig: VaultConfig = {
   txApiUrl: import.meta.env.VITE_NEAR_TX_API_URL ?? "https://tx.test.fastnear.com",
 };
 
+/** Creates vaults that nobody, including us, can change. */
+export const FACTORY_ID: string = import.meta.env.VITE_FACTORY_ACCOUNT_ID ?? "vaults.len3hq.testnet";
+
+/** The vault named in the page's URL, so one hosted dashboard can show any of them. */
+export function vaultFromUrl(search: string, fallback: string): string {
+  return new URLSearchParams(search).get("vault")?.trim().toLowerCase() || fallback;
+}
+
 /** Public testnet RPCs that allow browser requests, tried in order when the one in use fails. */
 export const RPC_FALLBACKS = ["https://near-testnet.drpc.org", "https://rpc.testnet.near.org"];
 
@@ -421,6 +429,49 @@ async function rpcQuery<T>(config: VaultConfig, params: object, fetcher: typeof 
   const body = (await response.json()) as { result?: T };
   if (!body.result) throw new Error("query: no result");
   return body.result;
+}
+
+export interface Provenance {
+  /** Made by the factory, running its code, with no key that could replace that code. */
+  standard: boolean;
+  keys: number;
+}
+
+/**
+ * Whether this vault is what the factory makes. Only a factory can create its own subaccounts, so
+ * the name proves where the account came from, and the other two checks prove it hasn't changed.
+ */
+export async function loadProvenance(
+  config: VaultConfig,
+  factory: string = FACTORY_ID,
+  fetcher: typeof fetch = fetch,
+): Promise<Provenance> {
+  const [account, access] = await Promise.all([
+    rpcQuery<{ global_contract_hash?: string | null }>(
+      config,
+      { request_type: "view_account", account_id: config.accountId },
+      fetcher,
+    ),
+    rpcQuery<{ keys: unknown[] }>(
+      config,
+      { request_type: "view_access_key_list", account_id: config.accountId },
+      fetcher,
+    ),
+  ]);
+  const keys = access.keys.length;
+  if (!config.accountId.endsWith(`.${factory}`) || keys > 0) return { standard: false, keys };
+  const expected = await view<string>({ ...config, accountId: factory }, "get_vault_code_hash", fetcher);
+  return { standard: account.global_contract_hash === expected, keys };
+}
+
+/** The vaults this account made with the factory. */
+export function vaultsOf(
+  config: VaultConfig,
+  owner: string,
+  factory: string = FACTORY_ID,
+  fetcher: typeof fetch = fetch,
+): Promise<string[]> {
+  return view<string[]>({ ...config, accountId: factory }, "vaults_of", fetcher, { owner });
 }
 
 async function nearBalance(config: VaultConfig, fetcher: typeof fetch): Promise<string | null> {

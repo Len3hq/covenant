@@ -71,6 +71,7 @@ These block work, so settle them at today's standup. Each has a recommended answ
 | D8 | Prize split and payout wallet | Prizes are paid in NEAR to the wallet on the form, so use a mainnet account. | Lead | 12 Nov |
 | D10 | Which of the 13 tracks to enter | Decided on 5 Nov: AI Security & Defense, plus Agent Economy. | Lead | Done |
 | D11 | How the real Sputnik DAO guardian works | Done on 5 Nov: `covenant-guardian.sputnikv2.testnet` is the live guardian, with one council member. A DAO veto took 23 s, inside the 120 s window, so the demo can use it. | Lead | Done |
+| D12 | Shared dashboard and vault factory | Decided on 9 Nov by Frank, ahead of the original plan: build both now. The dashboard takes `?vault=` and `?create`. The factory creates keyless vaults on one global contract, separately from the live vault, which it doesn't touch. | Lead | Done |
 | D9 | ~~Cut the real Sputnik DAO guardian and dashboard policy editing up front, since Frank works alone?~~ | Resolved on 3 Nov: no. Both stay in scope. | Lead | Done |
 
 ## Spec corrections

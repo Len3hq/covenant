@@ -6,6 +6,8 @@ import {
   describeAsset,
   describePayee,
   loadActivity,
+  loadProvenance,
+  vaultFromUrl,
   loadVault,
   payeeAddress,
   secondsUntil,
@@ -273,5 +275,45 @@ describe("formatting", () => {
   it("names each payee's chain and shows a Bitcoin script it can't decode as hex", () => {
     expect(describePayee({ chain: "Evm", to: [171], label: "a" })).toBe("a (Base): 0xab");
     expect(describePayee({ chain: "Bitcoin", to: [171], label: "b" })).toBe("b (Bitcoin): ab");
+  });
+});
+
+describe("choosing a vault", () => {
+  it("reads it from the URL, and falls back to the default", () => {
+    expect(vaultFromUrl("?vault=Acme.Testnet", "ours")).toBe("acme.testnet");
+    expect(vaultFromUrl("?vault=", "ours")).toBe("ours");
+    expect(vaultFromUrl("", "ours")).toBe("ours");
+  });
+});
+
+describe("loadProvenance", () => {
+  const answers = (hash: string | null, keys: number, published = "HASH"): typeof fetch =>
+    async (_url, init) => {
+      const { params } = JSON.parse(String(init?.body)) as {
+        params: { request_type: string };
+      };
+      if (params.request_type === "view_account") {
+        return new Response(JSON.stringify({ result: { global_contract_hash: hash } }));
+      }
+      if (params.request_type === "view_access_key_list") {
+        return new Response(JSON.stringify({ result: { keys: new Array(keys).fill({}) } }));
+      }
+      const bytes = new TextEncoder().encode(JSON.stringify(published));
+      return new Response(JSON.stringify({ result: { result: [...bytes] } }));
+    };
+  const acme = { ...config, accountId: "acme.vaults.testnet" };
+
+  it("trusts only the factory's name, its code and no keys together", async () => {
+    await expect(loadProvenance(acme, "vaults.testnet", answers("HASH", 0))).resolves.toEqual({ standard: true, keys: 0 });
+  });
+
+  it("refuses each way a vault can differ", async () => {
+    const standard = async (cfg: typeof config, fetcher: typeof fetch) =>
+      (await loadProvenance(cfg, "vaults.testnet", fetcher)).standard;
+    expect(await standard(acme, answers("OTHER", 0))).toBe(false);
+    expect(await standard(acme, answers(null, 0))).toBe(false);
+    expect(await standard(acme, answers("HASH", 1))).toBe(false);
+    // Ends with the factory's name, but isn't one of its subaccounts.
+    expect(await standard({ ...config, accountId: "fakevaults.testnet" }, answers("HASH", 0))).toBe(false);
   });
 });
