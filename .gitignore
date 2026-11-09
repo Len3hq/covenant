@@ -10,3 +10,5 @@ agent/spends.json.tmp
 .DS_Store
 .vscode/
 *.enc
+covenant-spends.json
+covenant-spends.json.tmp
