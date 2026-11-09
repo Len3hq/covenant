@@ -1,0 +1,9 @@
+# Railway sets PORT. Every path serves the app, which reads ?vault= and ?create itself.
+:{$PORT:8080} {
+	root * /srv
+	encode gzip
+	header /assets/* Cache-Control "public, max-age=31536000, immutable"
+	header -Server
+	try_files {path} /index.html
+	file_server
+}

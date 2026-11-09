@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+*.enc
+.git
+**/node_modules
+target
+**/dist
+research_notes
+reports
+docs/WIN_AND_BUSINESS.md
+agent/spends.json

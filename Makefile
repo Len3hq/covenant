@@ -5,7 +5,7 @@ MOCK_SIGNER_MANIFEST := tests/mock-signer/Cargo.toml
 FACTORY_MANIFEST := contracts/covenant-factory/Cargo.toml
 
 .DEFAULT_GOAL := help
-.PHONY: help setup fmt lint wasm test build check addresses deploy deploy-factory set-policy pay-btc pay-eth demo demo-pay demo-attack demo-queue agent-key veto freeze unfreeze set-guardian dao-freeze dao-veto pay-usdc testnet-smoke
+.PHONY: help setup fmt lint wasm test build check addresses deploy deploy-factory deploy-dashboard set-policy pay-btc pay-eth demo demo-pay demo-attack demo-queue agent-key veto freeze unfreeze set-guardian dao-freeze dao-veto pay-usdc testnet-smoke
 
 help: ## List the targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-15s %s\n", $$1, $$2}'
@@ -46,6 +46,9 @@ deploy: wasm ## Deploy the vault to NEAR testnet (needs the near CLI and the vau
 
 deploy-factory: wasm ## Publish the vault code and deploy the factory (needs the near CLI and both accounts' keys)
 	node --env-file=.env scripts/src/deploy-factory.ts
+
+deploy-dashboard: ## Build and publish the dashboard on Railway (needs the railway CLI, logged in and linked)
+	railway up --service dashboard --ci
 
 agent-key: ## Create the agent's restricted key and save it to .env (needs the agent account's full key)
 	node --env-file=.env scripts/src/create-agent-key.ts

@@ -18,6 +18,7 @@ Instructions for AI agents and new contributors.
 | Show vault addresses | `make addresses` (needs `.env`) |
 | Deploy to testnet | `make deploy` (needs `.env`, the NEAR CLI and the vault's key) |
 | Publish the vault code and deploy the factory | `make deploy-factory` (needs `FACTORY_*` in `.env`, the NEAR CLI, and about 29 NEAR the first time) |
+| Publish the dashboard to Railway | `make deploy-dashboard` (needs the railway CLI, logged in) |
 | Run the dashboard | `pnpm --filter @covenant/web dev`, then add `?vault=<account>` or `?create` |
 | Update the live policy | `make set-policy` (needs the owner's key) |
 | Veto a queued spend as owner | `make veto ID=<id>` |

@@ -18,9 +18,13 @@ decides what gets signed.
 3. The policy checks caps, payees, tokens, fees and chain ID.
 4. Rejected spends are logged, large ones wait out a veto window, and the rest go to the MPC signer.
 
+## Live dashboard
+
+https://dashboard-production-65f1.up.railway.app shows the testnet vault: every payment it signed or refused, and why.
+
 ## Your own vault
 
-Open the dashboard with `?create`, connect a NEAR wallet, and fill in your payees and limits. The
+Open the dashboard with [`?create`](https://dashboard-production-65f1.up.railway.app/?create), connect a NEAR wallet, and fill in your payees and limits. The
 factory gives you a separate vault with its own Bitcoin and Base addresses. You own it, its code can't
 be changed by anyone, and we hold no keys or funds. Any vault can be viewed at `?vault=<account>`.
 Testnet only, and unaudited.
