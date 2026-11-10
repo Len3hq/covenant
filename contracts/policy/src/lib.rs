@@ -82,6 +82,21 @@ pub struct AssetCap {
     pub per_tx: U128,
     pub per_24h: U128,
     pub queue_at: U128,
+    /// The most that payees not on the list may receive in this asset in a rolling 24 h. Zero, the
+    /// default, refuses them this asset even when the policy holds unlisted payees.
+    #[serde(default)]
+    pub unlisted_per_24h: U128,
+}
+
+/// What happens to a payment whose recipient isn't on the payee list.
+#[near(serializers = [borsh, json])]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum UnlistedPayees {
+    /// Refused with `OutputNotWhitelisted`.
+    #[default]
+    Refuse,
+    /// Always held for `unlisted_veto_delay_ns`, whatever the amount, within `unlisted_per_24h`.
+    Hold,
 }
 
 #[near(serializers = [borsh, json])]
@@ -112,6 +127,12 @@ pub struct Policy {
     /// Solana support leaves it out, and zero refuses every Solana spend.
     #[serde(default)]
     pub sol_max_fee: U128,
+    /// A policy written before open payees leaves this out and keeps refusing unlisted payees.
+    #[serde(default)]
+    pub unlisted: UnlistedPayees,
+    /// How long a spend to an unlisted payee waits. At least `veto_delay_ns`.
+    #[serde(default)]
+    pub unlisted_veto_delay_ns: u64,
 }
 
 impl Policy {
@@ -125,8 +146,36 @@ impl Policy {
             if cap.queue_at.0 > cap.per_tx.0 {
                 return Err("queue_at must not exceed per_tx");
             }
+            if cap.unlisted_per_24h.0 > cap.per_24h.0 {
+                return Err("unlisted_per_24h must not exceed per_24h");
+            }
+        }
+        if self.unlisted == UnlistedPayees::Hold && self.unlisted_veto_delay_ns < self.veto_delay_ns
+        {
+            return Err("unlisted_veto_delay_ns must be at least veto_delay_ns");
         }
         Ok(())
+    }
+
+    pub fn is_listed(&self, chain: ChainKind, to: &[u8]) -> bool {
+        self.payees
+            .iter()
+            .any(|payee| payee.chain == chain && payee.to == to)
+    }
+
+    /// Whether an adapter may accept a payment to `to`. An unlisted payee passes only when the
+    /// policy holds unlisted payees, and `check_unlisted` then decides how much and how long.
+    pub fn allows_payee(&self, chain: ChainKind, to: &[u8]) -> bool {
+        self.unlisted == UnlistedPayees::Hold || self.is_listed(chain, to)
+    }
+
+    /// The veto window for a spend, which is the longer one when any payee is unlisted.
+    pub fn delay_for(&self, holds_unlisted: bool) -> u64 {
+        if holds_unlisted {
+            self.veto_delay_ns.max(self.unlisted_veto_delay_ns)
+        } else {
+            self.veto_delay_ns
+        }
     }
 }
 
@@ -170,6 +219,10 @@ pub enum CovenantError {
     UnknownSpend,
     NotYetExecutable,
     SignFailed,
+    /// The asset's `unlisted_per_24h` is zero, so unlisted payees can't be paid in it.
+    UnlistedNotAllowed,
+    /// Payments to unlisted payees would exceed the asset's `unlisted_per_24h`.
+    UnlistedCapExceeded,
 }
 
 /// Sums payments and the fee per asset, so neither splitting outputs nor paying through fees gets a
@@ -226,6 +279,72 @@ pub fn check(
     Ok(decision)
 }
 
+/// What a spend pays to unlisted payees, summed per asset. Fees aren't included: they count
+/// against the asset's main caps, like every other spend.
+pub fn unlisted_charges(
+    chain: ChainKind,
+    parsed: &ParsedTx,
+    policy: &Policy,
+) -> Result<Vec<Charge>, CovenantError> {
+    let mut charges: Vec<Charge> = Vec::new();
+    for payment in parsed
+        .payments
+        .iter()
+        .filter(|payment| !policy.is_listed(chain, &payment.to))
+    {
+        match charges
+            .iter_mut()
+            .find(|charge| charge.asset == payment.asset)
+        {
+            Some(charge) => {
+                charge.amount.0 = charge
+                    .amount
+                    .0
+                    .checked_add(payment.amount.0)
+                    .ok_or(CovenantError::MalformedTx)?;
+            }
+            None => charges.push(Charge {
+                asset: payment.asset.clone(),
+                amount: payment.amount,
+            }),
+        }
+    }
+    Ok(charges)
+}
+
+/// Checks what a spend pays unlisted payees against each asset's `unlisted_per_24h`. Any unlisted
+/// payment means the spend is held, so a passing result is always `Queue` when `unlisted` isn't
+/// empty. `check` must pass as well: these limits come on top of the main caps.
+pub fn check_unlisted(
+    unlisted: &[Charge],
+    policy: &Policy,
+    unlisted_spent_24h: impl Fn(&AssetId) -> u128,
+) -> Result<Decision, CovenantError> {
+    if unlisted.is_empty() {
+        return Ok(Decision::Sign);
+    }
+    if policy.unlisted != UnlistedPayees::Hold {
+        return Err(CovenantError::OutputNotWhitelisted);
+    }
+    for charge in unlisted {
+        let cap = policy
+            .caps
+            .iter()
+            .find(|cap| cap.asset == charge.asset)
+            .ok_or(CovenantError::AssetNotCapped)?;
+        if cap.unlisted_per_24h.0 == 0 {
+            return Err(CovenantError::UnlistedNotAllowed);
+        }
+        let total = unlisted_spent_24h(&charge.asset)
+            .checked_add(charge.amount.0)
+            .ok_or(CovenantError::UnlistedCapExceeded)?;
+        if total > cap.unlisted_per_24h.0 {
+            return Err(CovenantError::UnlistedCapExceeded);
+        }
+    }
+    Ok(Decision::Queue)
+}
+
 /// Repeats the adapter rules that depend on policy, for a spend parsed under an earlier policy. A
 /// queued spend keeps its parsed form rather than its raw transaction, so this works from that.
 pub fn recheck_parsed(
@@ -233,13 +352,11 @@ pub fn recheck_parsed(
     parsed: &ParsedTx,
     policy: &Policy,
 ) -> Result<(), CovenantError> {
-    let listed = |payment: &Payment| {
-        policy
-            .payees
-            .iter()
-            .any(|payee| payee.chain == chain && payee.to == payment.to)
-    };
-    if !parsed.payments.iter().all(listed) {
+    if !parsed
+        .payments
+        .iter()
+        .all(|payment| policy.allows_payee(chain, &payment.to))
+    {
         return Err(CovenantError::OutputNotWhitelisted);
     }
     match (chain, &parsed.fee_asset) {
@@ -287,6 +404,7 @@ mod tests {
             per_tx: U128(per_tx),
             per_24h: U128(per_24h),
             queue_at: U128(queue_at),
+            unlisted_per_24h: U128(0),
         }
     }
 
@@ -300,6 +418,8 @@ mod tests {
             evm_max_gas_cost: U128(1_000_000_000_000_000),
             veto_delay_ns: 120_000_000_000,
             sol_max_fee: U128(100_000),
+            unlisted: UnlistedPayees::Refuse,
+            unlisted_veto_delay_ns: 0,
         }
     }
 
@@ -583,5 +703,179 @@ mod tests {
     fn amounts_cross_json_as_strings() {
         let json = near_sdk::serde_json::to_value(cap(1, 2, 1)).unwrap();
         assert_eq!(json["per_tx"], "1");
+    }
+
+    mod unlisted {
+        use super::*;
+
+        const LISTED: [u8; 22] = [0xaa; 22];
+
+        fn open(unlisted_per_24h: u128) -> Policy {
+            let mut caps = cap(100, 500, 50);
+            caps.unlisted_per_24h = U128(unlisted_per_24h);
+            let mut rules = policy(vec![caps]);
+            rules.payees = vec![Payee {
+                chain: ChainKind::Bitcoin,
+                to: LISTED.to_vec(),
+                label: "supplier".into(),
+            }];
+            rules.unlisted = UnlistedPayees::Hold;
+            rules.unlisted_veto_delay_ns = 600_000_000_000;
+            rules
+        }
+
+        fn pay(to: &[u8], amount: u128) -> Payment {
+            Payment {
+                asset: AssetId::Btc,
+                to: to.to_vec(),
+                amount: U128(amount),
+            }
+        }
+
+        fn spend(payments: Vec<Payment>) -> ParsedTx {
+            ParsedTx {
+                payments,
+                fee: 1,
+                fee_asset: AssetId::Btc,
+                signing_payloads: vec![SignPayload::Ecdsa([0; 32])],
+                vsize: 100,
+            }
+        }
+
+        fn hold(parsed: &ParsedTx, rules: &Policy, spent: u128) -> Result<Decision, CovenantError> {
+            let unlisted = unlisted_charges(ChainKind::Bitcoin, parsed, rules)?;
+            check_unlisted(&unlisted, rules, |_| spent)
+        }
+
+        #[test]
+        fn unlisted_payee_is_always_held() {
+            let rules = open(200);
+            let small = spend(vec![pay(&[0xbb; 22], 1)]);
+            assert_eq!(
+                check(&charges(&small).unwrap(), &rules, |_| 0),
+                Ok(Decision::Sign)
+            );
+            assert_eq!(hold(&small, &rules, 0), Ok(Decision::Queue));
+        }
+
+        #[test]
+        fn listed_payee_is_not_held_by_the_unlisted_rule() {
+            let rules = open(200);
+            let listed = spend(vec![pay(&LISTED, 40)]);
+            assert_eq!(
+                unlisted_charges(ChainKind::Bitcoin, &listed, &rules),
+                Ok(vec![])
+            );
+            assert_eq!(hold(&listed, &rules, 0), Ok(Decision::Sign));
+        }
+
+        #[test]
+        fn a_payee_listed_for_another_chain_is_unlisted() {
+            let mut rules = open(200);
+            rules.payees[0].chain = ChainKind::Evm;
+            let other = spend(vec![pay(&LISTED, 40)]);
+            assert_eq!(hold(&other, &rules, 0), Ok(Decision::Queue));
+        }
+
+        #[test]
+        fn refuse_mode_still_refuses() {
+            let mut rules = open(200);
+            rules.unlisted = UnlistedPayees::Refuse;
+            assert!(!rules.allows_payee(ChainKind::Bitcoin, &[0xbb; 22]));
+            assert!(rules.allows_payee(ChainKind::Bitcoin, &LISTED));
+            let stranger = spend(vec![pay(&[0xbb; 22], 1)]);
+            assert_eq!(
+                hold(&stranger, &rules, 0),
+                Err(CovenantError::OutputNotWhitelisted)
+            );
+            let parsed = spend(vec![pay(&[0xbb; 22], 1)]);
+            assert_eq!(
+                recheck_parsed(ChainKind::Bitcoin, &parsed, &rules),
+                Err(CovenantError::OutputNotWhitelisted)
+            );
+            rules.unlisted = UnlistedPayees::Hold;
+            assert_eq!(recheck_parsed(ChainKind::Bitcoin, &parsed, &rules), Ok(()));
+        }
+
+        #[test]
+        fn unlisted_cap_counts_split_outputs() {
+            let rules = open(100);
+            let split = spend(vec![
+                pay(&[0xbb; 22], 30),
+                pay(&[0xcc; 22], 30),
+                pay(&[0xbb; 22], 30),
+                pay(&LISTED, 9),
+            ]);
+            let unlisted = unlisted_charges(ChainKind::Bitcoin, &split, &rules).unwrap();
+            assert_eq!(
+                unlisted,
+                vec![Charge {
+                    asset: AssetId::Btc,
+                    amount: U128(90),
+                }]
+            );
+            assert_eq!(hold(&split, &rules, 10), Ok(Decision::Queue));
+            assert_eq!(
+                hold(&split, &rules, 11),
+                Err(CovenantError::UnlistedCapExceeded)
+            );
+        }
+
+        #[test]
+        fn zero_unlisted_cap_refuses_the_asset() {
+            let rules = open(0);
+            let stranger = spend(vec![pay(&[0xbb; 22], 1)]);
+            assert_eq!(
+                hold(&stranger, &rules, 0),
+                Err(CovenantError::UnlistedNotAllowed)
+            );
+        }
+
+        #[test]
+        fn unlisted_cap_does_not_lift_the_main_caps() {
+            let rules = open(500);
+            let big = spend(vec![pay(&[0xbb; 22], 150)]);
+            assert_eq!(hold(&big, &rules, 0), Ok(Decision::Queue));
+            assert_eq!(
+                check(&charges(&big).unwrap(), &rules, |_| 0),
+                Err(CovenantError::PerTxCapExceeded)
+            );
+        }
+
+        #[test]
+        fn delay_is_the_longer_window_for_unlisted() {
+            let rules = open(200);
+            assert_eq!(rules.delay_for(false), 120_000_000_000);
+            assert_eq!(rules.delay_for(true), 600_000_000_000);
+        }
+
+        #[test]
+        fn validate_checks_the_unlisted_rules() {
+            let mut rules = open(200);
+            assert_eq!(rules.validate(), Ok(()));
+            rules.unlisted_veto_delay_ns = rules.veto_delay_ns - 1;
+            assert!(rules.validate().is_err());
+            rules.unlisted = UnlistedPayees::Refuse;
+            assert_eq!(rules.validate(), Ok(()));
+            let mut over = open(501);
+            over.unlisted_veto_delay_ns = over.veto_delay_ns;
+            assert!(over.validate().is_err());
+        }
+
+        #[test]
+        fn a_policy_without_the_new_fields_refuses_unlisted() {
+            let json = near_sdk::serde_json::json!({
+                "caps": [{ "asset": "Btc", "per_tx": "100", "per_24h": "500", "queue_at": "50" }],
+                "payees": [],
+                "btc_max_fee_rate": 50,
+                "btc_max_inputs": 3,
+                "evm_chain_ids": [84532],
+                "evm_max_gas_cost": "1",
+                "veto_delay_ns": 1u64,
+            });
+            let rules: Policy = near_sdk::serde_json::from_value(json).unwrap();
+            assert_eq!(rules.unlisted, UnlistedPayees::Refuse);
+            assert_eq!(rules.caps[0].unlisted_per_24h, U128(0));
+        }
     }
 }

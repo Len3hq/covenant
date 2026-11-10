@@ -4,6 +4,8 @@ import {
   explainRefusal,
   isShownInLog,
   payeeAddress,
+  holdsUnlisted,
+  unlistedDelaySeconds,
   vetoDelaySeconds,
   type Activity,
   type Asset,
@@ -70,12 +72,27 @@ export function rulesOf(policy: Policy): Rule[] {
   const add = (text: string, errors: string[]) =>
     rules.push({ id: `R${rules.length + 1}`, text, errors });
   const payees = policy.payees.map((p) => p.label).join(", ");
-  add(
-    policy.payees.length === 0
-      ? "Pay no one: the payee list is empty"
-      : `Pay only listed payees: ${payees}`,
-    ["OutputNotWhitelisted", "UnsupportedScript"],
-  );
+  if (holdsUnlisted(policy)) {
+    add(
+      `Pay anyone, but hold every payment to someone off the list${payees ? ` (${payees})` : ""} for ${unlistedDelaySeconds(policy)} s, so a human can veto`,
+      ["UnsupportedScript", "NotYetExecutable"],
+    );
+    for (const cap of policy.caps) {
+      add(
+        BigInt(cap.unlisted_per_24h ?? "0") === 0n
+          ? `Pay new payees no ${symbolOf(cap.asset)}`
+          : `Pay new payees at most ${humanAmount(cap.asset, cap.unlisted_per_24h ?? "0")} in any 24 hours`,
+        ["UnlistedNotAllowed", "UnlistedCapExceeded"],
+      );
+    }
+  } else {
+    add(
+      policy.payees.length === 0
+        ? "Pay no one: the payee list is empty"
+        : `Pay only listed payees: ${payees}`,
+      ["OutputNotWhitelisted", "UnsupportedScript"],
+    );
+  }
   for (const cap of policy.caps) {
     add(
       `Refuse any single ${symbolOf(cap.asset)} payment over ${humanAmount(cap.asset, cap.per_tx)}`,

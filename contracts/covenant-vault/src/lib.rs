@@ -5,7 +5,7 @@
 use covenant_adapter_bitcoin::BitcoinVault;
 use covenant_policy::{
     AssetCap, AssetId, ChainKind, Charge, CovenantError, Decision, ParsedTx, Payee, Payment,
-    Policy, SignPayload, TxMeta,
+    Policy, SignPayload, TxMeta, UnlistedPayees,
 };
 use near_sdk::json_types::{Base64VecU8, U128, U64};
 use near_sdk::serde_json::{self, json};
@@ -43,6 +43,8 @@ pub struct Pending {
     pub signing_payloads: Vec<SignPayload>,
     pub vsize: u64,
     pub charges: Vec<Charge>,
+    /// What the spend pays unlisted payees, reserved on the unlisted ledger.
+    pub unlisted: Vec<Charge>,
     pub queued_at: U64,
     pub executable_at: U64,
 }
@@ -186,6 +188,47 @@ pub struct CovenantVault {
     queue: IterableMap<u64, Pending>,
     next_id: u64,
     sol_pubkey: [u8; 32],
+    unlisted_ledger: LookupMap<AssetId, Vec<(u64, u128)>>,
+}
+
+/// A cap as stored before open payees.
+#[near(serializers = [borsh])]
+struct AssetCapV2 {
+    asset: AssetId,
+    per_tx: U128,
+    per_24h: U128,
+    queue_at: U128,
+}
+
+/// The policy as stored before open payees.
+#[near(serializers = [borsh])]
+struct PolicyV2 {
+    caps: Vec<AssetCapV2>,
+    payees: Vec<Payee>,
+    btc_max_fee_rate: u64,
+    btc_max_inputs: u8,
+    evm_chain_ids: Vec<u64>,
+    evm_max_gas_cost: U128,
+    veto_delay_ns: u64,
+    sol_max_fee: U128,
+}
+
+/// The vault's state before open payees. As with V1, `migrate_v3` only accepts an empty queue.
+#[near(serializers = [borsh])]
+struct VaultV2 {
+    owner: AccountId,
+    guardian: Option<AccountId>,
+    agent: AccountId,
+    signer: AccountId,
+    paths: Paths,
+    btc_pubkey: [u8; 33],
+    evm_address: [u8; 20],
+    policy: PolicyV2,
+    frozen: bool,
+    ledger: LookupMap<AssetId, Vec<(u64, u128)>>,
+    queue: IterableMap<u64, Pending>,
+    next_id: u64,
+    sol_pubkey: [u8; 32],
 }
 
 /// The policy as stored before Solana support.
@@ -216,6 +259,35 @@ struct VaultV1 {
     ledger: LookupMap<AssetId, Vec<(u64, u128)>>,
     queue: IterableMap<u64, Pending>,
     next_id: u64,
+}
+
+type Ledger = LookupMap<AssetId, Vec<(u64, u128)>>;
+
+fn sum_24h(ledger: &Ledger, asset: &AssetId) -> u128 {
+    let cutoff = env::block_timestamp().saturating_sub(NS_PER_24H);
+    ledger.get(asset).map_or(0, |entries| {
+        entries
+            .iter()
+            .filter(|(at, _)| *at > cutoff)
+            .map(|(_, amount)| *amount)
+            .sum()
+    })
+}
+
+fn reserve(ledger: &mut Ledger, charge: &Charge, at: u64) {
+    let cutoff = at.saturating_sub(NS_PER_24H);
+    let entries = ledger.entry(charge.asset.clone()).or_default();
+    entries.retain(|(entry_at, _)| *entry_at > cutoff);
+    entries.push((at, charge.amount.0));
+}
+
+fn release(ledger: &mut Ledger, charge: &Charge, at: u64) {
+    if let Some(entries) = ledger.get_mut(&charge.asset) {
+        let entry = (at, charge.amount.0);
+        if let Some(index) = entries.iter().position(|e| *e == entry) {
+            entries.remove(index);
+        }
+    }
 }
 
 fn fail(error: CovenantError) -> ! {
@@ -265,6 +337,7 @@ impl CovenantVault {
             queue: IterableMap::new(b"q"),
             next_id: 0,
             sol_pubkey,
+            unlisted_ledger: LookupMap::new(b"u"),
         }
     }
 
@@ -305,12 +378,75 @@ impl CovenantVault {
                 evm_max_gas_cost,
                 veto_delay_ns,
                 sol_max_fee: U128(0),
+                unlisted: UnlistedPayees::Refuse,
+                unlisted_veto_delay_ns: veto_delay_ns,
             },
             frozen: old.frozen,
             ledger: old.ledger,
             queue: old.queue,
             next_id: old.next_id,
             sol_pubkey,
+            unlisted_ledger: LookupMap::new(b"u"),
+        }
+    }
+
+    /// Moves a vault deployed with Solana support but before open payees to this code, in the same
+    /// batch as the deploy. Unlisted payees stay refused, and every `unlisted_per_24h` is zero, until
+    /// the owner sets a policy that holds them.
+    #[private]
+    #[init(ignore_state)]
+    pub fn migrate_v3() -> Self {
+        let old: VaultV2 =
+            env::state_read().unwrap_or_else(|| env::panic_str("migrate: no state to migrate"));
+        if !old.queue.is_empty() {
+            env::panic_str("migrate: veto or execute every queued spend first");
+        }
+        let PolicyV2 {
+            caps,
+            payees,
+            btc_max_fee_rate,
+            btc_max_inputs,
+            evm_chain_ids,
+            evm_max_gas_cost,
+            veto_delay_ns,
+            sol_max_fee,
+        } = old.policy;
+        let caps = caps
+            .into_iter()
+            .map(|cap| AssetCap {
+                asset: cap.asset,
+                per_tx: cap.per_tx,
+                per_24h: cap.per_24h,
+                queue_at: cap.queue_at,
+                unlisted_per_24h: U128(0),
+            })
+            .collect();
+        Self {
+            owner: old.owner,
+            guardian: old.guardian,
+            agent: old.agent,
+            signer: old.signer,
+            paths: old.paths,
+            btc_pubkey: old.btc_pubkey,
+            evm_address: old.evm_address,
+            policy: Policy {
+                caps,
+                payees,
+                btc_max_fee_rate,
+                btc_max_inputs,
+                evm_chain_ids,
+                evm_max_gas_cost,
+                veto_delay_ns,
+                sol_max_fee,
+                unlisted: UnlistedPayees::Refuse,
+                unlisted_veto_delay_ns: veto_delay_ns,
+            },
+            frozen: old.frozen,
+            ledger: old.ledger,
+            queue: old.queue,
+            next_id: old.next_id,
+            sol_pubkey: old.sol_pubkey,
+            unlisted_ledger: LookupMap::new(b"u"),
         }
     }
 
@@ -330,8 +466,9 @@ impl CovenantVault {
             Err(error) => return self.reject(self.next_id, chain, vec![], 0, error),
         };
         let charges = covenant_policy::charges(&parsed).unwrap_or_else(|error| fail(error));
-        let decision =
-            covenant_policy::check(&charges, &self.policy, |asset| self.spent_24h(asset));
+        let unlisted = covenant_policy::unlisted_charges(chain, &parsed, &self.policy)
+            .unwrap_or_else(|error| fail(error));
+        let decision = self.decide(&charges, &unlisted);
         let decision = match decision {
             Ok(decision) => decision,
             Err(error) => {
@@ -346,9 +483,7 @@ impl CovenantVault {
         let id = self.next_id;
         self.next_id += 1;
         let at = env::block_timestamp();
-        for charge in &charges {
-            self.reserve(charge, at);
-        }
+        self.reserve_all(&charges, &unlisted, at);
         CovenantEvent::SpendProposed(SpendEvent {
             id: U64(id),
             chain,
@@ -359,9 +494,11 @@ impl CovenantVault {
         .emit();
         match decision {
             Decision::Sign => {
-                PromiseOrValue::Promise(self.sign_all(id, chain, parsed, charges, at))
+                PromiseOrValue::Promise(self.sign_all(id, chain, parsed, charges, unlisted, at))
             }
-            Decision::Queue => PromiseOrValue::Value(self.enqueue(id, chain, parsed, charges, at)),
+            Decision::Queue => {
+                PromiseOrValue::Value(self.enqueue(id, chain, parsed, charges, unlisted, at))
+            }
         }
     }
 
@@ -377,6 +514,7 @@ impl CovenantVault {
         payments: Vec<Payment>,
         fee: U128,
         charges: Vec<Charge>,
+        unlisted: Vec<Charge>,
         at: U64,
     ) -> SpendOutcome {
         let signatures: Option<Vec<MpcSignature>> = (0..count)
@@ -401,9 +539,7 @@ impl CovenantVault {
             None => {
                 // A freeze keeps the reservation, because part of the join may have been signed.
                 if !self.frozen {
-                    for charge in &charges {
-                        self.release(charge, at.0);
-                    }
+                    self.release_all(&charges, &unlisted, at.0);
                 }
                 CovenantEvent::SpendRejected(event).emit();
                 SpendOutcome::Rejected(CovenantError::SignFailed)
@@ -422,14 +558,17 @@ impl CovenantVault {
             .cloned()
             .unwrap_or_else(|| fail(CovenantError::UnknownSpend));
         let now = env::block_timestamp();
-        // A delay raised since the spend was queued applies to it too.
-        let ready = pending.executable_at.0.max(
-            pending
-                .queued_at
-                .0
-                .saturating_add(self.policy.veto_delay_ns),
-        );
         let parsed = pending.parsed();
+        // Today's payee list decides which payments are unlisted, so a payee removed since the
+        // spend was queued gets the unlisted window and cap too.
+        let unlisted = covenant_policy::unlisted_charges(pending.chain, &parsed, &self.policy)
+            .unwrap_or_else(|error| fail(error));
+        // A delay raised since the spend was queued applies to it too.
+        let delay = self.policy.delay_for(!unlisted.is_empty());
+        let ready = pending
+            .executable_at
+            .0
+            .max(pending.queued_at.0.saturating_add(delay));
         if now < ready {
             let error = CovenantError::NotYetExecutable;
             return self.reject(id.0, pending.chain, parsed.payments, parsed.fee, error);
@@ -438,22 +577,21 @@ impl CovenantVault {
         self.queue.remove(&id.0);
         // The spend's own reservation must not count against it, and it restarts at signing time so
         // it stays on the ledger for a full 24 h after the money moves (C6).
-        for charge in &pending.charges {
-            self.release(charge, pending.queued_at.0);
-        }
+        self.release_all(&pending.charges, &pending.unlisted, pending.queued_at.0);
         let decision = covenant_policy::recheck_parsed(pending.chain, &parsed, &self.policy)
-            .and_then(|()| {
-                covenant_policy::check(&pending.charges, &self.policy, |asset| {
-                    self.spent_24h(asset)
-                })
-            });
+            .and_then(|()| self.decide(&pending.charges, &unlisted));
         if let Err(error) = decision {
             return self.reject(id.0, pending.chain, parsed.payments, parsed.fee, error);
         }
-        for charge in &pending.charges {
-            self.reserve(charge, now);
-        }
-        PromiseOrValue::Promise(self.sign_all(id.0, pending.chain, parsed, pending.charges, now))
+        self.reserve_all(&pending.charges, &unlisted, now);
+        PromiseOrValue::Promise(self.sign_all(
+            id.0,
+            pending.chain,
+            parsed,
+            pending.charges,
+            unlisted,
+            now,
+        ))
     }
 
     /// Removes a queued spend and returns its budget. This works during a freeze, because a human
@@ -464,9 +602,7 @@ impl CovenantVault {
             .queue
             .remove(&id.0)
             .unwrap_or_else(|| fail(CovenantError::UnknownSpend));
-        for charge in &pending.charges {
-            self.release(charge, pending.queued_at.0);
-        }
+        self.release_all(&pending.charges, &pending.unlisted, pending.queued_at.0);
         CovenantEvent::SpendVetoed(pending.event(None)).emit();
     }
 
@@ -534,6 +670,11 @@ impl CovenantVault {
         U128(self.spent_24h(&asset))
     }
 
+    /// What unlisted payees received in an asset over the last 24 h, reservations included.
+    pub fn get_unlisted_spent_24h(&self, asset: AssetId) -> U128 {
+        U128(sum_24h(&self.unlisted_ledger, &asset))
+    }
+
     pub fn is_frozen(&self) -> bool {
         self.frozen
     }
@@ -563,9 +704,11 @@ impl CovenantVault {
         chain: ChainKind,
         parsed: ParsedTx,
         charges: Vec<Charge>,
+        unlisted: Vec<Charge>,
         at: u64,
     ) -> SpendOutcome {
-        let executable_at = U64(at.saturating_add(self.policy.veto_delay_ns));
+        let delay = self.policy.delay_for(!unlisted.is_empty());
+        let executable_at = U64(at.saturating_add(delay));
         let pending = Pending {
             id: U64(id),
             chain,
@@ -575,6 +718,7 @@ impl CovenantVault {
             signing_payloads: parsed.signing_payloads,
             vsize: parsed.vsize,
             charges,
+            unlisted,
             queued_at: U64(at),
             executable_at,
         };
@@ -611,6 +755,7 @@ impl CovenantVault {
         chain: ChainKind,
         parsed: ParsedTx,
         charges: Vec<Charge>,
+        unlisted: Vec<Charge>,
         at: u64,
     ) -> Promise {
         let path = match chain {
@@ -657,35 +802,44 @@ impl CovenantVault {
                         parsed.payments,
                         U128(parsed.fee),
                         charges,
+                        unlisted,
                         U64(at),
                     ),
             )
     }
 
     fn spent_24h(&self, asset: &AssetId) -> u128 {
-        let cutoff = env::block_timestamp().saturating_sub(NS_PER_24H);
-        self.ledger.get(asset).map_or(0, |entries| {
-            entries
-                .iter()
-                .filter(|(at, _)| *at > cutoff)
-                .map(|(_, amount)| *amount)
-                .sum()
+        sum_24h(&self.ledger, asset)
+    }
+
+    /// Both caps must pass; any unlisted payment holds the spend.
+    fn decide(&self, charges: &[Charge], unlisted: &[Charge]) -> Result<Decision, CovenantError> {
+        let main = covenant_policy::check(charges, &self.policy, |asset| self.spent_24h(asset))?;
+        let open = covenant_policy::check_unlisted(unlisted, &self.policy, |asset| {
+            sum_24h(&self.unlisted_ledger, asset)
+        })?;
+        Ok(if main == Decision::Queue || open == Decision::Queue {
+            Decision::Queue
+        } else {
+            Decision::Sign
         })
     }
 
-    fn reserve(&mut self, charge: &Charge, at: u64) {
-        let cutoff = at.saturating_sub(NS_PER_24H);
-        let entries = self.ledger.entry(charge.asset.clone()).or_default();
-        entries.retain(|(entry_at, _)| *entry_at > cutoff);
-        entries.push((at, charge.amount.0));
+    fn reserve_all(&mut self, charges: &[Charge], unlisted: &[Charge], at: u64) {
+        for charge in charges {
+            reserve(&mut self.ledger, charge, at);
+        }
+        for charge in unlisted {
+            reserve(&mut self.unlisted_ledger, charge, at);
+        }
     }
 
-    fn release(&mut self, charge: &Charge, at: u64) {
-        if let Some(entries) = self.ledger.get_mut(&charge.asset) {
-            let entry = (at, charge.amount.0);
-            if let Some(index) = entries.iter().position(|e| *e == entry) {
-                entries.remove(index);
-            }
+    fn release_all(&mut self, charges: &[Charge], unlisted: &[Charge], at: u64) {
+        for charge in charges {
+            release(&mut self.ledger, charge, at);
+        }
+        for charge in unlisted {
+            release(&mut self.unlisted_ledger, charge, at);
         }
     }
 
@@ -739,6 +893,7 @@ mod tests {
                 per_tx: U128(per_tx),
                 per_24h: U128(per_tx * 5),
                 queue_at: U128(queue_at),
+                unlisted_per_24h: U128(0),
             }],
             payees: vec![],
             btc_max_fee_rate: 50,
@@ -747,6 +902,8 @@ mod tests {
             evm_max_gas_cost: U128(1_000_000_000_000_000),
             veto_delay_ns: 120_000_000_000,
             sol_max_fee: U128(0),
+            unlisted: UnlistedPayees::Refuse,
+            unlisted_veto_delay_ns: 0,
         }
     }
 
@@ -859,6 +1016,194 @@ mod tests {
     }
 
     #[test]
+    fn migrate_v3_keeps_state_and_refuses_unlisted_payees() {
+        call_as("vault.testnet");
+        let mut queue: IterableMap<u64, Pending> = IterableMap::new(b"q");
+        queue.flush();
+        let mut ledger = LookupMap::new(b"l");
+        ledger.insert(AssetId::Btc, vec![(1u64, 700u128)]);
+        ledger.flush();
+        let old = VaultV2 {
+            owner: account("owner.testnet"),
+            guardian: Some(account("guardian.testnet")),
+            agent: account("agent.testnet"),
+            signer: account("v1.signer-prod.testnet"),
+            paths: Paths {
+                btc: "btc-vault-1".into(),
+                evm: "evm-vault-1".into(),
+                sol: "sol-vault-1".into(),
+            },
+            btc_pubkey: [2; 33],
+            evm_address: [9; 20],
+            policy: PolicyV2 {
+                caps: vec![AssetCapV2 {
+                    asset: AssetId::Btc,
+                    per_tx: U128(100),
+                    per_24h: U128(500),
+                    queue_at: U128(50),
+                }],
+                payees: vec![],
+                btc_max_fee_rate: 50,
+                btc_max_inputs: 3,
+                evm_chain_ids: vec![84532],
+                evm_max_gas_cost: U128(1),
+                veto_delay_ns: 7,
+                sol_max_fee: U128(9),
+            },
+            frozen: true,
+            ledger,
+            queue,
+            next_id: 42,
+            sol_pubkey: [5; 32],
+        };
+        env::state_write(&old);
+        let vault = CovenantVault::migrate_v3();
+        let policy = vault.get_policy();
+        assert_eq!(policy.unlisted, UnlistedPayees::Refuse);
+        assert_eq!(policy.unlisted_veto_delay_ns, 7);
+        assert_eq!(policy.caps[0].unlisted_per_24h, U128(0));
+        assert_eq!(policy.caps[0].queue_at, U128(50));
+        assert_eq!(policy.sol_max_fee, U128(9));
+        assert_eq!(vault.next_id, 42);
+        assert!(vault.is_frozen());
+        assert_eq!(vault.sol_pubkey, [5; 32]);
+        assert_eq!(
+            vault.ledger.get(&AssetId::Btc).cloned(),
+            Some(vec![(1, 700)])
+        );
+        assert_eq!(vault.get_unlisted_spent_24h(AssetId::Btc), U128(0));
+    }
+
+    mod unlisted {
+        use super::*;
+
+        const START: u64 = 1_000_000_000_000;
+        const LISTED_DELAY: u64 = 120_000_000_000;
+        const UNLISTED_DELAY: u64 = 600_000_000_000;
+
+        fn at(name: &str, now: u64) {
+            testing_env!(VMContextBuilder::new()
+                .predecessor_account_id(account(name))
+                .block_timestamp(now)
+                .build());
+        }
+
+        fn open_vault() -> CovenantVault {
+            let mut vault = vault();
+            vault.policy.caps[0].unlisted_per_24h = U128(200);
+            vault.policy.unlisted = UnlistedPayees::Hold;
+            vault.policy.unlisted_veto_delay_ns = UNLISTED_DELAY;
+            vault
+        }
+
+        fn stranger_spend() -> ParsedTx {
+            ParsedTx {
+                payments: vec![Payment {
+                    asset: AssetId::Btc,
+                    to: vec![0xbb; 22],
+                    amount: U128(10),
+                }],
+                fee: 1,
+                fee_asset: AssetId::Btc,
+                signing_payloads: vec![SignPayload::Ecdsa([0; 32])],
+                vsize: 100,
+            }
+        }
+
+        /// Queues a small spend to an unlisted payee the way `propose_spend` does.
+        fn hold(vault: &mut CovenantVault) -> SpendOutcome {
+            let parsed = stranger_spend();
+            let charges = covenant_policy::charges(&parsed).unwrap();
+            let unlisted =
+                covenant_policy::unlisted_charges(ChainKind::Bitcoin, &parsed, &vault.policy)
+                    .unwrap();
+            assert_eq!(vault.decide(&charges, &unlisted), Ok(Decision::Queue));
+            vault.reserve_all(&charges, &unlisted, START);
+            vault.enqueue(0, ChainKind::Bitcoin, parsed, charges, unlisted, START)
+        }
+
+        #[test]
+        fn small_unlisted_spend_waits_the_unlisted_window() {
+            at("agent.testnet", START);
+            let mut vault = open_vault();
+            assert_eq!(
+                hold(&mut vault),
+                SpendOutcome::Queued {
+                    id: U64(0),
+                    executable_at: U64(START + UNLISTED_DELAY),
+                }
+            );
+            assert_eq!(vault.get_unlisted_spent_24h(AssetId::Btc), U128(10));
+            assert_eq!(vault.get_spent_24h(AssetId::Btc), U128(11));
+        }
+
+        #[test]
+        fn execute_after_the_listed_window_is_still_too_early() {
+            at("agent.testnet", START);
+            let mut vault = open_vault();
+            hold(&mut vault);
+            at("agent.testnet", START + LISTED_DELAY + 1);
+            let outcome = vault.execute(U64(0));
+            assert!(matches!(
+                outcome,
+                PromiseOrValue::Value(SpendOutcome::Rejected(CovenantError::NotYetExecutable))
+            ));
+            assert_eq!(vault.get_queue().len(), 1);
+        }
+
+        #[test]
+        fn veto_returns_both_budgets() {
+            at("agent.testnet", START);
+            let mut vault = open_vault();
+            hold(&mut vault);
+            at("owner.testnet", START + 1);
+            vault.veto(U64(0));
+            assert!(vault.get_queue().is_empty());
+            assert_eq!(vault.get_spent_24h(AssetId::Btc), U128(0));
+            assert_eq!(vault.get_unlisted_spent_24h(AssetId::Btc), U128(0));
+        }
+
+        #[test]
+        fn switching_back_to_refuse_blocks_a_held_spend_at_execute() {
+            at("agent.testnet", START);
+            let mut vault = open_vault();
+            hold(&mut vault);
+            vault.policy.unlisted = UnlistedPayees::Refuse;
+            at("agent.testnet", START + UNLISTED_DELAY);
+            let outcome = vault.execute(U64(0));
+            assert!(matches!(
+                outcome,
+                PromiseOrValue::Value(SpendOutcome::Rejected(CovenantError::OutputNotWhitelisted))
+            ));
+            assert_eq!(vault.get_spent_24h(AssetId::Btc), U128(0));
+            assert_eq!(vault.get_unlisted_spent_24h(AssetId::Btc), U128(0));
+        }
+
+        #[test]
+        fn unlisted_daily_cap_is_enforced_across_spends() {
+            at("agent.testnet", START);
+            let mut vault = open_vault();
+            reserve(
+                &mut vault.unlisted_ledger,
+                &Charge {
+                    asset: AssetId::Btc,
+                    amount: U128(195),
+                },
+                START,
+            );
+            let parsed = stranger_spend();
+            let charges = covenant_policy::charges(&parsed).unwrap();
+            let unlisted =
+                covenant_policy::unlisted_charges(ChainKind::Bitcoin, &parsed, &vault.policy)
+                    .unwrap();
+            assert_eq!(
+                vault.decide(&charges, &unlisted),
+                Err(CovenantError::UnlistedCapExceeded)
+            );
+        }
+    }
+
+    #[test]
     fn new_starts_unfrozen_with_an_empty_queue() {
         let vault = vault();
         assert!(!vault.is_frozen());
@@ -954,13 +1299,13 @@ mod tests {
             asset: AssetId::Btc,
             amount: U128(amount),
         };
-        vault.reserve(&charge(30), 1);
-        vault.reserve(&charge(30), 2);
-        vault.reserve(&charge(40), 2);
+        reserve(&mut vault.ledger, &charge(30), 1);
+        reserve(&mut vault.ledger, &charge(30), 2);
+        reserve(&mut vault.ledger, &charge(40), 2);
         assert_eq!(vault.spent_24h(&AssetId::Btc), 100);
-        vault.release(&charge(30), 2);
+        release(&mut vault.ledger, &charge(30), 2);
         assert_eq!(vault.spent_24h(&AssetId::Btc), 70);
-        vault.release(&charge(30), 2);
+        release(&mut vault.ledger, &charge(30), 2);
         assert_eq!(vault.spent_24h(&AssetId::Btc), 70);
     }
 
@@ -972,7 +1317,7 @@ mod tests {
             asset: AssetId::Btc,
             amount: U128(30),
         };
-        vault.reserve(&charge, 0);
+        reserve(&mut vault.ledger, &charge, 0);
         let spent_before = vault.ledger.get(&AssetId::Btc).cloned();
         call_as("guardian.testnet");
         vault.freeze();
@@ -993,6 +1338,7 @@ mod tests {
             vec![],
             U128(0),
             vec![charge],
+            vec![],
             U64(0),
         );
         assert_eq!(outcome, SpendOutcome::Rejected(CovenantError::SignFailed));
@@ -1107,6 +1453,7 @@ mod tests {
                 per_tx: U128(PER_TX as u128),
                 per_24h: U128(PER_24H as u128),
                 queue_at: U128(QUEUE_AT as u128),
+                unlisted_per_24h: U128(0),
             }];
             vault.policy.payees = vec![Payee {
                 chain: ChainKind::Bitcoin,
@@ -1272,6 +1619,7 @@ mod tests {
                                 vec![],
                                 U128(FEE as u128),
                                 charges,
+                                vec![],
                                 U64(spend.at),
                             );
                             if signed {

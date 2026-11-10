@@ -162,11 +162,7 @@ pub fn parse(tx: &[u8], policy: &Policy) -> Result<ParsedTx, CovenantError> {
     };
 
     // Rule 7.
-    let listed = policy
-        .payees
-        .iter()
-        .any(|p| p.chain == ChainKind::Evm && p.to == payment.to);
-    if !listed {
+    if !policy.allows_payee(ChainKind::Evm, &payment.to) {
         return Err(CovenantError::OutputNotWhitelisted);
     }
 
@@ -218,7 +214,7 @@ fn token_transfer(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use covenant_policy::{AssetCap, Payee};
+    use covenant_policy::{AssetCap, Payee, UnlistedPayees};
     use near_sdk::serde_json::{self, Value};
 
     const CHAIN: u64 = 84532;
@@ -238,6 +234,7 @@ mod tests {
                 per_tx: U128(50_000_000),
                 per_24h: U128(200_000_000),
                 queue_at: U128(25_000_000),
+                unlisted_per_24h: U128(0),
             }],
             payees: vec![Payee {
                 chain: ChainKind::Evm,
@@ -250,6 +247,8 @@ mod tests {
             evm_max_gas_cost: U128(MAX_GAS_COST),
             veto_delay_ns: 1,
             sol_max_fee: U128(0),
+            unlisted: UnlistedPayees::Refuse,
+            unlisted_veto_delay_ns: 0,
         }
     }
 
@@ -757,5 +756,16 @@ mod tests {
                 proptest::prop_assert_ne!(parsed.signing_payloads, allowed.signing_payloads);
             }
         }
+    }
+    #[test]
+    fn evm_hold_mode_accepts_an_unlisted_payee() {
+        let mut open = policy();
+        open.unlisted = UnlistedPayees::Hold;
+        let native = Tx {
+            to: STRANGER.to_vec(),
+            ..Tx::native()
+        };
+        let parsed = parse(&native.encode(), &open).unwrap();
+        assert_eq!(parsed.payments[0].to, STRANGER.to_vec());
     }
 }

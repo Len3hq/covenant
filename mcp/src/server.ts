@@ -26,7 +26,7 @@ export function createServer(wallet: Wallet): McpServer {
     {
       title: "Pay from the vault",
       description:
-        "Pays from the Covenant vault. `amount` is a whole number of base units: sats for BTC, wei for ETH, lamports for SOL, and 1000000 is 1 USDC. `USDC` is on Base and `USDC-SOL` is on Solana. `to` is a payee's name from list_payees, or an address. `reference` names what the payment is for, such as an invoice number; the same reference never pays twice. The result is `broadcast` (paid), `queued` (large, waiting out a veto window), or `rejected` with the rule it broke. A rejection is final: don't retry it another way.",
+        "Pays from the Covenant vault. `amount` is a whole number of base units: sats for BTC, wei for ETH, lamports for SOL, and 1000000 is 1 USDC. `USDC` is on Base and `USDC-SOL` is on Solana. `to` is a payee's name from list_payees, or an address. `reference` names what the payment is for, such as an invoice number; the same reference never pays twice. The result is `broadcast` (paid), `queued` (large, or to an address off the payee list on a vault that holds new payees, waiting out a veto window), or `rejected` with the rule it broke. A queued payment isn't a failure: a human may veto it, and execute_queued signs it once its window passes. A rejection is final: don't retry it another way.",
       inputSchema: {
         asset: z.enum(ASSETS),
         to: z.string().min(1),
@@ -40,7 +40,7 @@ export function createServer(wallet: Wallet): McpServer {
 
   server.registerTool(
     "list_payees",
-    { title: "Who the vault may pay", description: "The payees the vault's policy allows. Everything else is refused." },
+    { title: "Who the vault may pay", description: "The payees on the vault's list. Depending on the vault's policy, anyone else is either refused or held for a longer veto window within a smaller daily limit." },
     async () => text(await wallet.payees()),
   );
 

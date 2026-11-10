@@ -1301,6 +1301,13 @@ fieldset p {
   align-self: flex-start;
 }
 
+.payee-mode label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+}
+
 .cap-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));

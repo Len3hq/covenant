@@ -49,10 +49,22 @@ describe("payeeBytes", () => {
 describe("buildPolicy", () => {
   it("writes every limit in the asset's integer unit", () => {
     const policy = buildPolicy(form);
-    expect(policy.caps[0]).toEqual({ asset: "Btc", per_tx: "500000", per_24h: "2000000", queue_at: "250000" });
+    expect(policy.caps[0]).toEqual({
+      asset: "Btc",
+      per_tx: "500000",
+      per_24h: "2000000",
+      queue_at: "250000",
+      unlisted_per_24h: "400000",
+    });
     expect(policy.caps[2]?.per_tx).toBe("50000000");
     expect(policy.veto_delay_ns).toBe(120_000_000_000);
-    expect(policy.caps[3]).toEqual({ asset: "Sol", per_tx: "100000000", per_24h: "500000000", queue_at: "50000000" });
+    expect(policy.caps[3]).toEqual({
+      asset: "Sol",
+      per_tx: "100000000",
+      per_24h: "500000000",
+      queue_at: "50000000",
+      unlisted_per_24h: "100000000",
+    });
     expect(policy.sol_max_fee).toBe("100000");
   });
 
@@ -71,8 +83,24 @@ describe("buildPolicy", () => {
   it("refuses limits the contract would refuse", () => {
     expect(() => buildPolicy({ ...form, btc: { ...form.btc, perTx: "0" } })).toThrow("above zero");
     expect(() => buildPolicy({ ...form, btc: { ...form.btc, queueAt: "1" } })).toThrow("veto threshold");
-    expect(() => buildPolicy({ ...form, payees: [] })).toThrow("at least one payee");
+    expect(() => buildPolicy({ ...form, openPayees: false, payees: [] })).toThrow("at least one payee");
     expect(() => buildPolicy({ ...form, vetoSeconds: "1.5" })).toThrow("whole number");
+    expect(() => buildPolicy({ ...form, btc: { ...form.btc, unlisted24h: "1" } })).toThrow("new-payee limit");
+    expect(() => buildPolicy({ ...form, unlistedSeconds: "60" })).toThrow("new-payee window");
+  });
+
+  it("holds unlisted payees by default, with the longer window", () => {
+    const policy = buildPolicy({ ...form, payees: [] });
+    expect(policy.unlisted).toBe("Hold");
+    expect(policy.payees).toEqual([]);
+    expect(policy.unlisted_veto_delay_ns).toBe(600_000_000_000);
+  });
+
+  it("refuses unlisted payees when only the list may be paid", () => {
+    const policy = buildPolicy({ ...form, openPayees: false, unlistedSeconds: "1" });
+    expect(policy.unlisted).toBe("Refuse");
+    expect(policy.unlisted_veto_delay_ns).toBe(policy.veto_delay_ns);
+    expect(policy.caps.every((cap) => cap.unlisted_per_24h === "0")).toBe(true);
   });
 });
 

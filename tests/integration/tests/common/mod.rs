@@ -288,10 +288,19 @@ pub fn policy(btc: &BtcCap) -> Value {
     })
 }
 
+pub fn vault_wasm() -> anyhow::Result<Vec<u8>> {
+    wasm(VAULT_WASM)
+}
+
 pub async fn setup(btc: &BtcCap) -> anyhow::Result<Setup> {
+    setup_with(btc, &vault_wasm()?).await
+}
+
+/// `setup`, with other vault code, such as an earlier build to migrate from.
+pub async fn setup_with(btc: &BtcCap, vault_code: &[u8]) -> anyhow::Result<Setup> {
     let worker = near_workspaces::sandbox().await?;
     let signer = worker.dev_deploy(&wasm(SIGNER_WASM)?).await?;
-    let vault = worker.dev_deploy(&wasm(VAULT_WASM)?).await?;
+    let vault = worker.dev_deploy(vault_code).await?;
     let root = worker.root_account()?;
     root.transfer_near(vault.id(), NearToken::from_near(5))
         .await?

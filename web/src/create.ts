@@ -49,6 +49,8 @@ export interface CapForm {
   perTx: string;
   per24h: string;
   queueAt: string;
+  /** Most per 24 hours to payees off the list. Zero refuses them this asset. */
+  unlisted24h: string;
 }
 
 export interface PayeeForm {
@@ -63,6 +65,9 @@ export interface VaultForm {
   guardian: string;
   deposit: string;
   vetoSeconds: string;
+  /** Pay anyone, holding payments to unlisted payees, or pay only the list. */
+  openPayees: boolean;
+  unlistedSeconds: string;
   btc: CapForm;
   eth: CapForm;
   usdc: CapForm;
@@ -78,15 +83,23 @@ export const STARTING_FORM: VaultForm = {
   guardian: "",
   deposit: "1.5",
   vetoSeconds: "120",
-  btc: { perTx: "0.005", per24h: "0.02", queueAt: "0.0025" },
-  eth: { perTx: "0.01", per24h: "0.05", queueAt: "0.005" },
-  usdc: { perTx: "50", per24h: "200", queueAt: "25" },
-  sol: { perTx: "0.1", per24h: "0.5", queueAt: "0.05" },
-  solUsdc: { perTx: "50", per24h: "200", queueAt: "25" },
+  openPayees: true,
+  unlistedSeconds: "600",
+  btc: { perTx: "0.005", per24h: "0.02", queueAt: "0.0025", unlisted24h: "0.004" },
+  eth: { perTx: "0.01", per24h: "0.05", queueAt: "0.005", unlisted24h: "0.01" },
+  usdc: { perTx: "50", per24h: "200", queueAt: "25", unlisted24h: "40" },
+  sol: { perTx: "0.1", per24h: "0.5", queueAt: "0.05", unlisted24h: "0.1" },
+  solUsdc: { perTx: "50", per24h: "200", queueAt: "25", unlisted24h: "40" },
   payees: [{ label: "", chain: "Bitcoin", address: "" }],
 };
 
-function cap(asset: AssetCap["asset"], form: CapForm, decimals: number, name: string): AssetCap {
+function cap(
+  asset: AssetCap["asset"],
+  form: CapForm,
+  decimals: number,
+  name: string,
+  open: boolean,
+): AssetCap {
   const per_tx = parseUnits(form.perTx, decimals);
   const per_24h = parseUnits(form.per24h, decimals);
   const queue_at = parseUnits(form.queueAt, decimals);
@@ -96,12 +109,26 @@ function cap(asset: AssetCap["asset"], form: CapForm, decimals: number, name: st
   if (BigInt(queue_at) > BigInt(per_tx)) {
     throw new Error(`${name}: the veto threshold can't be above the per-payment cap`);
   }
-  return { asset, per_tx, per_24h, queue_at };
+  const unlisted_per_24h = open ? parseUnits(form.unlisted24h, decimals) : "0";
+  if (BigInt(unlisted_per_24h) > BigInt(per_24h)) {
+    throw new Error(`${name}: the new-payee limit can't be above the 24-hour limit`);
+  }
+  return { asset, per_tx, per_24h, queue_at, unlisted_per_24h };
+}
+
+function wholeSeconds(text: string, what: string): bigint {
+  const seconds = text.trim();
+  if (!/^\d+$/.test(seconds)) throw new Error(`${what} must be a whole number of seconds`);
+  return BigInt(seconds);
 }
 
 export function buildPolicy(form: VaultForm): Policy {
-  const seconds = form.vetoSeconds.trim();
-  if (!/^\d+$/.test(seconds)) throw new Error("The veto window must be a whole number of seconds");
+  const seconds = wholeSeconds(form.vetoSeconds, "The veto window");
+  const unlistedSeconds = form.openPayees ? wholeSeconds(form.unlistedSeconds, "The new-payee window") : seconds;
+  if (unlistedSeconds < seconds) {
+    throw new Error("The new-payee window can't be shorter than the veto window");
+  }
+  const open = form.openPayees;
   const solUsdc = base58.decode(SOL_USDC_DEVNET);
   const payees = form.payees.flatMap(({ label, chain, address }): Payee[] => {
     if (!label.trim()) throw new Error("Every payee needs a name");
@@ -112,21 +139,23 @@ export function buildPolicy(form: VaultForm): Policy {
     const tokens = associatedTokenAccount(Uint8Array.from(to), solUsdc);
     return [payee, { chain, to: [...tokens], label: `${label.trim()} (USDC)` }];
   });
-  if (payees.length === 0) throw new Error("Add at least one payee, or the vault can pay no one");
+  if (payees.length === 0 && !open) throw new Error("Add at least one payee, or the vault can pay no one");
   return {
     caps: [
-      cap("Btc", form.btc, 8, "BTC"),
-      cap({ EvmNative: { chain_id: CHAIN_ID } }, form.eth, 18, "ETH"),
-      cap({ Erc20: { chain_id: CHAIN_ID, token: [...hex.decode(USDC)] } }, form.usdc, 6, "USDC"),
-      cap("Sol", form.sol, 9, "SOL"),
-      cap({ Spl: { mint: [...solUsdc] } }, form.solUsdc, 6, "Solana USDC"),
+      cap("Btc", form.btc, 8, "BTC", open),
+      cap({ EvmNative: { chain_id: CHAIN_ID } }, form.eth, 18, "ETH", open),
+      cap({ Erc20: { chain_id: CHAIN_ID, token: [...hex.decode(USDC)] } }, form.usdc, 6, "USDC", open),
+      cap("Sol", form.sol, 9, "SOL", open),
+      cap({ Spl: { mint: [...solUsdc] } }, form.solUsdc, 6, "Solana USDC", open),
     ],
     payees,
     btc_max_fee_rate: 50,
     btc_max_inputs: 3,
     evm_chain_ids: [CHAIN_ID],
     evm_max_gas_cost: "1000000000000000",
-    veto_delay_ns: Number(BigInt(seconds) * 1_000_000_000n),
+    veto_delay_ns: Number(seconds * 1_000_000_000n),
+    unlisted: open ? "Hold" : "Refuse",
+    unlisted_veto_delay_ns: Number(unlistedSeconds * 1_000_000_000n),
     // 5,000 lamports of base fee, leaving room for a priority fee in busy times.
     sol_max_fee: "100000",
   };

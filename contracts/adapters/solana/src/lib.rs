@@ -243,13 +243,10 @@ pub fn parse(message: &[u8], policy: &Policy, vault: &[u8; 32]) -> Result<Parsed
     }
 
     // Rule 6.
-    let listed = |payment: &Payment| {
-        policy
-            .payees
-            .iter()
-            .any(|payee| payee.chain == ChainKind::Solana && payee.to == payment.to)
-    };
-    if !payments.iter().all(listed) {
+    if !payments
+        .iter()
+        .all(|payment| policy.allows_payee(ChainKind::Solana, &payment.to))
+    {
         return Err(CovenantError::OutputNotWhitelisted);
     }
 
@@ -278,7 +275,7 @@ pub fn parse(message: &[u8], policy: &Policy, vault: &[u8; 32]) -> Result<Parsed
 #[cfg(test)]
 mod tests {
     use super::*;
-    use covenant_policy::{AssetCap, Payee};
+    use covenant_policy::{AssetCap, Payee, UnlistedPayees};
 
     const VAULT_KEY: [u8; 32] = [0x11; 32];
     const NONCE: [u8; 32] = [0x22; 32];
@@ -296,6 +293,7 @@ mod tests {
             per_tx: U128(1_000_000_000),
             per_24h: U128(5_000_000_000),
             queue_at: U128(500_000_000),
+            unlisted_per_24h: U128(0),
         };
         let payee = |to: [u8; 32]| Payee {
             chain: ChainKind::Solana,
@@ -311,6 +309,8 @@ mod tests {
             evm_max_gas_cost: U128(1),
             veto_delay_ns: 1,
             sol_max_fee: U128(MAX_FEE),
+            unlisted: UnlistedPayees::Refuse,
+            unlisted_veto_delay_ns: 0,
         }
     }
 
@@ -483,6 +483,7 @@ mod tests {
                 per_tx: U128(u128::MAX),
                 per_24h: U128(u128::MAX),
                 queue_at: U128(u128::MAX),
+                unlisted_per_24h: U128(0),
             });
             rules.payees.push(Payee {
                 chain: ChainKind::Solana,
@@ -800,5 +801,13 @@ mod tests {
         fn prop_random_bytes_are_refused(bytes in proptest::collection::vec(proptest::prelude::any::<u8>(), 0..300)) {
             proptest::prop_assert!(run(&bytes).is_err());
         }
+    }
+    #[test]
+    fn sol_hold_mode_accepts_an_unlisted_payee() {
+        let mut open = policy();
+        open.unlisted = UnlistedPayees::Hold;
+        let sol = Builder::new().nonce().sol(VAULT_KEY, STRANGER, 1).build();
+        let parsed = parse(&sol, &open, &VAULT_KEY).unwrap();
+        assert_eq!(parsed.payments[0].to, STRANGER.to_vec());
     }
 }

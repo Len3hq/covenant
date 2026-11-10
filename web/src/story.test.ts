@@ -55,6 +55,20 @@ describe("rulesOf", () => {
     expect(ruleFor(rules, "PerTxCapExceeded")?.text).toContain("single BTC payment");
     expect(ruleFor(rules, undefined)).toBeUndefined();
   });
+  it("describes a vault that pays anyone but holds new payees", () => {
+    const open: Policy = {
+      ...policy,
+      caps: policy.caps.map((cap) => ({ ...cap, unlisted_per_24h: "400000" })),
+      unlisted: "Hold",
+      unlisted_veto_delay_ns: 600_000_000_000,
+    };
+    const rules = rulesOf(open);
+    expect(rules[0]?.text).toBe(
+      "Pay anyone, but hold every payment to someone off the list (Acme Hosting) for 600 s, so a human can veto",
+    );
+    expect(ruleFor(rules, "UnlistedCapExceeded")?.text).toBe("Pay new payees at most 0.004 BTC in any 24 hours");
+    expect(ruleFor(rules, "OutputNotWhitelisted")).toBeUndefined();
+  });
 });
 
 describe("featured", () => {

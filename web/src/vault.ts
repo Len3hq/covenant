@@ -89,6 +89,8 @@ export interface AssetCap {
   per_tx: string;
   per_24h: string;
   queue_at: string;
+  /** What unlisted payees may receive per 24 hours. Absent on older vaults, which refuse them. */
+  unlisted_per_24h?: string;
 }
 
 export interface Payee {
@@ -107,6 +109,9 @@ export interface Policy {
   veto_delay_ns: number;
   /** Lamports. Absent on vaults from before Solana support, which refuse Solana. */
   sol_max_fee?: string;
+  /** Absent on vaults from before open payees, which refuse unlisted payees. */
+  unlisted?: "Refuse" | "Hold";
+  unlisted_veto_delay_ns?: number;
 }
 
 /** Amounts are integer strings in the asset's base unit. */
@@ -704,6 +709,8 @@ export const REFUSALS: Record<string, string> = {
   NotYetExecutable: "it was still in its veto window",
   QueueFull: "the veto queue was full",
   SignFailed: "the signer failed, so the budget was returned",
+  UnlistedNotAllowed: "it paid a new payee in an asset that new payees can't receive",
+  UnlistedCapExceeded: "it would pass the 24-hour limit for new payees",
   MalformedTx: "the transaction was malformed",
 };
 
@@ -714,7 +721,15 @@ export const explainRefusal = (error: string | undefined) =>
 export function describePayment(payment: Payment, policy: Policy): string {
   const { unit, name } = describeAsset(payment.asset);
   const payee = policy.payees.find((p) => bytesToHex(p.to) === bytesToHex(payment.to));
-  return `${payment.amount} ${unit} of ${name} to ${payee?.label ?? payeeAddress(chainOfAsset(payment.asset), payment.to)}`;
+  const to = payee?.label ?? `${payeeAddress(chainOfAsset(payment.asset), payment.to)} (new payee)`;
+  return `${payment.amount} ${unit} of ${name} to ${to}`;
+}
+
+/** Whether a vault pays payees off its list, holding each payment for the longer window. */
+export const holdsUnlisted = (policy: Policy) => policy.unlisted === "Hold";
+
+export function unlistedDelaySeconds(policy: Policy): number {
+  return Math.floor(Math.max(policy.veto_delay_ns, policy.unlisted_veto_delay_ns ?? 0) / 1_000_000_000);
 }
 
 /** Whole seconds until a nanosecond timestamp from the contract, never below zero. */

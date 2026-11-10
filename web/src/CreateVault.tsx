@@ -33,10 +33,12 @@ function Field({
 function CapFields({
   name,
   cap,
+  open,
   onChange,
 }: {
   name: string;
   cap: CapForm;
+  open: boolean;
   onChange(cap: CapForm): void;
 }) {
   return (
@@ -49,19 +51,38 @@ function CapFields({
         value={cap.queueAt}
         onChange={(queueAt) => onChange({ ...cap, queueAt })}
       />
+      {open && (
+        <Field
+          label="New payees, most per 24 hours"
+          value={cap.unlisted24h}
+          hint="0 means new payees can't be paid in this asset."
+          onChange={(unlisted24h) => onChange({ ...cap, unlisted24h })}
+        />
+      )}
     </fieldset>
   );
 }
 
-function Payees({ payees, onChange }: { payees: PayeeForm[]; onChange(payees: PayeeForm[]): void }) {
+function Payees({
+  payees,
+  open,
+  onChange,
+}: {
+  payees: PayeeForm[];
+  open: boolean;
+  onChange(payees: PayeeForm[]): void;
+}) {
   const update = (index: number, patch: Partial<PayeeForm>) =>
     onChange(payees.map((payee, i) => (i === index ? { ...payee, ...patch } : payee)));
   return (
     <fieldset className="payee-list">
-      <legend>Who it may pay</legend>
+      <legend>{open ? "Trusted payees (optional)" : "Who it may pay"}</legend>
       <p className="muted small">
-        Everything else is refused. Bitcoin payees must be tb1q addresses. A Solana payee's USDC account is
-        listed for you, and must already exist.
+        {open
+          ? "These are paid without the new-payee wait. Anyone else can be paid too, but each payment waits out the new-payee window so you can veto it."
+          : "Everything else is refused."}{" "}
+        Bitcoin payees must be tb1q addresses. A Solana payee's USDC account is listed for you, and must
+        already exist.
       </p>
       {payees.map((payee, index) => (
         <div className="payee-row" key={index}>
@@ -236,15 +257,41 @@ export function CreateVault({
           hint="An account or Sputnik DAO that can also veto and freeze."
           onChange={(guardian) => setForm({ ...form, guardian })}
         />
-        <Payees payees={form.payees} onChange={(payees) => setForm({ ...form, payees })} />
+        <fieldset className="payee-mode">
+          <legend>Who the agent can pay</legend>
+          <label>
+            <input
+              type="radio"
+              name="payee-mode"
+              checked={form.openPayees}
+              onChange={() => setForm({ ...form, openPayees: true })}
+            />{" "}
+            Anyone, but hold payments to new payees so I can veto them
+          </label>
+          <label>
+            <input
+              type="radio"
+              name="payee-mode"
+              checked={!form.openPayees}
+              onChange={() => setForm({ ...form, openPayees: false })}
+            />{" "}
+            Only the payees I list
+          </label>
+        </fieldset>
+        <Payees
+          payees={form.payees}
+          open={form.openPayees}
+          onChange={(payees) => setForm({ ...form, payees })}
+        />
         <div className="cap-grid">
-          <CapFields name="BTC" cap={form.btc} onChange={(btc) => setForm({ ...form, btc })} />
-          <CapFields name="USDC" cap={form.usdc} onChange={(usdc) => setForm({ ...form, usdc })} />
-          <CapFields name="ETH" cap={form.eth} onChange={(eth) => setForm({ ...form, eth })} />
-          <CapFields name="SOL" cap={form.sol} onChange={(sol) => setForm({ ...form, sol })} />
+          <CapFields name="BTC" cap={form.btc} open={form.openPayees} onChange={(btc) => setForm({ ...form, btc })} />
+          <CapFields name="USDC" cap={form.usdc} open={form.openPayees} onChange={(usdc) => setForm({ ...form, usdc })} />
+          <CapFields name="ETH" cap={form.eth} open={form.openPayees} onChange={(eth) => setForm({ ...form, eth })} />
+          <CapFields name="SOL" cap={form.sol} open={form.openPayees} onChange={(sol) => setForm({ ...form, sol })} />
           <CapFields
             name="USDC on Solana"
             cap={form.solUsdc}
+            open={form.openPayees}
             onChange={(solUsdc) => setForm({ ...form, solUsdc })}
           />
         </div>
@@ -254,6 +301,14 @@ export function CreateVault({
           hint="How long large payments wait, so you or your guardian can stop them."
           onChange={(vetoSeconds) => setForm({ ...form, vetoSeconds })}
         />
+        {form.openPayees && (
+          <Field
+            label="New-payee window, in seconds"
+            value={form.unlistedSeconds}
+            hint="How long every payment to someone off your list waits. At least the veto window; 48 hours suits real money."
+            onChange={(unlistedSeconds) => setForm({ ...form, unlistedSeconds })}
+          />
+        )}
         <Field
           label="Deposit, in NEAR"
           value={form.deposit}

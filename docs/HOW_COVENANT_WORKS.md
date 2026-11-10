@@ -84,6 +84,9 @@ The owner writes one policy. The live testnet vault's policy
 Plus:
 
 - **Allowed payees:** "Acme Hosting" (a Bitcoin address) and "DesignCo" (a Base address). Nobody else.
+  A vault can instead be set to pay anyone: payments to someone off the list are then always held
+  for a longer veto window, whatever the amount, and have their own, smaller daily limit. The live
+  vault keeps the strict list.
 - **Fee limits:** Bitcoin fee at most 50 sat/vB; EVM gas cost capped. Otherwise an attacker could
   burn the money as fees.
 - **Chain lock:** EVM transactions must be for Base Sepolia (chain ID 84532).

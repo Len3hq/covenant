@@ -282,11 +282,7 @@ pub fn parse(
         if output.script == own_script.as_slice() {
             continue;
         }
-        let listed = policy
-            .payees
-            .iter()
-            .any(|p| p.chain == ChainKind::Bitcoin && p.to == output.script);
-        if !listed {
+        if !policy.allows_payee(ChainKind::Bitcoin, output.script) {
             return Err(CovenantError::OutputNotWhitelisted);
         }
         payments.push(Payment {
@@ -335,7 +331,7 @@ mod tests {
             })
             .collect()
     }
-    use covenant_policy::Payee;
+    use covenant_policy::{Payee, UnlistedPayees};
     use near_sdk::serde_json::{self, Value};
 
     const PUBKEY: [u8; 33] = [0x02; 33];
@@ -373,6 +369,8 @@ mod tests {
             evm_max_gas_cost: U128(1),
             veto_delay_ns: 1,
             sol_max_fee: U128(0),
+            unlisted: UnlistedPayees::Refuse,
+            unlisted_veto_delay_ns: 0,
         }
     }
 
@@ -872,5 +870,30 @@ mod tests {
                 proptest::prop_assert_ne!(hashes(&parsed), hashes(&allowed));
             }
         }
+    }
+    #[test]
+    fn btc_hold_mode_accepts_an_unlisted_output_as_a_payment() {
+        let (prev, txid) = coin();
+        let tx = unsigned(
+            &[(txid, 0)],
+            &[(60_000, foreign_script()), (39_000, own_script())],
+        );
+        let mut open = policy();
+        open.unlisted = UnlistedPayees::Hold;
+        let parsed = parse(
+            &tx,
+            &meta(&[&prev]),
+            &open,
+            &BitcoinVault { pubkey: &PUBKEY },
+        )
+        .unwrap();
+        assert_eq!(
+            parsed.payments,
+            vec![Payment {
+                asset: AssetId::Btc,
+                to: foreign_script(),
+                amount: U128(60_000),
+            }]
+        );
     }
 }

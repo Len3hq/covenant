@@ -211,7 +211,16 @@ pub struct Policy {
 
 **Errors (****`CovenantError`****, names used verbatim everywhere)**
 
-`NotAgent`, `NotOwner`, `NotGuardianOrOwner`, `Frozen`, `MalformedTx`, `UnsupportedScript`, `TooManyInputs`, `PrevTxMismatch`, `InputNotOwned`, `OutputNotWhitelisted`, `ChangeNotToVault`, `FeeTooHigh`, `WrongChainId`, `CalldataNotAllowed`, `TokenNotAllowed`, `ValueWithTokenCall`, `GasCostTooHigh`, `AssetNotCapped`, `PerTxCapExceeded`, `DailyCapExceeded`, `QueueFull`, `UnknownSpend`, `NotYetExecutable`, `SignFailed`.
+`NotAgent`, `NotOwner`, `NotGuardianOrOwner`, `Frozen`, `MalformedTx`, `UnsupportedScript`, `TooManyInputs`, `PrevTxMismatch`, `InputNotOwned`, `OutputNotWhitelisted`, `ChangeNotToVault`, `FeeTooHigh`, `WrongChainId`, `CalldataNotAllowed`, `TokenNotAllowed`, `ValueWithTokenCall`, `GasCostTooHigh`, `AssetNotCapped`, `PerTxCapExceeded`, `DailyCapExceeded`, `QueueFull`, `UnknownSpend`, `NotYetExecutable`, `SignFailed`, `UnlistedNotAllowed`, `UnlistedCapExceeded`.
+
+**Open payees.** `Policy.unlisted` is `Refuse` (the default, and what a policy without the field gets) or `Hold`. With `Refuse`, an output to anyone off the payee list fails with `OutputNotWhitelisted`, as the adapter rules below say. With `Hold`, the adapters accept it, and the vault then:
+
+- sums what the spend pays unlisted payees per asset (fees excluded) and checks it against that asset's `unlisted_per_24h` on a second rolling ledger: zero gives `UnlistedNotAllowed`, and going over gives `UnlistedCapExceeded`;
+- still applies every main cap to the whole spend;
+- always queues the spend, at any amount, with `executable_at = queued_at + max(veto_delay_ns, unlisted_veto_delay_ns)`;
+- at `execute`, recomputes which payments are unlisted under today's payee list, so a payee removed since gets the longer window and the unlisted cap, and switching back to `Refuse` refuses the spend.
+
+`set_policy` requires `unlisted_per_24h <= per_24h`, and in `Hold` mode `unlisted_veto_delay_ns >= veto_delay_ns`. `get_unlisted_spent_24h(asset)` reads the second ledger. `migrate_v3` moves a vault from before open payees, keeping it in `Refuse`.
 
 **Events (NEP-297 JSON logs, ****`standard: "covenant"`****, ****`version: "1.0.0"`****):** `spend_proposed`, `spend_queued`, `spend_signed`, `spend_rejected`, `spend_vetoed`, `frozen`, `unfrozen`, `policy_updated`. Each carries `id`, `chain`, `payments`, `fee`, and the error if any.
 
