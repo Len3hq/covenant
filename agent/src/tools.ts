@@ -13,6 +13,7 @@ import {
   type EvmChain,
   type Payer,
   type PayDeps,
+  type PrepareDeps,
   type SolanaDeps,
   type SpendReport,
 } from "@len3hq/covenant-sdk";
@@ -36,6 +37,8 @@ export interface ToolDeps {
   runId: string;
   /** Coins promised to unfinished spends, which a new payment must not use. */
   heldCoins?: () => Set<string>;
+  /** Unfinished Base spends, which block another Base payment until they finish. */
+  unfinishedEvm?: PrepareDeps["unfinishedEvm"];
   /** Every spend the tools made, for the caller to check and print. */
   onSpend?: (asset: string, to: string, report: SpendReport) => void;
 }
@@ -68,6 +71,7 @@ export function createTools(deps: ToolDeps): Tool[] {
     usdc,
     ...(deps.solana ? { solana: deps.solana } : {}),
     ...(deps.heldCoins ? { heldCoins: deps.heldCoins } : {}),
+    ...(deps.unfinishedEvm ? { unfinishedEvm: deps.unfinishedEvm } : {}),
   };
 
   return [

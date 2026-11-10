@@ -1,6 +1,6 @@
 import { hex } from "@scure/base";
 import { address, networks } from "bitcoinjs-lib";
-import { getAddress, type Address, type Hex } from "viem";
+import { getAddress, parseTransaction, type Address, type Hex } from "viem";
 import { prepareBitcoin, type PayDeps } from "./bitcoin/pay.js";
 import { contractCall, prepareEvm, transferData, type EvmChain } from "./evm/pay.js";
 import { prepareSolana, type SolanaDeps } from "./solana/pay.js";
@@ -51,6 +51,39 @@ export interface PrepareDeps {
   solana?: SolanaDeps;
   /** Coins an unfinished spend holds, as `txid:vout`, which this payment must not use. */
   heldCoins?: () => Set<string>;
+  /** Unfinished Base spends. While one is unfinished, another Base payment is refused. */
+  unfinishedEvm?: () => UnfinishedEvm[];
+}
+
+export interface UnfinishedEvm {
+  id?: string;
+  status: string;
+  description: string;
+  prepared: { unsignedHex: string };
+}
+
+/**
+ * Refuses a Base payment while another is unfinished: both would get the same nonce, and the one
+ * signed second would be charged to the budget but could never land. A spend whose nonce the chain
+ * has passed has landed or never can, and a queued spend that has left the vault's queue was
+ * vetoed, so neither counts.
+ */
+async function checkNoEvmInFlight(deps: PrepareDeps, from: Address): Promise<void> {
+  const unfinished = deps.unfinishedEvm?.() ?? [];
+  if (unfinished.length === 0) return;
+  const [next, queue] = await Promise.all([deps.chain.pendingNonce(from), deps.vault.queue()]);
+  const queued = new Set(queue.map(({ id }) => id));
+  const blocking = unfinished.find(({ id, status, prepared }) => {
+    const nonce = parseTransaction(prepared.unsignedHex as Hex).nonce ?? 0;
+    if (nonce < next) return false;
+    return status !== "queued" || (id !== undefined && queued.has(id));
+  });
+  if (!blocking) return;
+  const which = blocking.id ? `spend ${blocking.id}` : "a payment";
+  throw new Error(
+    `Another Base payment (${which}: ${blocking.description}) is still ${blocking.status}. ` +
+      "Execute or veto it first: two Base payments at once would share a nonce, and the second couldn't land.",
+  );
 }
 
 async function evmPrepared(
@@ -58,6 +91,7 @@ async function evmPrepared(
   call: { to: Address; value: bigint; gas: bigint; data?: Hex },
 ): Promise<Prepared> {
   const from = (await deps.vault.evmAddress()) as Address;
+  await checkNoEvmInFlight(deps, from);
   return { chain: "Evm", unsignedHex: await prepareEvm(deps.chain, from, call) };
 }
 

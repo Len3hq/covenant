@@ -97,26 +97,18 @@ token `0x38d8…a252`.
 
 **T5. Fund the vault.** Get its addresses with `make addresses`, then:
 
-- **Tidepool test USDC and USDT** on Base and Solana. Tidepool allows one claim per address each
-  week:
-
-  ```sh
-  curl -s -X POST https://www.usetidepool.tech/v0/faucet -H 'content-type: application/json' \
-    -d '{"chain":"base","address":"<vault Base address>"}'
-  curl -s -X POST https://www.usetidepool.tech/v0/faucet -H 'content-type: application/json' \
-    -d '{"chain":"sol","address":"<vault Solana address>"}'
-  ```
-
-  Base drips need an address with some Ethereum Sepolia history. If Tidepool answers 403 for the
-  vault, drip to your own Sepolia address and send the USDC on.
+- **Tidepool test USDC and USDT** on Base and Solana, from
+  [app.usetidepool.tech/faucet](https://app.usetidepool.tech/faucet). Tidepool turned off its faucet
+  API, which now answers `403 site_only`, and allows one claim per address each week. Paste the
+  vault's Base address (`0x…`) into the Base box and its Solana address into the Solana box.
 - **testnet4 BTC:** [CypherFaucet](https://cypherfaucet.com/btc-testnet) or
   [testnet4.info](https://testnet4.info). About 0.006 BTC, because T15 holds 450,000 sats.
 - **Base Sepolia ETH, for gas:** one of the faucets on
   [Base's list](https://docs.base.org/get-started/get-funds). About 0.01 ETH.
 - **Devnet SOL:** [faucet.solana.com](https://faucet.solana.com). About 0.5 SOL.
-- **The Solana payee's Tidepool USDC account,** which T9 pays into. Drip the faucet to the listed
-  Solana payee's wallet (`"chain":"sol","address":"<payee wallet>"`), which creates that account.
-  The policy lists it as `JCWcfRmxdV4i7R88kmo9U7VqSEsgQ9GrJFGmzEiDSqkD`.
+- **The Solana payee's Tidepool USDC account,** which T9 pays into. Claim on the faucet page with
+  the listed Solana payee's wallet, `xR99hjGSXQVvAWCPFfg8ZjqeLeWn9KVcX6X3N1iFHRU`, which creates
+  that account. The policy lists it as `JCWcfRmxdV4i7R88kmo9U7VqSEsgQ9GrJFGmzEiDSqkD`.
 
 Expect each balance on the dashboard's Budgets card.
 
@@ -264,7 +256,9 @@ make execute ID=<id>          # after 10 minutes
 
 Expect `SUCCESS` about a minute after it's executed.
 
-**T19. ETH on Base to USDC on Arbitrum.**
+**T19. ETH on Base to USDC on Arbitrum.** Start it after T18 is executed. The SDK refuses a second
+Base payment while one is unfinished, because both would get the same nonce and the second could
+never land.
 
 ```sh
 make pay-swap ASSET=ETH AMOUNT=2000000000000000 TO_CHAIN=arbitrum TO_ASSET=USDC TO=<an EVM address> REF=swap-t19

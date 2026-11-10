@@ -152,6 +152,7 @@ export class Covenant {
           bitcoin: this.world,
           solana: { ...this.world.solana, heldNonces: () => this.store.heldNonces() },
           heldCoins: () => this.store.heldCoins(),
+          unfinishedEvm: () => this.store.unfinishedEvm(),
         },
         asset,
         destination,
@@ -173,6 +174,7 @@ export class Covenant {
       bitcoin: this.world,
       solana: { ...this.world.solana, heldNonces: () => this.store.heldNonces() },
       heldCoins: () => this.store.heldCoins(),
+      unfinishedEvm: () => this.store.unfinishedEvm(),
     };
   }
 

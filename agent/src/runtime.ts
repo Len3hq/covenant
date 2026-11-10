@@ -55,6 +55,7 @@ export function createRuntime(world: World, runId: string) {
     bitcoin: { vault: world.vault, mempool: world.mempool },
     reads: world.reads,
     heldCoins: () => store.heldCoins(),
+    unfinishedEvm: () => store.unfinishedEvm(),
     ...(world.solana ? { solana: { ...world.solana, heldNonces: () => store.heldNonces() } } : {}),
     onSpend: (asset, to, report) => spends.push({ asset, to, report }),
   });

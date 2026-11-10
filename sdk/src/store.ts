@@ -95,6 +95,18 @@ export class SpendStore {
     return held;
   }
 
+  /**
+   * Unfinished Base spends. Each one's transaction carries the nonce the chain gave when it was
+   * built, so a second one built meanwhile gets the same nonce, and whichever is signed later can
+   * never land. A `queued` record whose spend has left the vault's queue was vetoed elsewhere.
+   */
+  unfinishedEvm(): SpendRecord[] {
+    const unfinished = new Set(["proposing", "queued", "executing", "signed"]);
+    return [...this.records.values()].filter(
+      ({ status, prepared }) => prepared.chain === "Evm" && unfinished.has(status),
+    );
+  }
+
   /** Written to a temporary file first, so a crash can't leave half a record behind. */
   put(record: SpendRecord): void {
     this.records.set(record.key, record);
