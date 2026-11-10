@@ -74,7 +74,7 @@ async function runScenario(world: World, scenario: string, runId: string): Promi
     const source = `recorded from ${process.env.LLM_MODEL} on ${world.name === "live" ? "testnet" : "the sandbox"}, ${new Date().toISOString().slice(0, 10)}`;
     writeFileSync(replayUrl, `${JSON.stringify({ source, turns: recorded }, null, 2)}\n`);
   }
-  const verdict = check(scenario, spends, attackers);
+  const verdict = check(scenario, spends, attackers, args.llm);
   console.log(`  ${verdict.passed ? "PASS" : "FAIL"}: ${verdict.summary}`);
   return verdict.passed;
 }

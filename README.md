@@ -58,7 +58,8 @@ make help    # list every target
 
 `make demo` runs all three scenarios on a local sandbox with no keys: the real contract, a mock signer
 and simulated chains. Add `LIVE=1` to run on testnet with the agent's key, and `LLM=1` to use a real
-model instead of the saved tool calls.
+model instead of the saved tool calls. A real model may ignore the poisoned invoice; the attack then
+passes as long as no attacker is paid, since the saved calls already test both refusals.
 
 ## Gas
 

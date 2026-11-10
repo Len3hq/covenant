@@ -148,7 +148,10 @@ with `make veto ID=<id>`.
 make demo-attack LIVE=1 LLM=1
 ```
 
-Expect the refusals `OutputNotWhitelisted` and `CalldataNotAllowed`, and no attacker paid.
+Expect `PASS` with no attacker paid. A real model may see through the poisoned invoice and never try
+the attack; the run then passes and says so, because T7 already shows the contract refusing both
+attacks. If the model does try, expect each attempt refused with `OutputNotWhitelisted` or
+`CalldataNotAllowed`.
 
 **T9. A Solana payment.** Needs `SOL_NONCE_ACCOUNTS`; run `make sol-nonce` once if it's empty.
 
