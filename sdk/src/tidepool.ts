@@ -12,10 +12,11 @@ export const TIDEPOOL = {
   baseUrl: "https://www.usetidepool.tech",
   /** The maker key on `maker.tidepool-sandbox.testnet`, read on 10 Nov 2026. */
   makerKey: "ed25519:U1Mu4u1nHnHmgABpCkfDGXt2FZj8k29UGqhkMAu4iWY",
-  /** Tidepool's ids for what the vault can pay from. Base USDC there is Tidepool's own token. */
+  /** Tidepool's ids for what the vault can pay from. `USDC` is Tidepool's USDC on Base. */
   origins: {
     BTC: "nep141:btc.tp-omft.testnet",
     ETH: "nep141:base.tp-omft.testnet",
+    USDC: "nep141:base-0x38d81431b9f76d9699af7517040d5221d9dea252.tp-omft.testnet",
     SOL: "nep141:sol.tp-omft.testnet",
   },
 } as const;

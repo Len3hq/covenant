@@ -2,7 +2,10 @@ import { base58, base64, hex } from "@scure/base";
 import vectorsJson from "../../tests/vectors/solana_message.json?raw";
 import { describe, expect, it } from "vitest";
 import { requestedPayments } from "./decode";
-import { associatedTokenAccount, SOL_USDC_DEVNET, solanaKey, solanaPayments } from "./solana";
+import { associatedTokenAccount, solanaKey, solanaPayments } from "./solana";
+
+/** Circle's devnet USDC, which the recorded web3.js vector derives from. */
+const SOL_USDC_DEVNET = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU";
 import { chainOfAsset, describeAsset, payeeAddress } from "./vault";
 import { explorerFor, humanAmount } from "./story";
 

@@ -19,7 +19,7 @@ jobs:
       BTC_API_URL: https://mempool.space/testnet4/api
       EVM_RPC_URL: https://sepolia.base.org
       EVM_CHAIN_ID: "84532"
-      USDC_ADDRESS: "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
+      USDC_ADDRESS: "0x38d81431B9f76d9699AF7517040D5221D9dEA252"
       SMOKE_BTC_PAYEE: tb1ql3d46g8n2ua8ulj8nu8fq8ulpm7vxfl6tjfxgs
       SMOKE_EVM_PAYEE: "0x8A6d5c011A9A1480a89b20EB1482bBE89BAEf829"
     steps:

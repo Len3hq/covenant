@@ -72,7 +72,7 @@ export interface PayRequest {
   /**
    * Pays on another chain or in another token through Tidepool: `asset` leaves the vault, and the
    * recipient gets `toAsset` on `toChain`, such as `USDC` on `solana`. `to` is then an address on
-   * `toChain`, or a swap payee's label. Only BTC, ETH and SOL can be swapped from.
+   * `toChain`, or a swap payee's label. Only BTC, ETH, USDC (on Base) and SOL can be swapped from.
    */
   toChain?: string;
   toAsset?: string;
@@ -180,6 +180,7 @@ export class Covenant {
   private async ownAddress(asset: SwapOrigin): Promise<string> {
     if (asset === "BTC") return this.world.btcAddress();
     if (asset === "SOL") return this.world.solAddress();
+    // ETH and USDC both leave from the vault's Base address.
     return this.world.evmAddress();
   }
 
@@ -198,7 +199,7 @@ export class Covenant {
 
   private async paySwap(request: PayRequest): Promise<Payment> {
     const { asset, amount, reference } = request;
-    if (!(asset in TIDEPOOL.origins)) throw new Error(`${asset} can't be swapped from; use BTC, ETH or SOL`);
+    if (!(asset in TIDEPOOL.origins)) throw new Error(`${asset} can't be swapped from; use BTC, ETH, USDC or SOL`);
     const origin = asset as SwapOrigin;
     const { token, recipient, timing } = await this.swapTarget(request);
     const key = keyOf(this.options.vault, reference);
@@ -254,7 +255,7 @@ export class Covenant {
   /** A swap's expected output, without spending anything or reserving a deposit address. */
   async quoteSwap(request: Omit<PayRequest, "reference">): Promise<{ amountIn: string; amountOut: string; minAmountOut: string; asset: string }> {
     const { asset, amount } = request;
-    if (!(asset in TIDEPOOL.origins)) throw new Error(`${asset} can't be swapped from; use BTC, ETH or SOL`);
+    if (!(asset in TIDEPOOL.origins)) throw new Error(`${asset} can't be swapped from; use BTC, ETH, USDC or SOL`);
     const origin = asset as SwapOrigin;
     const { token, recipient, timing } = await this.swapTarget({ ...request, reference: "quote" });
     const { terms, amountOut } = await this.tidepool.quote({

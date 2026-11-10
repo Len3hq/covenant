@@ -4,7 +4,8 @@ import { prepareSolana, signSolana, SolanaRpc } from "@covenant/sdk";
 import { base58 } from "@scure/base";
 import { connectVaultFromEnv } from "./env.js";
 
-const DEVNET_USDC = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU";
+/** Tidepool's test USDC on Solana devnet. */
+const DEVNET_USDC = "7pafEGXSmR35rLKNaD6inpfLYuEnRX9DyBc1c7M8r4Xr";
 
 const [to, amount, token] = process.argv.slice(2);
 if (!to || !amount) throw new Error("usage: pay-sol <address> <amount> [USDC]");

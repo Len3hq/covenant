@@ -4,4 +4,4 @@ useDefault = true
 # Public contract addresses, not secrets. Keep this to exact values.
 [[allowlists]]
 description = "Base Sepolia USDC contract, in tests/vectors/evm_hash.json"
-regexes = ['''^036cbd53842c5426634e7929541ec2318f3dcf7e$''']
+regexes = ['''^036cbd53842c5426634e7929541ec2318f3dcf7e$''', '''^38d81431b9f76d9699af7517040d5221d9dea252$''']

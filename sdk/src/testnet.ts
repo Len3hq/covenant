@@ -15,10 +15,11 @@ export const TESTNET = {
   btcApiUrl: "https://mempool.space/testnet4/api",
   evmRpcUrl: "https://sepolia.base.org",
   evmChainId: 84532,
-  usdc: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+  /** Tidepool's test USDC on Base Sepolia, which its faucet drips and its swaps use. */
+  usdc: "0x38d81431B9f76d9699AF7517040D5221D9dEA252",
   solRpcUrl: "https://api.devnet.solana.com",
-  /** Circle's devnet USDC. */
-  solUsdcMint: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+  /** Tidepool's test USDC on Solana devnet, which its faucet drips. */
+  solUsdcMint: "7pafEGXSmR35rLKNaD6inpfLYuEnRX9DyBc1c7M8r4Xr",
 } as const;
 
 export interface ConnectOptions {

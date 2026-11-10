@@ -13,7 +13,8 @@ const ASSOCIATED_TOKEN_PROGRAM = base58.decode("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25
 const SYSTEM_PROGRAM = new Uint8Array(32);
 
 /** Circle's devnet USDC. */
-export const SOL_USDC_DEVNET = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU";
+/** Tidepool's test USDC on Solana devnet, which its faucet drips. */
+export const SOL_USDC_DEVNET = "7pafEGXSmR35rLKNaD6inpfLYuEnRX9DyBc1c7M8r4Xr";
 
 /** A Solana address as 32 bytes, or an error naming what's wrong with it. */
 export function solanaKey(address: string): Uint8Array {
