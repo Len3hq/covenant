@@ -2,10 +2,12 @@
 //! deposit address that the service will swap and deliver on another chain. See
 //! docs/NEXT_PHASES.md, "Phase 2".
 //!
-//! The quote's signature is Ed25519, by the maker key, over `sha256(body)`, where `body` is the
-//! JSON of `{correlationId, timestamp, quoteRequest, quote}` exactly as the service sent it. The
-//! contract hashes the bytes it was given and then parses those same bytes, so every field it reads
-//! is a field that was signed. Serde refuses a duplicated field, so one key can't say two things.
+//! The quote's signature follows 1Click's scheme: Ed25519, by the maker key, over the UTF-8 text of
+//! `base58(sha256(body))`. `body` is one JSON object holding the chosen request and quote fields and
+//! the response's `timestamp`, with its keys sorted. The agent sends that body; the contract hashes
+//! the bytes it was given and then parses those same bytes, so every field it reads is a field that
+//! was signed. Serde refuses a duplicated field, so one key can't say two things, and refuses any
+//! field it doesn't know.
 //!
 //! What this can't check is delivery: the service holds the deposit until it pays out or refunds.
 //! That trust is bounded by the vault's caps, and the refund must come back to the vault.
@@ -41,16 +43,9 @@ pub struct SwapPlan {
     pub info: SwapInfo,
 }
 
-#[derive(Deserialize)]
-#[serde(crate = "near_sdk::serde", rename_all = "camelCase")]
-struct Body {
-    correlation_id: String,
-    quote_request: Request,
-    quote: Quote,
-}
-
-/// Every field the vault accepts in a request. Unknown fields are refused, because a field added
-/// later, such as an app fee or a forwarding message, could send part of the swap elsewhere.
+/// Every field the vault accepts in a signed quote. Unknown fields are refused, because a field
+/// added later, such as an app fee or a forwarding message, could send part of the swap elsewhere.
+/// The request's `deadline` and the quote's share one key, and in a live quote it is the quote's.
 #[derive(Deserialize)]
 #[serde(
     crate = "near_sdk::serde",
@@ -58,10 +53,10 @@ struct Body {
     deny_unknown_fields
 )]
 #[allow(dead_code)]
-struct Request {
+struct Body {
+    timestamp: String,
+    // The request.
     dry: bool,
-    #[serde(default)]
-    deposit_mode: Option<String>,
     swap_type: String,
     slippage_tolerance: serde_json::Number,
     origin_asset: String,
@@ -77,30 +72,41 @@ struct Request {
     referral: Option<String>,
     #[serde(default)]
     quote_waiting_time_ms: Option<serde_json::Number>,
+    // The quote.
+    amount_in: String,
     #[serde(default)]
-    session_id: Option<String>,
+    amount_in_formatted: Option<String>,
     #[serde(default)]
-    insured: Option<bool>,
-}
-
-#[derive(Deserialize)]
-#[serde(crate = "near_sdk::serde", rename_all = "camelCase")]
-struct Quote {
+    amount_in_usd: Option<String>,
+    #[serde(default)]
+    min_amount_in: Option<String>,
+    #[serde(default)]
+    amount_out: Option<String>,
+    #[serde(default)]
+    amount_out_formatted: Option<String>,
+    #[serde(default)]
+    amount_out_usd: Option<String>,
+    min_amount_out: String,
     #[serde(default)]
     deposit_address: Option<String>,
     #[serde(default)]
     deposit_memo: Option<String>,
-    amount_in: String,
-    min_amount_out: String,
     #[serde(default)]
-    deadline: Option<String>,
+    time_when_inactive: Option<String>,
+    #[serde(default)]
+    time_estimate: Option<serde_json::Number>,
+    #[serde(default)]
+    refund_fee: Option<String>,
+    #[serde(default)]
+    withdraw_fee: Option<String>,
 }
 
 const MISMATCH: CovenantError = CovenantError::QuoteMismatch;
 
 /// Checks a quote for a spend on `chain`, in rule order:
 ///
-/// 1. It is signed by the policy's maker key.
+/// 1. It is signed by the policy's maker key. Its id, which the vault records so it pays once, is
+///    the message the maker signed: unique to the quote, since it covers the timestamp.
 /// 2. It is a live quote that deposits on the origin chain, refunds there and delivers to the
 ///    destination chain, with an exact input or exact output and no memo.
 /// 3. Its refund goes to the vault's own address on `chain`.
@@ -122,20 +128,20 @@ pub fn verify(
         .and_then(|text| bs58::decode(text).into_vec().ok())
         .and_then(|bytes| <[u8; 64]>::try_from(bytes).ok())
         .ok_or(CovenantError::QuoteSignatureInvalid)?;
-    let digest = env::sha256_array(&quote.body.0);
-    if !env::ed25519_verify(&signature, digest, &swap.maker_key) {
+    let message = bs58::encode(env::sha256_array(&quote.body.0)).into_string();
+    if !env::ed25519_verify(&signature, message.as_bytes(), &swap.maker_key) {
         return Err(CovenantError::QuoteSignatureInvalid);
     }
     let body: Body = serde_json::from_slice(&quote.body.0).map_err(|_| MISMATCH)?;
-    let request = &body.quote_request;
+    let request = &body;
 
     // Rule 2.
     let exact = matches!(request.swap_type.as_str(), "EXACT_INPUT" | "EXACT_OUTPUT");
     let routed = request.deposit_type == "ORIGIN_CHAIN"
         && request.refund_type == "ORIGIN_CHAIN"
         && request.recipient_type == "DESTINATION_CHAIN";
-    let simple = request.deposit_mode.as_deref().unwrap_or("SIMPLE") == "SIMPLE"
-        && body.quote.deposit_memo.is_none();
+    // A memo deposit is the only other mode, and its memo is signed, so no memo means simple.
+    let simple = body.deposit_memo.is_none();
     if request.dry || !exact || !routed || !simple {
         return Err(MISMATCH);
     }
@@ -162,16 +168,16 @@ pub fn verify(
     }
 
     // Rule 6.
-    let deadline = parse_time(body.quote.deadline.as_deref().ok_or(MISMATCH)?)?;
+    let deadline = parse_time(&body.deadline)?;
     let earliest = now_ns.saturating_add(swap.min_deposit_window_ns);
     if deadline < earliest || deadline > now_ns.saturating_add(NS_PER_DAY) {
         return Err(CovenantError::QuoteExpired);
     }
 
     // Rule 7.
-    let deposit_address = body.quote.deposit_address.ok_or(MISMATCH)?;
+    let deposit_address = body.deposit_address.clone().ok_or(MISMATCH)?;
     let deposit_to = address_bytes(chain, &deposit_address)?;
-    let amount_in = integer(&body.quote.amount_in)?;
+    let amount_in = integer(&body.amount_in)?;
     if amount_in == 0 {
         return Err(MISMATCH);
     }
@@ -180,11 +186,11 @@ pub fn verify(
         amount_in,
         origin: origin.asset.clone(),
         info: SwapInfo {
-            correlation_id: body.correlation_id,
+            correlation_id: message,
             deposit_address,
             destination_asset: request.destination_asset.clone(),
             recipient: request.recipient.clone(),
-            min_amount_out: U128(integer(&body.quote.min_amount_out)?),
+            min_amount_out: U128(integer(&body.min_amount_out)?),
             deadline_ns: U64(deadline),
         },
     })
@@ -400,8 +406,8 @@ mod tests {
     use near_sdk::test_utils::VMContextBuilder;
     use near_sdk::testing_env;
 
-    /// A live quote from Tidepool on 10 Nov 2026: 20,000 sats to USDC on Base, refunded to the
-    /// vault's address in this test, with the maker key it was signed by.
+    /// A live quote from Tidepool on 10 Nov 2026, under the 1Click scheme: 20,000 sats to USDC on
+    /// Base, refunded to the vault's address in this test, with the maker key it was signed by.
     const LIVE: &str = include_str!("../../../../tests/vectors/tidepool_quote.json");
 
     fn vector() -> serde_json::Value {
@@ -477,6 +483,26 @@ mod tests {
             segwit_script(v["deposit_address"].as_str().unwrap(), "tb").unwrap()
         );
         assert_eq!(plan.deposit_to.len(), 22);
+        let message = bs58::encode(env::sha256_array(v["body"].as_str().unwrap().as_bytes()));
+        assert_eq!(plan.info.correlation_id, message.into_string());
+    }
+
+    #[test]
+    fn the_old_scheme_fails() {
+        // A signature over `sha256(body)` itself, as Tidepool signed before 10 Nov 2026.
+        testing_env!(VMContextBuilder::new().build());
+        let text = vector()["body"].as_str().unwrap().to_string();
+        let (key, signature) = test_key::sign(&env::sha256_array(text.as_bytes()));
+        let mut rules = policy();
+        rules.maker_key = key;
+        let old = SignedQuote {
+            body: Base64VecU8(text.into_bytes()),
+            signature: format!("ed25519:{}", bs58::encode(signature).into_string()),
+        };
+        assert_eq!(
+            run(&old, &rules, now()),
+            Err(CovenantError::QuoteSignatureInvalid)
+        );
     }
 
     #[test]
@@ -578,8 +604,8 @@ mod tests {
         fn test_signed(text: String) -> (SignedQuote, SwapPolicy) {
             use near_sdk::env::sha256_array;
             testing_env!(VMContextBuilder::new().build());
-            let digest = sha256_array(text.as_bytes());
-            let (key, signature) = test_key::sign(&digest);
+            let message = bs58::encode(sha256_array(text.as_bytes())).into_string();
+            let (key, signature) = test_key::sign(message.as_bytes());
             let mut rules = policy();
             rules.maker_key = key;
             (
@@ -610,17 +636,14 @@ mod tests {
 
         #[test]
         fn dry_quote_fails() {
-            refuses(
-                |b| b["quoteRequest"]["dry"] = true.into(),
-                CovenantError::QuoteMismatch,
-            );
+            refuses(|b| b["dry"] = true.into(), CovenantError::QuoteMismatch);
         }
 
         #[test]
         fn flex_and_any_input_fail() {
             for kind in ["FLEX_INPUT", "ANY_INPUT"] {
                 refuses(
-                    |b| b["quoteRequest"]["swapType"] = kind.into(),
+                    |b| b["swapType"] = kind.into(),
                     CovenantError::QuoteMismatch,
                 );
             }
@@ -630,7 +653,7 @@ mod tests {
         fn routing_other_than_chain_to_chain_fails() {
             for field in ["depositType", "refundType", "recipientType"] {
                 refuses(
-                    |b| b["quoteRequest"][field] = "INTENTS".into(),
+                    |b| b[field] = "INTENTS".into(),
                     CovenantError::QuoteMismatch,
                 );
             }
@@ -639,7 +662,7 @@ mod tests {
         #[test]
         fn memo_and_unknown_request_fields_fail() {
             refuses(
-                |b| b["quote"]["depositMemo"] = "1".into(),
+                |b| b["depositMemo"] = "1".into(),
                 CovenantError::QuoteMismatch,
             );
             for field in [
@@ -650,7 +673,7 @@ mod tests {
                 "confidentiality",
             ] {
                 refuses(
-                    |b| b["quoteRequest"][field] = serde_json::json!([]),
+                    |b| b[field] = serde_json::json!([]),
                     CovenantError::QuoteMismatch,
                 );
             }
@@ -675,12 +698,12 @@ mod tests {
         #[test]
         fn fractional_slippage_and_odd_amounts_fail() {
             refuses(
-                |b| b["quoteRequest"]["slippageTolerance"] = serde_json::json!(50.5),
+                |b| b["slippageTolerance"] = serde_json::json!(50.5),
                 CovenantError::QuoteMismatch,
             );
             for amount in ["", "0", "020000", "-1", "1e5"] {
                 refuses(
-                    |b| b["quote"]["amountIn"] = amount.into(),
+                    |b| b["amountIn"] = amount.into(),
                     CovenantError::QuoteMismatch,
                 );
             }
@@ -689,15 +712,12 @@ mod tests {
         #[test]
         fn deposit_address_on_another_chain_fails() {
             refuses(
-                |b| {
-                    b["quote"]["depositAddress"] =
-                        "0x2527D02599Ba641c19FEa793cD0F167589a0f10D".into()
-                },
+                |b| b["depositAddress"] = "0x2527D02599Ba641c19FEa793cD0F167589a0f10D".into(),
                 CovenantError::QuoteMismatch,
             );
             refuses(
                 |b| {
-                    b["quote"].as_object_mut().unwrap().remove("depositAddress");
+                    b.as_object_mut().unwrap().remove("depositAddress");
                 },
                 CovenantError::QuoteMismatch,
             );

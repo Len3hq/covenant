@@ -6,16 +6,35 @@ import { quoteSignedBy, signedBody, Tidepool, TIDEPOOL } from "./tidepool.js";
 /** A live Tidepool quote from 10 Nov 2026, as the vault's tests also use it. */
 const vector = JSON.parse(
   readFileSync(new URL("../../tests/vectors/tidepool_quote.json", import.meta.url), "utf8"),
-) as { body: string; signature: string; maker_key: string; deposit_address: string; recipient: string };
+) as {
+  body: string;
+  signature: string;
+  maker_key: string;
+  deposit_address: string;
+  recipient: string;
+  response: Record<string, unknown>;
+};
 
-/** The response Tidepool sent: the signed body with its signature added at the end. */
-const response = { ...(JSON.parse(vector.body) as Record<string, unknown>), signature: vector.signature };
+/** The response Tidepool sent, with its signature. */
+const response = { ...vector.response, signature: vector.signature };
 
 describe("quote signatures", () => {
   it("rebuilds the exact bytes Tidepool signed", () => {
     expect(signedBody(response)).toBe(vector.body);
+    expect(Object.keys(JSON.parse(vector.body) as object)).toEqual(Object.keys(JSON.parse(vector.body) as object).sort());
     expect(quoteSignedBy(vector.body, vector.signature, TIDEPOOL.makerKey)).toBe(true);
     expect(vector.maker_key).toBe(TIDEPOOL.makerKey);
+  });
+
+  it("signs a dry quote's amounts only, and drops the optional request fields when empty", () => {
+    const dry = {
+      timestamp: "t",
+      quoteRequest: { dry: true, amount: "1", referral: "", deadline: "d" },
+      quote: { amountIn: "1", minAmountOut: "0", depositAddress: "x", deadline: "q" },
+    };
+    expect(signedBody(dry)).toBe('{"amount":"1","amountIn":"1","deadline":"d","dry":true,"minAmountOut":"0","timestamp":"t"}');
+    const live = { ...dry, quoteRequest: { ...dry.quoteRequest, dry: false } };
+    expect(JSON.parse(signedBody(live))).toMatchObject({ deadline: "q", depositAddress: "x", dry: false });
   });
 
   it("refuses a changed body or another key", () => {

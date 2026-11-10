@@ -145,6 +145,9 @@ fn same_recipient(a: &str, b: &str) -> bool {
 #[near(serializers = [borsh, json])]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SwapInfo {
+    /// The quote's id, which the vault records so it pays once: the base58 `sha256` of the signed
+    /// body, which is what the maker signs. Quotes from before 10 Nov 2026 used Tidepool's
+    /// `correlationId` here.
     pub correlation_id: String,
     pub deposit_address: String,
     pub destination_asset: String,

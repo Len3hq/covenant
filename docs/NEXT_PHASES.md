@@ -234,16 +234,22 @@ key on `maker.tidepool-sandbox.testnet`:
 ed25519:U1Mu4u1nHnHmgABpCkfDGXt2FZj8k29UGqhkMAu4iWY
 ```
 
-The signed message is:
+**Changed on 10 Nov, in the evening.** Tidepool moved to 1Click's documented scheme
+([Tidepool's guide](https://www.usetidepool.tech/docs/guides/verify-quote-signatures)). The key
+stayed the same. The signed message is now the UTF-8 text of:
 
 ```
-sha256( JSON.stringify({ correlationId, timestamp, quoteRequest, quote }) )
+base58( sha256( stableStringify({ ...signedRequestFields, ...signedQuoteFields, timestamp }) ) )
 ```
 
-These are the response's own fields, in the response's own order, without `signature`. I checked
-this against a dry quote and a live one (BTC to Base USDC). Both verify, and the live one's signed
-`quote` includes `depositAddress` and `deadline`. The docs don't state this format, so the
-SDK must check it on every quote and fail closed if it stops verifying.
+The fields are the ones 1Click's `verifyQuoteSignature` picks. A live quote adds `depositAddress`,
+`depositMemo`, `deadline` (which replaces the request's), `timeWhenInactive`, `timeEstimate`,
+`refundFee` and `withdrawFee`. `correlationId` is no longer signed, so the vault records the signed
+message as the quote's id instead. The SDK rebuilds this body, checks it on every quote and fails
+closed if it stops verifying; the contract parses the same flat body.
+
+Before that change the message was `sha256(JSON.stringify({ correlationId, timestamp,
+quoteRequest, quote }))`, in the response's own order. Those quotes no longer verify.
 
 This makes the plan safe: **the contract can check the quote itself**. An agent can't pair a
 harmless-looking quote with a deposit address that leads somewhere else, because the address is
@@ -287,7 +293,7 @@ pub fn verify(quote: &SignedQuote, policy: &SwapPolicy, vault: &VaultAddrs, now_
 
 `verify` runs these rules in order:
 
-1. `env::ed25519_verify(signature, sha256(body), policy.maker_key)`. The bytes are hashed,
+1. `env::ed25519_verify(signature, base58(sha256(body)), policy.maker_key)`. The bytes are hashed,
    then parsed, so the fields read are the ones that were signed. `serde_json` refuses duplicate
    keys in a struct, so `{"recipient":A,"recipient":B}` fails to parse. Add a test for it.
 2. `quoteRequest.dry == false`, `depositType == "ORIGIN_CHAIN"`,

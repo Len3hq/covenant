@@ -66,47 +66,47 @@ fn iso(ns: u64) -> String {
     )
 }
 
-/// A quote body as Tidepool writes one, depositing `AMOUNT` sats and expiring in `hours`.
+/// A quote body as Tidepool signs one, depositing `AMOUNT` sats and expiring in `hours`: the
+/// request and quote fields and the timestamp in one object.
 fn body(hours: u64) -> Value {
     let deadline = iso(now_ns() + hours * HOUR_NS);
     json!({
-        "correlationId": format!("test-{}", now_ns()),
         "timestamp": iso(now_ns()),
-        "quoteRequest": {
-            "dry": false,
-            "swapType": "EXACT_INPUT",
-            "slippageTolerance": 100,
-            "originAsset": ORIGIN,
-            "depositType": "ORIGIN_CHAIN",
-            "destinationAsset": DESTINATION,
-            "amount": AMOUNT.to_string(),
-            "refundTo": VAULT_ADDRESS,
-            "refundType": "ORIGIN_CHAIN",
-            "recipient": RECIPIENT,
-            "recipientType": "DESTINATION_CHAIN",
-            "deadline": deadline,
-        },
-        "quote": {
-            "depositAddress": DEPOSIT_ADDRESS,
-            "amountIn": AMOUNT.to_string(),
-            "amountInFormatted": "0.0002",
-            "amountInUsd": "14.72",
-            "minAmountIn": AMOUNT.to_string(),
-            "amountOut": "98000000",
-            "amountOutFormatted": "0.098",
-            "amountOutUsd": "14.6",
-            "minAmountOut": "97020000",
-            "deadline": deadline,
-            "timeWhenInactive": deadline,
-            "timeEstimate": 60,
-        },
+        "dry": false,
+        "swapType": "EXACT_INPUT",
+        "slippageTolerance": 100,
+        "originAsset": ORIGIN,
+        "depositType": "ORIGIN_CHAIN",
+        "destinationAsset": DESTINATION,
+        "amount": AMOUNT.to_string(),
+        "refundTo": VAULT_ADDRESS,
+        "refundType": "ORIGIN_CHAIN",
+        "recipient": RECIPIENT,
+        "recipientType": "DESTINATION_CHAIN",
+        "depositAddress": DEPOSIT_ADDRESS,
+        "amountIn": AMOUNT.to_string(),
+        "amountInFormatted": "0.0002",
+        "amountInUsd": "14.72",
+        "minAmountIn": AMOUNT.to_string(),
+        "amountOut": "98000000",
+        "amountOutFormatted": "0.098",
+        "amountOutUsd": "14.6",
+        "minAmountOut": "97020000",
+        "deadline": deadline,
+        "timeWhenInactive": deadline,
+        "timeEstimate": 60,
     })
+}
+
+/// What the maker signs for `body`, which the vault also records as the quote's id.
+fn quote_id(body: &Value) -> String {
+    let text = serde_json::to_string(body).unwrap();
+    bs58::encode(Sha256::digest(text.as_bytes())).into_string()
 }
 
 fn sign(body: &Value) -> Value {
     let text = serde_json::to_string(body).unwrap();
-    let digest = Sha256::digest(text.as_bytes());
-    let signature = maker().sign(&digest).to_bytes();
+    let signature = maker().sign(quote_id(body).as_bytes()).to_bytes();
     json!({
         "body": STANDARD.encode(text),
         "signature": format!("ed25519:{}", bs58::encode(signature).into_string()),
@@ -214,7 +214,7 @@ async fn honest_swap_to_a_listed_recipient_signs_and_logs_the_swap() -> anyhow::
     let used: bool = s
         .vault
         .view("is_quote_used")
-        .args_json(json!({ "correlation_id": quote_body["correlationId"] }))
+        .args_json(json!({ "correlation_id": quote_id(&quote_body) }))
         .await?
         .json()?;
     assert!(used);
@@ -253,7 +253,7 @@ async fn attack_changes_the_recipient_after_signing() -> anyhow::Result<()> {
 async fn attack_sends_the_refund_to_itself() -> anyhow::Result<()> {
     let s = with_swaps(true).await?;
     let mut quote_body = body(3);
-    quote_body["quoteRequest"]["refundTo"] = json!("tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx");
+    quote_body["refundTo"] = json!("tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx");
     refused(&s, honest(sign(&quote_body)), "QuoteMismatch").await
 }
 
@@ -268,7 +268,7 @@ async fn attack_deposits_more_than_the_quote() -> anyhow::Result<()> {
 async fn attack_uses_a_dry_quote() -> anyhow::Result<()> {
     let s = with_swaps(true).await?;
     let mut quote_body = body(3);
-    quote_body["quoteRequest"]["dry"] = json!(true);
+    quote_body["dry"] = json!(true);
     refused(&s, honest(sign(&quote_body)), "QuoteMismatch").await
 }
 
@@ -276,7 +276,7 @@ async fn attack_uses_a_dry_quote() -> anyhow::Result<()> {
 async fn attack_adds_an_app_fee_to_itself() -> anyhow::Result<()> {
     let s = with_swaps(true).await?;
     let mut quote_body = body(3);
-    quote_body["quoteRequest"]["appFees"] = json!([{ "recipient": "attacker.near", "fee": 5000 }]);
+    quote_body["appFees"] = json!([{ "recipient": "attacker.near", "fee": 5000 }]);
     refused(&s, honest(sign(&quote_body)), "QuoteMismatch").await
 }
 
@@ -284,7 +284,7 @@ async fn attack_adds_an_app_fee_to_itself() -> anyhow::Result<()> {
 async fn attack_swaps_to_an_unlisted_destination_asset() -> anyhow::Result<()> {
     let s = with_swaps(true).await?;
     let mut quote_body = body(3);
-    quote_body["quoteRequest"]["destinationAsset"] = json!("nep141:wnear.tidepool-sandbox.testnet");
+    quote_body["destinationAsset"] = json!("nep141:wnear.tidepool-sandbox.testnet");
     refused(&s, honest(sign(&quote_body)), "SwapAssetNotAllowed").await
 }
 

@@ -76,17 +76,83 @@ export interface QuoteRequest {
   slippageBps?: number;
 }
 
-/** The bytes Tidepool signs: the response without its signature, in the order it was sent. */
+/** The request fields the maker signs, as 1Click's `verifyQuoteSignature` selects them. */
+const SIGNED_REQUEST = [
+  "dry",
+  "swapType",
+  "slippageTolerance",
+  "originAsset",
+  "depositType",
+  "destinationAsset",
+  "amount",
+  "refundTo",
+  "refundType",
+  "recipient",
+  "recipientType",
+  "deadline",
+  "quoteWaitingTimeMs",
+  "referral",
+  "virtualChainRecipient",
+  "virtualChainRefundRecipient",
+  "customRecipientMsg",
+] as const;
+const SIGNED_AMOUNTS = [
+  "amountIn",
+  "amountInFormatted",
+  "amountInUsd",
+  "minAmountIn",
+  "amountOut",
+  "amountOutFormatted",
+  "amountOutUsd",
+  "minAmountOut",
+] as const;
+/** Signed only in a live quote. Its `deadline` replaces the request's. */
+const SIGNED_LIVE = [
+  "depositAddress",
+  "depositMemo",
+  "deadline",
+  "timeWhenInactive",
+  "timeEstimate",
+  "refundFee",
+  "withdrawFee",
+] as const;
+
+const pick = (from: Record<string, unknown>, keys: readonly string[], keepFalsy: readonly string[]) =>
+  Object.fromEntries(
+    keys.flatMap((key) => {
+      const value = from[key];
+      return value === undefined || (!value && !keepFalsy.includes(key)) ? [] : [[key, value]];
+    }),
+  );
+
+/**
+ * The bytes Tidepool signs, under 1Click's scheme: the chosen request and quote fields with the
+ * response's `timestamp`, merged into one object, as JSON with its keys sorted. The vault parses
+ * these same bytes, so every field it reads is one the maker signed.
+ */
 export function signedBody(response: Record<string, unknown>): string {
-  const { correlationId, timestamp, quoteRequest, quote } = response;
-  return JSON.stringify({ correlationId, timestamp, quoteRequest, quote });
+  const request = (response.quoteRequest ?? {}) as Record<string, unknown>;
+  const quote = (response.quote ?? {}) as Record<string, unknown>;
+  // 1Click keeps the core request fields even when falsy, and drops the optional ones.
+  const core = SIGNED_REQUEST.slice(0, 12);
+  const merged: Record<string, unknown> = {
+    ...pick(request, SIGNED_REQUEST, core),
+    ...pick(quote, SIGNED_AMOUNTS, SIGNED_AMOUNTS),
+    ...(request.dry ? {} : pick(quote, SIGNED_LIVE, [])),
+    timestamp: response.timestamp,
+  };
+  const sorted = Object.fromEntries(Object.keys(merged).sort().map((key) => [key, merged[key]]));
+  return JSON.stringify(sorted);
 }
 
-/** Whether `signature` is the maker's Ed25519 signature over `sha256(body)`. */
+/** What the maker's key signs: the base58 text of `sha256(body)`. */
+export const quoteMessage = (body: string) => base58.encode(sha256(new TextEncoder().encode(body)));
+
+/** Whether `signature` is the maker's Ed25519 signature over `quoteMessage(body)`. */
 export function quoteSignedBy(body: string, signature: string, makerKey: string): boolean {
   const decode = (text: string) => base58.decode(text.replace(/^ed25519:/, ""));
   try {
-    return ed25519.verify(decode(signature), sha256(new TextEncoder().encode(body)), decode(makerKey));
+    return ed25519.verify(decode(signature), new TextEncoder().encode(quoteMessage(body)), decode(makerKey));
   } catch {
     return false;
   }
