@@ -1,6 +1,6 @@
 // Pays a Bitcoin address from the vault: `node --env-file=.env agent/dist/pay-btc.js <address> <sats>`.
-import { Mempool } from "@covenant/sdk";
-import { payBitcoin } from "@covenant/sdk";
+import { Mempool } from "@len3hq/covenant-sdk";
+import { payBitcoin } from "@len3hq/covenant-sdk";
 import { connectVaultFromEnv, requireEnv } from "./env.js";
 
 const [to, sats] = process.argv.slice(2);

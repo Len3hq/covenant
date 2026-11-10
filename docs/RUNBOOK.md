@@ -10,7 +10,7 @@ says what to run, what you should see, and what to send back. Updated as phases 
 | 2. Pay on any chain through Tidepool | Yes | No | No |
 | 3. Create and replace the agent from the dashboard | Yes | No | No |
 | 4. "Create agent key" button | Yes | No | No |
-| 5. MCP server on npm | No | | |
+| 5. SDK and MCP server on npm | Yes | No | No |
 | 6. Ready-made settings snippet | No | | |
 
 When a step fails, stop, and send the command, its full output, and the NEAR transaction link if
@@ -265,7 +265,56 @@ This needs an agent account whose full-access key is in a wallet.
 
 **Send back:** the `list-keys` output after steps 3 and 5, and the payment's transaction link.
 
-## 9. Record the evidence
+## 9. Phase 5: publish the SDK and MCP server to npm
+
+The packages are `@len3hq/covenant-sdk` and `@len3hq/covenant-mcp`. The `@covenant` scope belongs to
+someone else, and `covenant-sdk` and `covenant-mcp` are taken.
+
+One-time setup:
+
+1. On npmjs.com, create the organization **len3hq**. A free org can publish public packages.
+2. Create a granular access token that can publish to `@len3hq`, and save it as the repository
+   secret `NPM_TOKEN`:
+
+   ```sh
+   gh secret set NPM_TOKEN --repo Len3hq/covenant
+   ```
+
+Publish by tagging. The tag must match the `version` in both `sdk/package.json` and
+`mcp/package.json`, which is `0.1.0` now:
+
+```sh
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+The Release workflow runs the tests, packs and installs both packages, publishes the SDK and then
+the MCP server, each with npm provenance. Watch it with `gh run watch`.
+
+Then check from a clean machine with only Node 22, or any folder outside the repo:
+
+```sh
+npx -y @len3hq/covenant-mcp --version       # prints 0.1.0
+```
+
+Put the npx config from the [MCP README](../mcp/README.md) in Claude Desktop, with the live vault,
+`agent.len3hq.testnet` and `AGENT_PRIVATE_KEY`. Restart Claude Desktop and ask it "what are my
+vault's addresses?" and "who can the vault pay?".
+
+Finally, switch the dashboard's docs to npx and republish it:
+
+```sh
+railway variables --service dashboard --set VITE_MCP_PUBLISHED=true
+make deploy-dashboard
+```
+
+**Send back:**
+
+- the npm package links;
+- the Release run link;
+- the `npx … --version` output;
+- what Claude Desktop answered.
+
+## 10. Record the evidence
 
 Add each transaction link to [EVIDENCE.md](../EVIDENCE.md), under a heading per phase, in the format
 already there. Then tick "Deployed" and "Tested live" in the table at the top of this file.

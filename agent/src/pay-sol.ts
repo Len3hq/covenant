@@ -1,6 +1,6 @@
 // Pays from the vault on Solana devnet:
 // `node --env-file=.env agent/dist/pay-sol.js <address> <lamports or USDC base units> [USDC]`.
-import { prepareSolana, signSolana, SolanaRpc } from "@covenant/sdk";
+import { prepareSolana, signSolana, SolanaRpc } from "@len3hq/covenant-sdk";
 import { base58 } from "@scure/base";
 import { connectVaultFromEnv } from "./env.js";
 

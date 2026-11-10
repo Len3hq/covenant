@@ -8,7 +8,7 @@ import { networks, payments, Transaction } from "bitcoinjs-lib";
 import { Account, JsonRpcProvider, type KeyPairString } from "near-api-js";
 import { z } from "zod";
 import type { World } from "./runtime.js";
-import { connectVault } from "@covenant/sdk";
+import { connectVault } from "@len3hq/covenant-sdk";
 
 /** Tidepool's test USDC, which scripts/policy.testnet.json caps. */
 const USDC = "0x38d81431B9f76d9699AF7517040D5221D9dEA252";

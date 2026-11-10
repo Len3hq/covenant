@@ -1,5 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { ASSETS, type Covenant } from "@covenant/sdk";
+import { ASSETS, type Covenant } from "@len3hq/covenant-sdk";
 import { z } from "zod";
 
 /** The parts of a Covenant wallet the tools use, so tests can stand in for the chains. */

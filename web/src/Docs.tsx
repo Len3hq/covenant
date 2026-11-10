@@ -1,6 +1,7 @@
+import { claudeCodeCommand, desktopConfig, installSteps, MCP_PUBLISHED } from "./mcpConfig";
 import { FACTORY_ID, REFUSALS } from "./vault";
 
-const SDK_EXAMPLE = `import { Covenant } from "@covenant/sdk";
+const SDK_EXAMPLE = `import { Covenant } from "@len3hq/covenant-sdk";
 
 const wallet = Covenant.connect({
   vault: "acme.${FACTORY_ID}",
@@ -20,31 +21,10 @@ if (result.status === "rejected") {
   console.log("Refused by the vault:", result.error); // e.g. OutputNotWhitelisted
 }`;
 
-const INSTALL = `git clone https://github.com/Len3hq/covenant && cd covenant
-pnpm install
-pnpm --filter "@covenant/mcp..." build   # builds the SDK and the MCP server`;
-
-const MCP_DESKTOP = `{
-  "mcpServers": {
-    "covenant": {
-      "command": "node",
-      "args": ["/path/to/covenant/mcp/dist/index.js"],
-      "env": {
-        "VAULT_ACCOUNT_ID": "acme.${FACTORY_ID}",
-        "AGENT_ACCOUNT_ID": "my-agent.testnet",
-        "AGENT_PRIVATE_KEY": "ed25519:…",
-        "SPENDS_FILE": "/path/to/covenant-spends.json",
-        "SOL_NONCE_ACCOUNTS": "<from make sol-nonce, for Solana>"
-      }
-    }
-  }
-}`;
-
-const MCP_CODE = `claude mcp add covenant \\
-  -e VAULT_ACCOUNT_ID=acme.${FACTORY_ID} \\
-  -e AGENT_ACCOUNT_ID=my-agent.testnet \\
-  -e AGENT_PRIVATE_KEY=ed25519:… \\
-  -- node /path/to/covenant/mcp/dist/index.js`;
+const PLACEHOLDERS = { vault: `acme.${FACTORY_ID}`, agent: "my-agent.testnet", key: "ed25519:…" };
+const INSTALL = installSteps();
+const MCP_DESKTOP = desktopConfig(PLACEHOLDERS);
+const MCP_CODE = claudeCodeCommand(PLACEHOLDERS);
 
 const AGENT_KEY = `VAULT_ACCOUNT_ID=acme.${FACTORY_ID} AGENT_ACCOUNT_ID=my-agent.testnet make agent-key`;
 
@@ -135,9 +115,9 @@ export function Docs() {
         <section id="sdk">
           <h2>TypeScript SDK</h2>
           <p>
-            <code>@covenant/sdk</code> builds the transactions, proposes them, broadcasts what the vault signs, and
-            records every step before taking it, so a crash or retry never pays twice. It isn't on npm yet; build it
-            from the repo:
+            <code>@len3hq/covenant-sdk</code> builds the transactions, proposes them, broadcasts what the vault signs, and
+            records every step before taking it, so a crash or retry never pays twice.{" "}
+            {MCP_PUBLISHED ? "Install it from npm:" : "It isn't on npm yet; build it from the repo:"}
           </p>
           <Code>{INSTALL}</Code>
           <Code>{SDK_EXAMPLE}</Code>
@@ -185,13 +165,26 @@ export function Docs() {
         <section id="mcp">
           <h2>MCP server</h2>
           <p>
-            Gives any MCP client six tools: <code>pay</code>, <code>list_payees</code>, <code>get_balances</code>,{" "}
-            <code>get_addresses</code>, <code>list_queue</code> and <code>execute_queued</code>. Build it as in the{" "}
-            <a href="#sdk">SDK section</a>, then add it to your client.
+            Gives any MCP client nine tools: <code>pay</code>, <code>quote_payment</code>,{" "}
+            <code>list_destinations</code>, <code>get_payment_status</code>, <code>list_payees</code>,{" "}
+            <code>get_balances</code>, <code>get_addresses</code>, <code>list_queue</code> and{" "}
+            <code>execute_queued</code>.{" "}
+            {MCP_PUBLISHED ? (
+              <>Your app starts it with npx, so there's nothing to install.</>
+            ) : (
+              <>
+                Build it as in the <a href="#sdk">SDK section</a>, then add it to your client.
+              </>
+            )}{" "}
+            It records payments in <code>~/.covenant/</code>, so none is paid twice; set <code>SPENDS_FILE</code> to
+            keep them elsewhere. For Solana, add <code>SOL_NONCE_ACCOUNTS</code> from <code>make sol-nonce</code>.
           </p>
           <p><strong>Claude Code</strong></p>
           <Code>{MCP_CODE}</Code>
-          <p><strong>Claude Desktop</strong>, in <code>claude_desktop_config.json</code>:</p>
+          <p>
+            <strong>Claude Desktop</strong>, in <code>claude_desktop_config.json</code>, or <strong>Cursor</strong>, in{" "}
+            <code>~/.cursor/mcp.json</code>:
+          </p>
           <Code>{MCP_DESKTOP}</Code>
           <p className="muted small">
             The key in this config can only ask your vault for payments. If it leaks, the worst it can do is propose

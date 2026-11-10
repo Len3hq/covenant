@@ -1,7 +1,7 @@
 // Pays across chains through Tidepool:
 // `node --env-file=.env agent/dist/pay-swap.js <BTC|ETH|USDC|SOL> <base units> <to chain> <to token> <recipient> [reference]`.
 // Prints the result, then follows Tidepool's status until it ends or a few minutes pass.
-import { Covenant, type Asset } from "@covenant/sdk";
+import { Covenant, type Asset } from "@len3hq/covenant-sdk";
 import { requireEnv } from "./env.js";
 
 const [asset, amount, toChain, toAsset, to, reference] = process.argv.slice(2);

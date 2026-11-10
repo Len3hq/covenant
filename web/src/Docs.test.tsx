@@ -7,7 +7,7 @@ describe("Docs", () => {
   const html = renderToString(<Docs />);
 
   it("covers setup, the SDK and the MCP server", () => {
-    for (const text of ["Quick start", "@covenant/sdk", "claude mcp add covenant", "make agent-key"]) {
+    for (const text of ["Quick start", "@len3hq/covenant-sdk", "claude mcp add covenant", "make agent-key"]) {
       expect(html).toContain(text);
     }
   });

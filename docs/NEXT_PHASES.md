@@ -552,7 +552,26 @@ can't call `set_policy`. The existing
 
 ## Phase 5: publish the MCP server to npm
 
-1. **Name:** `@covenant/mcp` and `@covenant/sdk` don't exist on npm (checked on 10 Nov), but the
+**Status: built on 10 Nov, not yet published.** It differs from the design below in five ways:
+
+- **The names are `@len3hq/covenant-sdk` and `@len3hq/covenant-mcp`.** The `@covenant` npm org
+  exists and belongs to someone else, and the unscoped `covenant-sdk` and `covenant-mcp` are taken.
+- **Both packages are published.** The SDK isn't bundled into the MCP server, and the MCP server
+  depends on `^0.1.0` of the SDK.
+- **The server gained some defaults:**
+  - `--version` and `--help`;
+  - refusing any vault that isn't a `.testnet` account;
+  - recording payments in `~/.covenant/<vault>-spends.json`, with the folder at mode 0700.
+- **CI checks the packages for real.** `scripts/pack-smoke.mjs` packs both, installs the tarballs
+  into an empty folder, and checks the installed server's version and its nine tools over a real MCP
+  handshake. CI runs it, and so does the tag-driven Release workflow before it publishes.
+- **The docs switch to npx on a build setting.** The dashboard's docs use npx once it's built with
+  `VITE_MCP_PUBLISHED=true`, and stay on the build-from-repo steps until then.
+
+There's no LICENSE file in the repo, so the packages have no `license` field. Pick one before
+publishing.
+
+1. **Name:** `@len3hq/covenant-mcp` and `@len3hq/covenant-sdk` don't exist on npm (checked on 10 Nov), but the
    `@covenant` scope may still be owned by someone. Run `npm org ls covenant`, or try to create
    the org. Fall back to `@len3hq/covenant-mcp` and `@len3hq/covenant-sdk`.
 2. **SDK:** publish it too, because `mcp` depends on it through `workspace:*`. `pnpm publish`
@@ -571,8 +590,8 @@ can't call `set_policy`. The existing
      until mainnet is supported.
    - `--version` and `--help` flags.
 5. **CI:** add a `release.yml` job on tags, running
-   `pnpm --filter @covenant/mcp build && npm publish --provenance`.
-6. **Smoke test:** `npx -y @covenant/mcp --version`, then call `list_payees` through
+   `pnpm --filter @len3hq/covenant-mcp build && npm publish --provenance`.
+6. **Smoke test:** `npx -y @len3hq/covenant-mcp --version`, then call `list_payees` through
    `@modelcontextprotocol/inspector` against the live vault.
 
 ### Exit check
@@ -592,7 +611,7 @@ Shown right after phase 3 or 4, in a card with tabs. Every value is filled in, a
   "mcpServers": {
     "covenant": {
       "command": "npx",
-      "args": ["-y", "@covenant/mcp"],
+      "args": ["-y", "@len3hq/covenant-mcp"],
       "env": {
         "VAULT_ACCOUNT_ID": "acme.<factory>",
         "AGENT_ACCOUNT_ID": "bot.alice.testnet",
@@ -606,7 +625,7 @@ Shown right after phase 3 or 4, in a card with tabs. Every value is filled in, a
 | Tab | What it shows |
 | --- | --- |
 | Claude Desktop | The JSON above. Where to put it: macOS `~/Library/Application Support/Claude/claude_desktop_config.json`, Windows `%APPDATA%\Claude\claude_desktop_config.json`, then restart Claude |
-| Claude Code | `claude mcp add covenant -e VAULT_ACCOUNT_ID=… -e AGENT_ACCOUNT_ID=… -e AGENT_PRIVATE_KEY=… -- npx -y @covenant/mcp` |
+| Claude Code | `claude mcp add covenant -e VAULT_ACCOUNT_ID=… -e AGENT_ACCOUNT_ID=… -e AGENT_PRIVATE_KEY=… -- npx -y @len3hq/covenant-mcp` |
 | Cursor | The same JSON, for `~/.cursor/mcp.json` |
 | Your own code | An `.env` block and the 3-line `Covenant.connect` example |
 

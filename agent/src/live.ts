@@ -1,4 +1,4 @@
-import { connectTestnet } from "@covenant/sdk";
+import { connectTestnet } from "@len3hq/covenant-sdk";
 import { requireEnv } from "./env.js";
 import type { World } from "./runtime.js";
 

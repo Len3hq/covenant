@@ -1,11 +1,11 @@
 import { readFileSync } from "node:fs";
-import type { PayDeps } from "@covenant/sdk";
-import type { EvmChain } from "@covenant/sdk";
-import { jsonLog } from "@covenant/sdk";
-import { Payer, type Assemble, type Broadcasters, type links, type SpendReport } from "@covenant/sdk";
-import { SpendStore } from "@covenant/sdk";
+import type { PayDeps } from "@len3hq/covenant-sdk";
+import type { EvmChain } from "@len3hq/covenant-sdk";
+import { jsonLog } from "@len3hq/covenant-sdk";
+import { Payer, type Assemble, type Broadcasters, type links, type SpendReport } from "@len3hq/covenant-sdk";
+import { SpendStore } from "@len3hq/covenant-sdk";
 import { createTools, type ChainReads } from "./tools.js";
-import type { AgentVault, SolanaDeps } from "@covenant/sdk";
+import type { AgentVault, SolanaDeps } from "@len3hq/covenant-sdk";
 
 const SCENARIOS = new URL("../scenarios/", import.meta.url);
 export const scenarioText = (name: string) => readFileSync(new URL(name, SCENARIOS), "utf8").trim();

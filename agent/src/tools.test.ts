@@ -3,10 +3,10 @@ import { networks, payments, Transaction } from "bitcoinjs-lib";
 import { describe, expect, it, vi } from "vitest";
 import type { LlmClient, LlmTurn, ToolResult } from "./llm/index.js";
 import { runAgent } from "./loop.js";
-import type { Payer } from "@covenant/sdk";
-import type { Prepared } from "@covenant/sdk";
+import type { Payer } from "@len3hq/covenant-sdk";
+import type { Prepared } from "@len3hq/covenant-sdk";
 import { createTools, spendKey, type ToolDeps } from "./tools.js";
-import type { AgentVault } from "@covenant/sdk";
+import type { AgentVault } from "@len3hq/covenant-sdk";
 
 const EVM_PAYEE = Array.from({ length: 20 }, () => 0xaa);
 const BTC_PAYEE = [0, 20, ...Array.from({ length: 20 }, () => 0xab)];

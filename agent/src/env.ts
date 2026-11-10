@@ -1,4 +1,4 @@
-import { connectVault, type AgentVault } from "@covenant/sdk";
+import { connectVault, type AgentVault } from "@len3hq/covenant-sdk";
 
 export function requireEnv(name: string): string {
   const value = process.env[name];

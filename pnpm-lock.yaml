@@ -13,7 +13,7 @@ importers:
       '@anthropic-ai/sdk':
         specifier: 1.4.0
         version: 1.4.0(zod@4.6.7)
-      '@covenant/sdk':
+      '@len3hq/covenant-sdk':
         specifier: workspace:*
         version: link:../sdk
       '@noble/curves':
@@ -56,8 +56,8 @@ importers:
 
   mcp:
     dependencies:
-      '@covenant/sdk':
-        specifier: workspace:*
+      '@len3hq/covenant-sdk':
+        specifier: workspace:^
         version: link:../sdk
       '@modelcontextprotocol/sdk':
         specifier: ^1.32.2

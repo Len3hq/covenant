@@ -9,7 +9,7 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "@covenant/sdk": "workspace:*",
+    "@len3hq/covenant-sdk": "workspace:*",
     "@anthropic-ai/sdk": "1.4.0",
     "@noble/curves": "^2.4.0",
     "@noble/hashes": "^2.4.0",

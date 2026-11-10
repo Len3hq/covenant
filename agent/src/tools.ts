@@ -15,7 +15,7 @@ import {
   type PayDeps,
   type SolanaDeps,
   type SpendReport,
-} from "@covenant/sdk";
+} from "@len3hq/covenant-sdk";
 import type { ToolSpec } from "./llm/index.js";
 
 export type { ChainReads };

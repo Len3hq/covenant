@@ -1,7 +1,33 @@
 {
-  "name": "@covenant/sdk",
+  "name": "@len3hq/covenant-sdk",
   "version": "0.1.0",
-  "description": "A policy-enforced wallet for AI agents: pay on Bitcoin and Base through a Covenant vault on NEAR.",
+  "description": "A policy-enforced wallet for AI agents: pay on Bitcoin, Base and Solana, and across chains, through a Covenant vault on NEAR.",
+  "keywords": [
+    "covenant",
+    "near",
+    "chain-signatures",
+    "ai-agent",
+    "wallet",
+    "bitcoin",
+    "solana",
+    "base"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Len3hq/covenant.git",
+    "directory": "sdk"
+  },
+  "homepage": "https://dashboard-production-65f1.up.railway.app/?docs",
+  "bugs": {
+    "url": "https://github.com/Len3hq/covenant/issues"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -12,12 +38,15 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.test.*",
+    "README.md"
   ],
   "scripts": {
     "lint": "eslint src && tsc",
     "test": "tsc && vitest run",
-    "build": "tsc"
+    "build": "tsc",
+    "prepack": "rm -rf dist && tsc"
   },
   "dependencies": {
     "@noble/curves": "^2.4.0",

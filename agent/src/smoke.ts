@@ -1,10 +1,10 @@
 // Proves the live path: real signatures on both chains, and a live refusal. Spends tiny amounts, so
 // it needs AGENT_PRIVATE_KEY and exits non-zero on any failure.
 import { createPublicClient, getAddress, http } from "viem";
-import { Mempool } from "@covenant/sdk";
-import { payBitcoin } from "@covenant/sdk";
+import { Mempool } from "@len3hq/covenant-sdk";
+import { payBitcoin } from "@len3hq/covenant-sdk";
 import { connectVaultFromEnv, requireEnv } from "./env.js";
-import { payEth, payToken, type EvmChain } from "@covenant/sdk";
+import { payEth, payToken, type EvmChain } from "@len3hq/covenant-sdk";
 
 const SATS = 1_000n;
 const WEI = 1_000n;

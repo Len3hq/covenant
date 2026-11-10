@@ -1,7 +1,7 @@
 // Signs and broadcasts a held payment the SDK recorded, once its veto window has passed:
 // `node --env-file=.env agent/dist/execute.js <spend id>`. Works for payments made with
 // `make pay-swap` or the MCP server, which share the spends file.
-import { Covenant } from "@covenant/sdk";
+import { Covenant } from "@len3hq/covenant-sdk";
 import { requireEnv } from "./env.js";
 
 const [id] = process.argv.slice(2);
