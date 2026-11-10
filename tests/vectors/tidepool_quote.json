@@ -1,0 +1,10 @@
+{
+  "source": "Tidepool POST /v0/quote, 10 Nov 2026. `body` is the exact JSON its signature covers: sha256(body), Ed25519, by the maker key.",
+  "maker_key": "ed25519:U1Mu4u1nHnHmgABpCkfDGXt2FZj8k29UGqhkMAu4iWY",
+  "vault_btc_address": "tb1q2xq57yyxwzkw6tthcxq9mhtxxj7f63e3dgldfj",
+  "deposit_address": "tb1q0jem8tkxvt4tha2wrqz0lnmf7mg0d6tjquwcv5",
+  "recipient": "0x00000000000000000000000000000000000000aA",
+  "deadline": "2026-11-11T16:24:41.000Z",
+  "body": "{\"correlationId\":\"c84d39f8-b753-47c6-b222-2da98e9b959a\",\"timestamp\":\"2026-11-10T17:24:42.774Z\",\"quoteRequest\":{\"dry\":false,\"swapType\":\"EXACT_INPUT\",\"slippageTolerance\":100,\"originAsset\":\"nep141:btc.tp-omft.testnet\",\"depositType\":\"ORIGIN_CHAIN\",\"destinationAsset\":\"nep141:base-0x38d81431b9f76d9699af7517040d5221d9dea252.tp-omft.testnet\",\"amount\":\"20000\",\"refundTo\":\"tb1q2xq57yyxwzkw6tthcxq9mhtxxj7f63e3dgldfj\",\"refundType\":\"ORIGIN_CHAIN\",\"recipient\":\"0x00000000000000000000000000000000000000aA\",\"recipientType\":\"DESTINATION_CHAIN\",\"deadline\":\"2026-11-11T16:24:41Z\"},\"quote\":{\"amountIn\":\"20000\",\"amountInFormatted\":\"0.0002\",\"amountInUsd\":\"14.6026\",\"minAmountIn\":\"20000\",\"amountOut\":\"14542850\",\"amountOutFormatted\":\"14.54285\",\"amountOutUsd\":\"14.5369\",\"minAmountOut\":\"14397421\",\"timeEstimate\":60,\"depositAddress\":\"tb1q0jem8tkxvt4tha2wrqz0lnmf7mg0d6tjquwcv5\",\"deadline\":\"2026-11-11T16:24:41.000Z\",\"timeWhenInactive\":\"2026-11-11T16:24:41.000Z\"}}",
+  "signature": "ed25519:4CM1JDq19YYK9GBcPC1aFNzFNJtYDJW84i6KWsE6eYW2JuBVHSv1JManHLKQxNDXgZ5Bw2NeCUNjkjJ8FNRWYn94"
+}

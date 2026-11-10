@@ -3,13 +3,14 @@
 //! and records. See docs/SPEC.md, "Vault contract spec".
 
 use covenant_adapter_bitcoin::BitcoinVault;
+use covenant_adapter_tidepool::{SignedQuote, VaultAddresses};
 use covenant_policy::{
     AssetCap, AssetId, ChainKind, Charge, CovenantError, Decision, ParsedTx, Payee, Payment,
-    Policy, SignPayload, TxMeta, UnlistedPayees,
+    Policy, SignPayload, SwapInfo, TxMeta, UnlistedPayees,
 };
 use near_sdk::json_types::{Base64VecU8, U128, U64};
 use near_sdk::serde_json::{self, json};
-use near_sdk::store::{IterableMap, LookupMap};
+use near_sdk::store::{IterableMap, LookupMap, LookupSet};
 use near_sdk::{env, near, AccountId, Gas, NearToken, PanicOnDefault, Promise, PromiseOrValue};
 
 const NS_PER_24H: u64 = 86_400_000_000_000;
@@ -47,6 +48,8 @@ pub struct Pending {
     pub unlisted: Vec<Charge>,
     pub queued_at: U64,
     pub executable_at: U64,
+    /// What a swap's quote committed to, when the spend pays a swap's deposit address.
+    pub swap: Option<SwapInfo>,
 }
 
 impl Pending {
@@ -67,6 +70,7 @@ impl Pending {
             payments: self.payments.clone(),
             fee: self.fee,
             error,
+            swap: self.swap.clone(),
         }
     }
 }
@@ -147,6 +151,9 @@ pub struct SpendEvent {
     pub payments: Vec<Payment>,
     pub fee: U128,
     pub error: Option<CovenantError>,
+    /// Present when the spend pays a swap: where the swap delivers, and its quote's terms.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub swap: Option<SwapInfo>,
 }
 
 /// NEP-297 events. Each logs as `EVENT_JSON:{"standard":"covenant","version":"1.0.0",...}`.
@@ -189,6 +196,8 @@ pub struct CovenantVault {
     next_id: u64,
     sol_pubkey: [u8; 32],
     unlisted_ledger: LookupMap<AssetId, Vec<(u64, u128)>>,
+    /// Correlation ids of every quote a spend has used, so none pays twice.
+    used_quotes: LookupSet<String>,
 }
 
 /// A cap as stored before open payees.
@@ -338,6 +347,7 @@ impl CovenantVault {
             next_id: 0,
             sol_pubkey,
             unlisted_ledger: LookupMap::new(b"u"),
+            used_quotes: LookupSet::new(b"x"),
         }
     }
 
@@ -380,6 +390,7 @@ impl CovenantVault {
                 sol_max_fee: U128(0),
                 unlisted: UnlistedPayees::Refuse,
                 unlisted_veto_delay_ns: veto_delay_ns,
+                swap: None,
             },
             frozen: old.frozen,
             ledger: old.ledger,
@@ -387,6 +398,7 @@ impl CovenantVault {
             next_id: old.next_id,
             sol_pubkey,
             unlisted_ledger: LookupMap::new(b"u"),
+            used_quotes: LookupSet::new(b"x"),
         }
     }
 
@@ -440,6 +452,7 @@ impl CovenantVault {
                 sol_max_fee,
                 unlisted: UnlistedPayees::Refuse,
                 unlisted_veto_delay_ns: veto_delay_ns,
+                swap: None,
             },
             frozen: old.frozen,
             ledger: old.ledger,
@@ -447,6 +460,7 @@ impl CovenantVault {
             next_id: old.next_id,
             sol_pubkey: old.sol_pubkey,
             unlisted_ledger: LookupMap::new(b"u"),
+            used_quotes: LookupSet::new(b"x"),
         }
     }
 
@@ -457,16 +471,24 @@ impl CovenantVault {
         chain: ChainKind,
         tx: Base64VecU8,
         meta: TxMeta,
+        quote: Option<SignedQuote>,
     ) -> PromiseOrValue<SpendOutcome> {
         self.assert_agent();
         self.assert_not_frozen();
-        let parsed = match self.parse(chain, &tx.0, &meta) {
+        let (parsed, swap) = match self.parse(chain, &tx.0, &meta, quote.as_ref()) {
             Ok(parsed) => parsed,
             Err(CovenantError::MalformedTx) => fail(CovenantError::MalformedTx),
             Err(error) => return self.reject(self.next_id, chain, vec![], 0, error),
         };
+        if let Some(info) = &swap {
+            if self.used_quotes.contains(&info.correlation_id) {
+                let error = CovenantError::QuoteReused;
+                return self.reject(self.next_id, chain, parsed.payments, parsed.fee, error);
+            }
+        }
         let charges = covenant_policy::charges(&parsed).unwrap_or_else(|error| fail(error));
-        let unlisted = covenant_policy::unlisted_charges(chain, &parsed, &self.policy)
+        let unlisted = self
+            .unlisted_of(chain, &parsed, swap.as_ref())
             .unwrap_or_else(|error| fail(error));
         let decision = self.decide(&charges, &unlisted);
         let decision = match decision {
@@ -479,10 +501,21 @@ impl CovenantVault {
             let error = CovenantError::QueueFull;
             return self.reject(self.next_id, chain, parsed.payments, parsed.fee, error);
         }
+        let at = env::block_timestamp();
+        if let (Decision::Queue, Some(info)) = (decision, &swap) {
+            // The deposit must still confirm before the quote's deadline once the window ends.
+            let ready = at.saturating_add(self.policy.delay_for(!unlisted.is_empty()));
+            if ready.saturating_add(self.deposit_window()) > info.deadline_ns.0 {
+                let error = CovenantError::QuoteExpiresInQueue;
+                return self.reject(self.next_id, chain, parsed.payments, parsed.fee, error);
+            }
+        }
 
         let id = self.next_id;
         self.next_id += 1;
-        let at = env::block_timestamp();
+        if let Some(info) = &swap {
+            self.used_quotes.insert(info.correlation_id.clone());
+        }
         self.reserve_all(&charges, &unlisted, at);
         CovenantEvent::SpendProposed(SpendEvent {
             id: U64(id),
@@ -490,14 +523,15 @@ impl CovenantVault {
             payments: parsed.payments.clone(),
             fee: U128(parsed.fee),
             error: None,
+            swap: swap.clone(),
         })
         .emit();
         match decision {
-            Decision::Sign => {
-                PromiseOrValue::Promise(self.sign_all(id, chain, parsed, charges, unlisted, at))
-            }
+            Decision::Sign => PromiseOrValue::Promise(
+                self.sign_all(id, chain, parsed, charges, unlisted, swap, at),
+            ),
             Decision::Queue => {
-                PromiseOrValue::Value(self.enqueue(id, chain, parsed, charges, unlisted, at))
+                PromiseOrValue::Value(self.enqueue(id, chain, parsed, charges, unlisted, swap, at))
             }
         }
     }
@@ -515,6 +549,7 @@ impl CovenantVault {
         fee: U128,
         charges: Vec<Charge>,
         unlisted: Vec<Charge>,
+        swap: Option<SwapInfo>,
         at: U64,
     ) -> SpendOutcome {
         let signatures: Option<Vec<MpcSignature>> = (0..count)
@@ -530,6 +565,7 @@ impl CovenantVault {
             payments,
             fee,
             error: signatures.is_none().then_some(CovenantError::SignFailed),
+            swap,
         };
         match signatures {
             Some(signatures) => {
@@ -561,7 +597,8 @@ impl CovenantVault {
         let parsed = pending.parsed();
         // Today's payee list decides which payments are unlisted, so a payee removed since the
         // spend was queued gets the unlisted window and cap too.
-        let unlisted = covenant_policy::unlisted_charges(pending.chain, &parsed, &self.policy)
+        let unlisted = self
+            .unlisted_of(pending.chain, &parsed, pending.swap.as_ref())
             .unwrap_or_else(|error| fail(error));
         // A delay raised since the spend was queued applies to it too.
         let delay = self.policy.delay_for(!unlisted.is_empty());
@@ -578,8 +615,11 @@ impl CovenantVault {
         // The spend's own reservation must not count against it, and it restarts at signing time so
         // it stays on the ledger for a full 24 h after the money moves (C6).
         self.release_all(&pending.charges, &pending.unlisted, pending.queued_at.0);
-        let decision = covenant_policy::recheck_parsed(pending.chain, &parsed, &self.policy)
-            .and_then(|()| self.decide(&pending.charges, &unlisted));
+        let recheck = match &pending.swap {
+            None => covenant_policy::recheck_parsed(pending.chain, &parsed, &self.policy),
+            Some(info) => self.recheck_swap(pending.chain, &parsed, info, now),
+        };
+        let decision = recheck.and_then(|()| self.decide(&pending.charges, &unlisted));
         if let Err(error) = decision {
             return self.reject(id.0, pending.chain, parsed.payments, parsed.fee, error);
         }
@@ -590,6 +630,7 @@ impl CovenantVault {
             parsed,
             pending.charges,
             unlisted,
+            pending.swap,
             now,
         ))
     }
@@ -670,6 +711,11 @@ impl CovenantVault {
         U128(self.spent_24h(&asset))
     }
 
+    /// Whether a quote's correlation id was already used by a spend.
+    pub fn is_quote_used(&self, correlation_id: String) -> bool {
+        self.used_quotes.contains(&correlation_id)
+    }
+
     /// What unlisted payees received in an asset over the last 24 h, reservations included.
     pub fn get_unlisted_spent_24h(&self, asset: AssetId) -> U128 {
         U128(sum_24h(&self.unlisted_ledger, &asset))
@@ -681,23 +727,142 @@ impl CovenantVault {
 }
 
 impl CovenantVault {
-    fn parse(&self, chain: ChainKind, tx: &[u8], meta: &TxMeta) -> Result<ParsedTx, CovenantError> {
+    /// Parses a spend, and with a quote checks that it pays exactly the quote's deposit and nothing
+    /// else. The adapter then sees a policy whose only payee is that deposit address, so change and
+    /// every other rule are checked as usual and any other output is refused.
+    fn parse(
+        &self,
+        chain: ChainKind,
+        tx: &[u8],
+        meta: &TxMeta,
+        quote: Option<&SignedQuote>,
+    ) -> Result<(ParsedTx, Option<SwapInfo>), CovenantError> {
+        let Some(quote) = quote else {
+            return Ok((self.parse_under(chain, tx, meta, &self.policy)?, None));
+        };
+        let swap = self
+            .policy
+            .swap
+            .as_ref()
+            .ok_or(CovenantError::SwapsDisabled)?;
+        let btc_script = covenant_adapter_bitcoin::p2wpkh_script(
+            &covenant_adapter_bitcoin::hash160(&self.btc_pubkey),
+        );
+        let vault = VaultAddresses {
+            btc_script: &btc_script,
+            evm: &self.evm_address,
+            sol: &self.sol_pubkey,
+        };
+        let plan =
+            covenant_adapter_tidepool::verify(quote, chain, swap, &vault, env::block_timestamp())?;
+        let mut deposit_only = self.policy.clone();
+        deposit_only.unlisted = UnlistedPayees::Refuse;
+        deposit_only.payees = vec![Payee {
+            chain,
+            to: plan.deposit_to.clone(),
+            label: "swap deposit".into(),
+        }];
+        let parsed = self.parse_under(chain, tx, meta, &deposit_only)?;
+        let exact = match parsed.payments.as_slice() {
+            [payment] => {
+                payment.to == plan.deposit_to
+                    && payment.amount.0 == plan.amount_in
+                    && payment.asset == plan.origin
+            }
+            _ => false,
+        };
+        if !exact {
+            return Err(CovenantError::QuoteMismatch);
+        }
+        Ok((parsed, Some(plan.info)))
+    }
+
+    fn parse_under(
+        &self,
+        chain: ChainKind,
+        tx: &[u8],
+        meta: &TxMeta,
+        policy: &Policy,
+    ) -> Result<ParsedTx, CovenantError> {
         match (chain, meta) {
             (ChainKind::Bitcoin, _) => {
                 let vault = BitcoinVault {
                     pubkey: &self.btc_pubkey,
                 };
-                covenant_adapter_bitcoin::parse(tx, meta, &self.policy, &vault)
+                covenant_adapter_bitcoin::parse(tx, meta, policy, &vault)
             }
-            (ChainKind::Evm, TxMeta::Evm) => covenant_adapter_evm::parse(tx, &self.policy),
+            (ChainKind::Evm, TxMeta::Evm) => covenant_adapter_evm::parse(tx, policy),
             (ChainKind::Evm, _) => Err(CovenantError::MalformedTx),
             (ChainKind::Solana, TxMeta::Solana) => {
-                covenant_adapter_solana::parse(tx, &self.policy, &self.sol_pubkey)
+                covenant_adapter_solana::parse(tx, policy, &self.sol_pubkey)
             }
             (ChainKind::Solana, _) => Err(CovenantError::MalformedTx),
         }
     }
 
+    /// What a spend pays unlisted payees. A swap's payee is its final recipient, which is listed
+    /// only when the swap section lists it for that destination asset.
+    fn unlisted_of(
+        &self,
+        chain: ChainKind,
+        parsed: &ParsedTx,
+        swap: Option<&SwapInfo>,
+    ) -> Result<Vec<Charge>, CovenantError> {
+        let Some(info) = swap else {
+            return covenant_policy::unlisted_charges(chain, parsed, &self.policy);
+        };
+        let listed = self
+            .policy
+            .swap
+            .as_ref()
+            .is_some_and(|rules| rules.is_listed(info));
+        if listed {
+            return Ok(vec![]);
+        }
+        Ok(parsed
+            .payments
+            .iter()
+            .map(|payment| Charge {
+                asset: payment.asset.clone(),
+                amount: payment.amount,
+            })
+            .collect())
+    }
+
+    /// The swap rules that today's policy may have changed since a swap was queued.
+    fn recheck_swap(
+        &self,
+        chain: ChainKind,
+        parsed: &ParsedTx,
+        info: &SwapInfo,
+        now: u64,
+    ) -> Result<(), CovenantError> {
+        let rules = self
+            .policy
+            .swap
+            .as_ref()
+            .ok_or(CovenantError::SwapsDisabled)?;
+        let origins_listed = parsed
+            .payments
+            .iter()
+            .all(|payment| rules.origins.iter().any(|o| o.asset == payment.asset));
+        if !origins_listed || !rules.destinations.contains(&info.destination_asset) {
+            return Err(CovenantError::SwapAssetNotAllowed);
+        }
+        if now.saturating_add(rules.min_deposit_window_ns) > info.deadline_ns.0 {
+            return Err(CovenantError::QuoteExpired);
+        }
+        covenant_policy::recheck_fees(chain, parsed, &self.policy)
+    }
+
+    fn deposit_window(&self) -> u64 {
+        self.policy
+            .swap
+            .as_ref()
+            .map_or(0, |rules| rules.min_deposit_window_ns)
+    }
+
+    #[allow(clippy::too_many_arguments)]
     fn enqueue(
         &mut self,
         id: u64,
@@ -705,6 +870,7 @@ impl CovenantVault {
         parsed: ParsedTx,
         charges: Vec<Charge>,
         unlisted: Vec<Charge>,
+        swap: Option<SwapInfo>,
         at: u64,
     ) -> SpendOutcome {
         let delay = self.policy.delay_for(!unlisted.is_empty());
@@ -721,6 +887,7 @@ impl CovenantVault {
             unlisted,
             queued_at: U64(at),
             executable_at,
+            swap,
         };
         CovenantEvent::SpendQueued(pending.event(None)).emit();
         self.queue.insert(id, pending);
@@ -744,11 +911,13 @@ impl CovenantVault {
             payments,
             fee: U128(fee),
             error: Some(error),
+            swap: None,
         })
         .emit();
         PromiseOrValue::Value(SpendOutcome::Rejected(error))
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn sign_all(
         &self,
         id: u64,
@@ -756,6 +925,7 @@ impl CovenantVault {
         parsed: ParsedTx,
         charges: Vec<Charge>,
         unlisted: Vec<Charge>,
+        swap: Option<SwapInfo>,
         at: u64,
     ) -> Promise {
         let path = match chain {
@@ -803,6 +973,7 @@ impl CovenantVault {
                         U128(parsed.fee),
                         charges,
                         unlisted,
+                        swap,
                         U64(at),
                     ),
             )
@@ -904,6 +1075,7 @@ mod tests {
             sol_max_fee: U128(0),
             unlisted: UnlistedPayees::Refuse,
             unlisted_veto_delay_ns: 0,
+            swap: None,
         }
     }
 
@@ -1119,7 +1291,15 @@ mod tests {
                     .unwrap();
             assert_eq!(vault.decide(&charges, &unlisted), Ok(Decision::Queue));
             vault.reserve_all(&charges, &unlisted, START);
-            vault.enqueue(0, ChainKind::Bitcoin, parsed, charges, unlisted, START)
+            vault.enqueue(
+                0,
+                ChainKind::Bitcoin,
+                parsed,
+                charges,
+                unlisted,
+                None,
+                START,
+            )
         }
 
         #[test]
@@ -1236,7 +1416,7 @@ mod tests {
     fn non_agent_cannot_reach_propose() {
         let mut vault = vault();
         call_as("owner.testnet");
-        let _ = vault.propose_spend(ChainKind::Evm, vec![].into(), TxMeta::Evm);
+        let _ = vault.propose_spend(ChainKind::Evm, vec![].into(), TxMeta::Evm, None);
     }
 
     #[test]
@@ -1246,7 +1426,7 @@ mod tests {
         call_as("guardian.testnet");
         vault.freeze();
         call_as("agent.testnet");
-        let _ = vault.propose_spend(ChainKind::Evm, vec![].into(), TxMeta::Evm);
+        let _ = vault.propose_spend(ChainKind::Evm, vec![].into(), TxMeta::Evm, None);
     }
 
     #[test]
@@ -1263,7 +1443,7 @@ mod tests {
     fn malformed_tx_panics() {
         let mut vault = vault();
         call_as("agent.testnet");
-        let _ = vault.propose_spend(ChainKind::Evm, vec![].into(), TxMeta::Evm);
+        let _ = vault.propose_spend(ChainKind::Evm, vec![].into(), TxMeta::Evm, None);
     }
 
     #[test]
@@ -1272,7 +1452,7 @@ mod tests {
         let mut vault = vault();
         call_as("agent.testnet");
         let meta = TxMeta::Bitcoin { prev_txs: vec![] };
-        let _ = vault.propose_spend(ChainKind::Evm, vec![].into(), meta);
+        let _ = vault.propose_spend(ChainKind::Evm, vec![].into(), meta, None);
     }
 
     #[test]
@@ -1280,7 +1460,7 @@ mod tests {
     fn solana_garbage_panics() {
         let mut vault = vault();
         call_as("agent.testnet");
-        let _ = vault.propose_spend(ChainKind::Solana, vec![].into(), TxMeta::Solana);
+        let _ = vault.propose_spend(ChainKind::Solana, vec![].into(), TxMeta::Solana, None);
     }
 
     #[test]
@@ -1288,7 +1468,7 @@ mod tests {
     fn solana_with_evm_meta_panics() {
         let mut vault = vault();
         call_as("agent.testnet");
-        let _ = vault.propose_spend(ChainKind::Solana, vec![].into(), TxMeta::Evm);
+        let _ = vault.propose_spend(ChainKind::Solana, vec![].into(), TxMeta::Evm, None);
     }
 
     #[test]
@@ -1339,6 +1519,7 @@ mod tests {
             U128(0),
             vec![charge],
             vec![],
+            None,
             U64(0),
         );
         assert_eq!(outcome, SpendOutcome::Rejected(CovenantError::SignFailed));
@@ -1501,7 +1682,7 @@ mod tests {
             let own = p2wpkh_script(&hash160(&vault.btc_pubkey));
             let spend = |vault: &mut CovenantVault, salt, amount| {
                 let (tx, meta) = proposal(salt, amount, &own);
-                vault.propose_spend(ChainKind::Bitcoin, tx, meta)
+                vault.propose_spend(ChainKind::Bitcoin, tx, meta, None)
             };
 
             let mut now = DAY;
@@ -1567,7 +1748,7 @@ mod tests {
                             let charge = (amount + FEE) as u128;
                             let room = in_window(&charged, now) + charge <= PER_24H as u128;
                             let id = vault.next_id;
-                            match vault.propose_spend(ChainKind::Bitcoin, tx, meta) {
+                            match vault.propose_spend(ChainKind::Bitcoin, tx, meta, None) {
                                 PromiseOrValue::Promise(promise) => {
                                     let _ = promise;
                                     prop_assert!(room);
@@ -1620,6 +1801,7 @@ mod tests {
                                 U128(FEE as u128),
                                 charges,
                                 vec![],
+                                None,
                                 U64(spend.at),
                             );
                             if signed {

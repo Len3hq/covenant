@@ -249,6 +249,7 @@ mod tests {
             sol_max_fee: U128(0),
             unlisted: UnlistedPayees::Refuse,
             unlisted_veto_delay_ns: 0,
+            swap: None,
         }
     }
 

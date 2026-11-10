@@ -1,0 +1,14 @@
+[package]
+name = "covenant-adapter-tidepool"
+description = "Covenant check of a signed 1Click-style swap quote, as Tidepool serves on testnet."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+covenant-policy.workspace = true
+near-sdk.workspace = true
+
+[dev-dependencies]
+near-sdk = { workspace = true, features = ["unit-testing"] }
+ed25519-dalek = "2"

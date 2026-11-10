@@ -13,6 +13,8 @@ base64 = "0.22"
 serde_json = "1"
 sha2 = "0.10"
 ripemd = "0.1"
+ed25519-dalek = "2"
+bs58 = "0.5"
 
 [[test]]
 name = "attacks_bitcoin"
@@ -25,3 +27,7 @@ path = "../attacks/evm.rs"
 [[test]]
 name = "attacks_solana"
 path = "../attacks/solana.rs"
+
+[[test]]
+name = "attacks_tidepool"
+path = "../attacks/tidepool.rs"

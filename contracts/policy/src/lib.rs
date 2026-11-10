@@ -88,6 +88,71 @@ pub struct AssetCap {
     pub unlisted_per_24h: U128,
 }
 
+/// A Tidepool asset id the vault may pay from, and the asset it is to the caps.
+#[near(serializers = [borsh, json])]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SwapOrigin {
+    /// For example `nep141:btc.tp-omft.testnet`.
+    pub asset_id: String,
+    pub asset: AssetId,
+}
+
+/// A recipient of swapped funds that skips the unlisted rules, like a `Payee`.
+#[near(serializers = [borsh, json])]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SwapPayee {
+    /// For example `nep141:sol.tp-omft.testnet`.
+    pub destination_asset: String,
+    pub recipient: String,
+    pub label: String,
+}
+
+/// Cross-chain payments through a 1Click-style swap service, Tidepool on testnet.
+#[near(serializers = [borsh, json])]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SwapPolicy {
+    /// The Ed25519 key that signs the service's quotes. The owner rotates it with `set_policy`.
+    pub maker_key: [u8; 32],
+    /// The assets the vault may swap from. Anything else is `SwapAssetNotAllowed`.
+    pub origins: Vec<SwapOrigin>,
+    /// The asset ids a swap may deliver. Empty refuses every swap.
+    pub destinations: Vec<String>,
+    pub payees: Vec<SwapPayee>,
+    pub max_slippage_bps: u32,
+    /// How long a quote must stay open after signing, so the deposit confirms before its deadline.
+    pub min_deposit_window_ns: u64,
+}
+
+impl SwapPolicy {
+    pub fn is_listed(&self, swap: &SwapInfo) -> bool {
+        self.payees.iter().any(|payee| {
+            payee.destination_asset == swap.destination_asset
+                && same_recipient(&payee.recipient, &swap.recipient)
+        })
+    }
+}
+
+/// EVM addresses compare without their checksum case; every other format is case-sensitive.
+fn same_recipient(a: &str, b: &str) -> bool {
+    if a.starts_with("0x") && b.starts_with("0x") {
+        a.eq_ignore_ascii_case(b)
+    } else {
+        a == b
+    }
+}
+
+/// What a signed quote committed the swap to, kept with a queued spend and in its events.
+#[near(serializers = [borsh, json])]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SwapInfo {
+    pub correlation_id: String,
+    pub deposit_address: String,
+    pub destination_asset: String,
+    pub recipient: String,
+    pub min_amount_out: U128,
+    pub deadline_ns: near_sdk::json_types::U64,
+}
+
 /// What happens to a payment whose recipient isn't on the payee list.
 #[near(serializers = [borsh, json])]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -133,6 +198,9 @@ pub struct Policy {
     /// How long a spend to an unlisted payee waits. At least `veto_delay_ns`.
     #[serde(default)]
     pub unlisted_veto_delay_ns: u64,
+    /// `None`, the default, refuses every swap with `SwapsDisabled`.
+    #[serde(default)]
+    pub swap: Option<SwapPolicy>,
 }
 
 impl Policy {
@@ -223,6 +291,22 @@ pub enum CovenantError {
     UnlistedNotAllowed,
     /// Payments to unlisted payees would exceed the asset's `unlisted_per_24h`.
     UnlistedCapExceeded,
+    /// The policy has no swap section.
+    SwapsDisabled,
+    /// The quote isn't signed by the policy's maker key.
+    QuoteSignatureInvalid,
+    /// The quote, or the transaction paying it, isn't the shape the vault accepts.
+    QuoteMismatch,
+    /// The quote's deadline is too close, or has passed.
+    QuoteExpired,
+    /// The quote would expire before the spend's veto window ends.
+    QuoteExpiresInQueue,
+    /// This quote was already used.
+    QuoteReused,
+    /// The quote swaps from or to an asset the policy doesn't list.
+    SwapAssetNotAllowed,
+    /// The quote allows more slippage than the policy.
+    SlippageTooHigh,
 }
 
 /// Sums payments and the fee per asset, so neither splitting outputs nor paying through fees gets a
@@ -359,6 +443,16 @@ pub fn recheck_parsed(
     {
         return Err(CovenantError::OutputNotWhitelisted);
     }
+    recheck_fees(chain, parsed, policy)
+}
+
+/// The fee and chain rules of `recheck_parsed`, without the payee list. A swap's payment goes to
+/// the deposit address its quote signed, so its payee is checked against the swap rules instead.
+pub fn recheck_fees(
+    chain: ChainKind,
+    parsed: &ParsedTx,
+    policy: &Policy,
+) -> Result<(), CovenantError> {
     match (chain, &parsed.fee_asset) {
         (ChainKind::Bitcoin, _) => {
             if parsed.signing_payloads.len() > policy.btc_max_inputs as usize {
@@ -420,6 +514,7 @@ mod tests {
             sol_max_fee: U128(100_000),
             unlisted: UnlistedPayees::Refuse,
             unlisted_veto_delay_ns: 0,
+            swap: None,
         }
     }
 
