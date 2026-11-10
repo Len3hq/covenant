@@ -10,7 +10,7 @@ decides what gets signed.
 > include USDC, sent with the agent's restricted key. Large spends wait in a veto queue, which the
 > owner or guardian DAO can clear, and an LLM agent can now drive payments through the contract. Solana
 > (SOL and SPL USDC, signed with Ed25519) is live on the testnet vault, which has refused a Solana attack
-> and had a real Ed25519 signature from the MPC network; no devnet payment has landed yet. Progress
+> and paid on Solana devnet. Progress
 > is tracked in [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md).
 
 ## How a spend works

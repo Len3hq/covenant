@@ -354,7 +354,7 @@ Passed on 6 Nov: `make demo` passes all three with no `.env` at all, in about 8 
 - [ ] Stretch only if gate 3 passed, in this order: Solana, then Heirloom, then the TEE reviewer
   - [x] Solana: adapter, Ed25519 signing, factory key, SDK, MCP, dashboard and tests (10 Nov)
   - [x] Solana live on NEAR: vault migrated, policy set, a refusal and a real Ed25519 signature recorded (10 Nov)
-  - [ ] Solana live on devnet: fund the funder, `make sol-nonce`, fund the vault, and land a payment
+  - [x] Solana live on devnet: nonce account created and a 0.001 SOL payment confirmed (10 Nov)
   - [ ] Publish the new vault code and a new factory, about 31 NEAR, then point the dashboard at it
 
 **Exit check:** `main` tagged `rc1`, and the repo is public.
