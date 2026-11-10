@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { buildRequest, STARTING_FORM, type CapForm, type PayeeForm, type VaultForm } from "./create";
 import { FACTORY_ID, vaultsOf, type VaultConfig } from "./vault";
 import { accountExists, createAgentTransaction, newAgentKey, type AgentKey } from "./agent";
+import { ConnectAgent } from "./ConnectAgent";
 import { createVaultCall, send } from "./wallet";
 
 const POLL_MS = 3_000;
@@ -125,28 +126,11 @@ function Payees({
   );
 }
 
-/** The agent's key, shown once. Nothing on this page stores it, so closing the page loses it. */
-function AgentSecret({ vault, agent, secret }: { vault: string; agent: string; secret: string }) {
-  const env = `VAULT_ACCOUNT_ID=${vault}\nAGENT_ACCOUNT_ID=${agent}\nAGENT_PRIVATE_KEY=${secret}`;
-  return (
-    <div className="agent-secret">
-      <p>
-        <strong>Save your agent's key now.</strong> It's shown only this once, and this page keeps no copy. It
-        can only ask {vault} for payments, within the rules you set.
-      </p>
-      <pre className="mono">{env}</pre>
-      <button type="button" onClick={() => void navigator.clipboard?.writeText(env)}>
-        Copy
-      </button>
-    </div>
-  );
-}
-
 function NextSteps({ vault, agent, secret }: { vault: string; agent: string; secret?: string }) {
   return (
     <section className="card created">
       <h2>✓ {vault} is live</h2>
-      {secret && <AgentSecret vault={vault} agent={agent} secret={secret} />}
+      {secret && <ConnectAgent values={{ vault, agent, key: secret }} />}
       <p>{secret ? "Then, before your agent can pay:" : "Three things left before your agent can pay:"}</p>
       <ol>
         <li>

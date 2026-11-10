@@ -1513,3 +1513,19 @@ pre {
   display: grid;
   gap: 4px;
 }
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 8px 0;
+}
+
+.tab {
+  font-size: 13px;
+}
+
+.tab-on {
+  font-weight: 600;
+  border-color: var(--line-soft);
+}

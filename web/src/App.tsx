@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { ConnectAgent } from "./ConnectAgent";
 import { CreateVault } from "./CreateVault";
 import { Docs } from "./Docs";
 import {
@@ -93,7 +94,7 @@ export interface Controls {
   /** For the owner: a new agent account and key, then `set_agent` to it. */
   replaceAgent?(name: string): void;
   /** The key of an agent made on this page, shown once. */
-  newAgent?: { agent: string; secret: string } | null;
+  newAgent?: { vault: string; agent: string; secret: string } | null;
   /** For the agent account itself: a new key scoped to this vault, shown once. */
   addAgentKey?(): void;
   removeAgentKey?(publicKey: string): void;
@@ -816,13 +817,10 @@ function PowersCard({
           )}
           {role === "owner" && controls.replaceAgent && <ReplaceAgent controls={controls} />}
           {controls.newAgent && (
-            <div className="agent-secret">
-              <p>
-                <strong>Save {controls.newAgent.agent}'s key now.</strong> It's shown only this once. Point your agent
-                at it, and the old agent can no longer ask for payments.
-              </p>
-              <pre className="mono">{`AGENT_ACCOUNT_ID=${controls.newAgent.agent}\nAGENT_PRIVATE_KEY=${controls.newAgent.secret}`}</pre>
-            </div>
+            <ConnectAgent
+              values={{ vault: controls.newAgent.vault, agent: controls.newAgent.agent, key: controls.newAgent.secret }}
+              intro={`It belongs to ${controls.newAgent.agent}. Point your agent at it.`}
+            />
           )}
           {role === "council" && (
             <p className="muted small">As a council member you propose and vote, so your wallet asks for two signatures.</p>
@@ -997,7 +995,7 @@ export function App() {
   const [status, setStatus] = useState<VaultStatus>({ kind: "loading" });
   const [account, setAccount] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [newAgent, setNewAgent] = useState<{ agent: string; secret: string } | null>(null);
+  const [newAgent, setNewAgent] = useState<{ vault: string; agent: string; secret: string } | null>(null);
   const [provenance, setProvenance] = useState<Provenance | null>(null);
   const { accountId, rpcUrl } = config;
 
@@ -1092,7 +1090,7 @@ export function App() {
           const key = newAgentKey();
           setMessage(`Sign 1 of 2: create ${agent}…`);
           await send(rpcUrl, createAgentTransaction(agent, accountId, key.publicKey));
-          setNewAgent({ agent, secret: key.secretKey });
+          setNewAgent({ vault: accountId, agent, secret: key.secretKey });
           setMessage(`Sign 2 of 2: point the vault at ${agent}…`);
           await send(rpcUrl, vaultCall(accountId, "set_agent", { agent }));
           setMessage(`The vault's agent is now ${agent}. The page updates within a few seconds.`);
@@ -1110,7 +1108,7 @@ export function App() {
         const key = newAgentKey();
         setMessage(`Waiting for your wallet to add a key to ${account}…`);
         await send(rpcUrl, addAgentKeyTransaction(account, accountId, key.publicKey));
-        setNewAgent({ agent: account, secret: key.secretKey });
+        setNewAgent({ vault: accountId, agent: account, secret: key.secretKey });
         setMessage(`Added a key that can only ask ${accountId} for payments. Save it below.`);
       } catch (error) {
         setMessage(`Adding the key failed: ${error instanceof Error ? error.message : String(error)}`);

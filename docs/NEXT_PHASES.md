@@ -603,6 +603,17 @@ payees.
 
 ## Phase 6: ready-made settings snippet
 
+**Status: built on 10 Nov, not yet deployed.** `web/src/ConnectAgent.tsx` shows the panel after a
+new agent (create form), a new key (Create agent key) or a replaced agent (Replace agent).
+
+- **Tabs:** Claude Desktop, Claude Code, Cursor, and "Your own code", which has the `.env` lines and
+  an SDK example. Each tab has **Copy** and **Download .env**.
+- **Where to put it:** each tab says where its text goes.
+- **Warnings:** the plain-text warning, and the "test it" question.
+- **Before npm:** until the dashboard is built with `VITE_MCP_PUBLISHED=true`, the snippets start a
+  local build and say how to make one.
+- **One source:** the snippet text comes from `web/src/mcpConfig.ts`, shared with the docs page.
+
 Shown right after phase 3 or 4, in a card with tabs. Every value is filled in, and each tab has a
 **Copy** button:
 
