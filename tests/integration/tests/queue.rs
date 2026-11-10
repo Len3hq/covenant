@@ -320,16 +320,17 @@ async fn only_the_owner_can_replace_the_guardian() -> anyhow::Result<()> {
         assert!(failure.contains("NotOwner"), "{failure}");
     }
     let old = s.guardian.clone();
+    let fresh = s.worker.dev_create_account().await?;
     call(
         &s.owner,
         &s,
         "set_guardian",
-        json!({ "guardian": s.agent.id() }),
+        json!({ "guardian": fresh.id() }),
     )
     .await?
     .into_result()?;
     let roles: Value = s.vault.view("get_roles").await?.json()?;
-    assert_eq!(roles["guardian"], s.agent.id().to_string());
+    assert_eq!(roles["guardian"], fresh.id().to_string());
     let failure = format!(
         "{:?}",
         call(&old, &s, "freeze", json!({})).await?.into_result()

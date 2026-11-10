@@ -23,8 +23,26 @@ export interface FunctionCall {
   params: { methodName: string; args: object; gas: string; deposit: string };
 }
 
+export type Action =
+  | FunctionCall
+  | { type: "CreateAccount" }
+  | { type: "Transfer"; params: { deposit: string } }
+  | {
+      type: "AddKey";
+      params: {
+        publicKey: string;
+        accessKey: { permission: "FullAccess" | { receiverId: string; allowance?: string; methodNames?: string[] } };
+      };
+    }
+  | { type: "DeleteKey"; params: { publicKey: string } };
+
 export interface Transaction {
   receiverId: string;
+  actions: Action[];
+}
+
+/** A transaction of function calls only, which is what the vault and DAO calls are. */
+export interface CallTransaction extends Transaction {
   actions: FunctionCall[];
 }
 
@@ -34,12 +52,12 @@ const call = (methodName: string, args: object, gas = CALL_GAS, deposit = "0"): 
 });
 
 /** A call the vault receives directly from the signer. */
-export function vaultCall(vault: string, method: string, args: object): Transaction {
+export function vaultCall(vault: string, method: string, args: object): CallTransaction {
   return { receiverId: vault, actions: [call(method, args)] };
 }
 
 /** Asks the factory for a vault, with the caller as its owner. */
-export function createVaultCall(factory: string, args: object, deposit: string): Transaction {
+export function createVaultCall(factory: string, args: object, deposit: string): CallTransaction {
   return { receiverId: factory, actions: [call("create_vault", args, CREATE_VAULT_GAS, deposit)] };
 }
 
@@ -61,14 +79,14 @@ export function daoProposal(vault: string, method: string, args: object, nonce: 
   return { kind, description: `Guardian: ${method} on ${vault} (${nonce})` };
 }
 
-export function proposeCall(dao: { accountId: string; proposalBond: string }, proposal: object): Transaction {
+export function proposeCall(dao: { accountId: string; proposalBond: string }, proposal: object): CallTransaction {
   return {
     receiverId: dao.accountId,
     actions: [call("add_proposal", { proposal }, CALL_GAS, dao.proposalBond)],
   };
 }
 
-export function voteCall(dao: { accountId: string }, id: number, kind: object): Transaction {
+export function voteCall(dao: { accountId: string }, id: number, kind: object): CallTransaction {
   return {
     receiverId: dao.accountId,
     actions: [call("act_proposal", { id, action: "VoteApprove", proposal: kind }, VOTE_GAS)],

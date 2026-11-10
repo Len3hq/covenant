@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { VaultState } from "./vault";
-import { act, canStop, daoProposal, parsePolicy, roleOf, vaultCall, type Transaction } from "./wallet";
+import { act, canStop, daoProposal, parsePolicy, roleOf, vaultCall, type CallTransaction } from "./wallet";
 
 const vault = {
   roles: { owner: "owner.testnet", guardian: "dao.testnet", agent: "agent.testnet" },
@@ -20,7 +20,7 @@ describe("roleOf", () => {
 
 describe("act", () => {
   const run = (role: "owner" | "council", found: number | null) => {
-    const sent: Transaction[] = [];
+    const sent: CallTransaction[] = [];
     const findProposal = vi.fn(async () => found);
     const done = act({
       rpcUrl: "rpc",
@@ -32,7 +32,7 @@ describe("act", () => {
       args: { id: "3" },
       findProposal,
       sendWith: async (_rpc, transaction) => {
-        sent.push(transaction);
+        sent.push(transaction as CallTransaction);
       },
     });
     return { done, sent, findProposal };

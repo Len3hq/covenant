@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { buildRequest, STARTING_FORM, type CapForm, type PayeeForm, type VaultForm } from "./create";
 import { FACTORY_ID, vaultsOf, type VaultConfig } from "./vault";
+import { accountExists, createAgentTransaction, newAgentKey, type AgentKey } from "./agent";
 import { createVaultCall, send } from "./wallet";
 
 const POLL_MS = 3_000;
@@ -124,20 +125,40 @@ function Payees({
   );
 }
 
-function NextSteps({ vault, agent }: { vault: string; agent: string }) {
+/** The agent's key, shown once. Nothing on this page stores it, so closing the page loses it. */
+function AgentSecret({ vault, agent, secret }: { vault: string; agent: string; secret: string }) {
+  const env = `VAULT_ACCOUNT_ID=${vault}\nAGENT_ACCOUNT_ID=${agent}\nAGENT_PRIVATE_KEY=${secret}`;
+  return (
+    <div className="agent-secret">
+      <p>
+        <strong>Save your agent's key now.</strong> It's shown only this once, and this page keeps no copy. It
+        can only ask {vault} for payments, within the rules you set.
+      </p>
+      <pre className="mono">{env}</pre>
+      <button type="button" onClick={() => void navigator.clipboard?.writeText(env)}>
+        Copy
+      </button>
+    </div>
+  );
+}
+
+function NextSteps({ vault, agent, secret }: { vault: string; agent: string; secret?: string }) {
   return (
     <section className="card created">
       <h2>✓ {vault} is live</h2>
-      <p>Three things left before your agent can pay:</p>
+      {secret && <AgentSecret vault={vault} agent={agent} secret={secret} />}
+      <p>{secret ? "Then, before your agent can pay:" : "Three things left before your agent can pay:"}</p>
       <ol>
         <li>
-          <a href={openHref(vault)}>Open its dashboard</a> to see its Bitcoin and Base addresses, then send
-          testnet funds to them.
+          <a href={openHref(vault)}>Open its dashboard</a> to see its Bitcoin, Base and Solana addresses, and
+          use its "Get test funds" panel to fill them.
         </li>
-        <li>
-          Give your agent a key that can only ask this vault for payments. From a clone of the repo:
-          <pre className="mono">{`VAULT_ACCOUNT_ID=${vault} AGENT_ACCOUNT_ID=${agent} make agent-key`}</pre>
-        </li>
+        {!secret && (
+          <li>
+            Give your agent a key that can only ask this vault for payments. From a clone of the repo:
+            <pre className="mono">{`VAULT_ACCOUNT_ID=${vault} AGENT_ACCOUNT_ID=${agent} make agent-key`}</pre>
+          </li>
+        )}
         <li>
           For Solana, create a durable nonce account the vault controls. It lets a payment held for a veto
           still land afterwards:
@@ -165,7 +186,9 @@ export function CreateVault({
   const [form, setForm] = useState<VaultForm>(STARTING_FORM);
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [created, setCreated] = useState<{ vault: string; agent: string } | null>(null);
+  const [created, setCreated] = useState<{ vault: string; agent: string; secret?: string } | null>(null);
+  // An agent account made in this visit, so a retry after a failed vault doesn't create it again.
+  const [madeAgent, setMadeAgent] = useState<{ agent: string; vault: string; key: AgentKey } | null>(null);
   const [mine, setMine] = useState<string[]>([]);
 
   useEffect(() => {
@@ -188,11 +211,25 @@ export function CreateVault({
     try {
       const { args, deposit } = buildRequest(form, FACTORY_ID, account);
       const vault = `${args.name}.${FACTORY_ID}`;
+      if (await accountExists(config.rpcUrl, vault, fetcher)) throw new Error(`${vault} is taken. Pick another name.`);
+      let key: AgentKey | undefined;
+      if (form.agentMode === "create") {
+        if (madeAgent?.agent === args.agent && madeAgent.vault === vault) {
+          key = madeAgent.key;
+        } else {
+          if (await accountExists(config.rpcUrl, args.agent, fetcher)) {
+            throw new Error(`${args.agent} already exists. Pick another agent name, or use it as an existing account.`);
+          }
+          key = newAgentKey();
+          await send(config.rpcUrl, createAgentTransaction(args.agent, vault, key.publicKey));
+          setMadeAgent({ agent: args.agent, vault, key });
+        }
+      }
       await send(config.rpcUrl, createVaultCall(FACTORY_ID, args, deposit));
       // A failed creation refunds the deposit and looks like success to the wallet, so ask the factory.
       for (let tries = 0; tries < POLL_TRIES; tries++) {
         if ((await vaultsOf(config, account, FACTORY_ID, fetcher)).includes(vault)) {
-          setCreated({ vault, agent: args.agent });
+          setCreated({ vault, agent: args.agent, ...(key ? { secret: key.secretKey } : {}) });
           return;
         }
         await new Promise((resolve) => setTimeout(resolve, POLL_MS));
@@ -207,7 +244,7 @@ export function CreateVault({
     }
   };
 
-  if (created) return <NextSteps vault={created.vault} agent={created.agent} />;
+  if (created) return <NextSteps vault={created.vault} agent={created.agent} {...(created.secret ? { secret: created.secret } : {})} />;
 
   return (
     <div className="create">
@@ -243,13 +280,44 @@ export function CreateVault({
           hint={`Becomes ${form.name.trim() || "name"}.${FACTORY_ID}`}
           onChange={(name) => setForm({ ...form, name })}
         />
-        <Field
-          label="Your agent's NEAR account"
-          value={form.agent}
-          placeholder="my-agent.testnet"
-          hint="It can only ask for payments. It must be separate from your own account."
-          onChange={(agent) => setForm({ ...form, agent })}
-        />
+        <fieldset className="payee-mode">
+          <legend>Your agent's NEAR account</legend>
+          <label>
+            <input
+              type="radio"
+              name="agent-mode"
+              checked={form.agentMode === "create"}
+              onChange={() => setForm({ ...form, agentMode: "create" })}
+            />{" "}
+            Create one for me
+          </label>
+          <label>
+            <input
+              type="radio"
+              name="agent-mode"
+              checked={form.agentMode === "existing"}
+              onChange={() => setForm({ ...form, agentMode: "existing" })}
+            />{" "}
+            Use one I already have
+          </label>
+        </fieldset>
+        {form.agentMode === "create" ? (
+          <Field
+            label="Agent name"
+            value={form.agentName}
+            placeholder="agent"
+            hint={`Becomes ${form.agentName.trim() || "agent"}.${account ?? "your-account.testnet"}, funded with 0.5 NEAR for gas, with a key that can only ask this vault for payments. Your wallet signs it, then the vault.`}
+            onChange={(agentName) => setForm({ ...form, agentName })}
+          />
+        ) : (
+          <Field
+            label="Agent account"
+            value={form.agent}
+            placeholder="my-agent.testnet"
+            hint="It can only ask for payments. It must be separate from your own account. You add its key afterwards."
+            onChange={(agent) => setForm({ ...form, agent })}
+          />
+        )}
         <Field
           label="Guardian (optional)"
           value={form.guardian}
@@ -283,8 +351,7 @@ export function CreateVault({
               checked={form.allowSwaps}
               onChange={(event) => setForm({ ...form, allowSwaps: event.target.checked })}
             />{" "}
-            Also pay on other chains and in other tokens, through Tidepool. Tidepool holds each swap for
-            the minute it takes, so the vault's limits are what you could lose.
+            Also pay on other chains and in other tokens, through Tidepool
           </label>
         </fieldset>
         <Payees

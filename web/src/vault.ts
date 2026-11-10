@@ -14,7 +14,8 @@ export interface VaultConfig {
   solRpcUrl: string;
 }
 
-const USDC_BASE_SEPOLIA = "036cbd53842c5426634e7929541ec2318f3dcf7e";
+/** Tidepool's test USDC, which vaults use now, and Circle's, which older vaults hold. */
+const USDC_BASE_SEPOLIA = ["38d81431b9f76d9699af7517040d5221d9dea252", "036cbd53842c5426634e7929541ec2318f3dcf7e"];
 const BALANCE_OF = "70a08231";
 
 export const defaultConfig: VaultConfig = {
@@ -27,7 +28,10 @@ export const defaultConfig: VaultConfig = {
   solRpcUrl: import.meta.env.VITE_SOL_RPC_URL ?? "https://api.devnet.solana.com",
 };
 
-const SOL_USDC_DEVNET_HEX = hex.encode(base58.decode(SOL_USDC_DEVNET));
+/** Tidepool's test USDC on Solana, which vaults use now, and Circle's, which older vaults hold. */
+const SOL_USDC_DEVNET_HEX = [SOL_USDC_DEVNET, "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"].map((mint) =>
+  hex.encode(base58.decode(mint)),
+);
 
 /** Creates vaults that nobody, including us, can change. */
 export const FACTORY_ID: string = import.meta.env.VITE_FACTORY_ACCOUNT_ID ?? "vaults.len3hq.testnet";
@@ -701,10 +705,10 @@ export function describeAsset(asset: Asset): { name: string; unit: string } {
   }
   if ("Erc20" in asset) {
     const { chain_id, token } = asset.Erc20;
-    if (bytesToHex(token) === USDC_BASE_SEPOLIA) return { name: "USDC", unit: "base units" };
+    if (USDC_BASE_SEPOLIA.includes(bytesToHex(token))) return { name: "USDC", unit: "base units" };
     return { name: `ERC-20 0x${bytesToHex(token)} (chain ${chain_id})`, unit: "base units" };
   }
-  if (bytesToHex(asset.Spl.mint) === SOL_USDC_DEVNET_HEX) return { name: "USDC on Solana", unit: "base units" };
+  if (SOL_USDC_DEVNET_HEX.includes(bytesToHex(asset.Spl.mint))) return { name: "USDC on Solana", unit: "base units" };
   return { name: `SPL ${base58.encode(Uint8Array.from(asset.Spl.mint))}`, unit: "base units" };
 }
 

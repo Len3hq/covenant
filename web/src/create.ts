@@ -1,4 +1,5 @@
 import { base58, bech32, hex } from "@scure/base";
+import { agentAccountId } from "./agent";
 import { associatedTokenAccount, SOL_USDC_DEVNET, solanaKey } from "./solana";
 import type { AssetCap, Payee, Policy } from "./vault";
 
@@ -8,7 +9,8 @@ import type { AssetCap, Payee, Policy } from "./vault";
  */
 
 export const CHAIN_ID = 84532;
-const USDC = "036cbd53842c5426634e7929541ec2318f3dcf7e";
+/** Tidepool's test USDC on Base Sepolia, which its faucet drips and its swaps use. */
+export const USDC = "38d81431b9f76d9699af7517040d5221d9dea252";
 const NEAR_DECIMALS = 24;
 const ACCOUNT_LIMIT = 64;
 
@@ -61,13 +63,16 @@ export interface PayeeForm {
 
 export interface VaultForm {
   name: string;
+  /** Create `agentName.<owner>` for the agent, or use an `agent` account that already exists. */
+  agentMode: "create" | "existing";
+  agentName: string;
   agent: string;
   guardian: string;
   deposit: string;
   vetoSeconds: string;
   /** Pay anyone, holding payments to unlisted payees, or pay only the list. */
   openPayees: boolean;
-  /** Pay on other chains and in other tokens through Tidepool, which holds each swap briefly. */
+  /** Pay on other chains and in other tokens through Tidepool. */
   allowSwaps: boolean;
   unlistedSeconds: string;
   btc: CapForm;
@@ -81,12 +86,14 @@ export interface VaultForm {
 /** Low limits to start from, so the first vault someone makes is a safe one. */
 export const STARTING_FORM: VaultForm = {
   name: "",
+  agentMode: "create",
+  agentName: "agent",
   agent: "",
   guardian: "",
   deposit: "1.5",
   vetoSeconds: "120",
   openPayees: true,
-  allowSwaps: false,
+  allowSwaps: true,
   unlistedSeconds: "600",
   btc: { perTx: "0.005", per24h: "0.02", queueAt: "0.0025", unlisted24h: "0.004" },
   eth: { perTx: "0.01", per24h: "0.05", queueAt: "0.005", unlisted24h: "0.01" },
@@ -164,6 +171,10 @@ function swapRules(): NonNullable<Policy["swap"]> {
     origins: [
       { asset_id: "nep141:btc.tp-omft.testnet", asset: "Btc" },
       { asset_id: "nep141:base.tp-omft.testnet", asset: { EvmNative: { chain_id: CHAIN_ID } } },
+      {
+        asset_id: `nep141:base-0x${USDC}.tp-omft.testnet`,
+        asset: { Erc20: { chain_id: CHAIN_ID, token: [...hex.decode(USDC)] } },
+      },
       { asset_id: "nep141:sol.tp-omft.testnet", asset: "Sol" },
     ],
     destinations: TIDEPOOL_DESTINATIONS,
@@ -226,7 +237,7 @@ export function buildRequest(form: VaultForm, factory: string, owner: string): C
     throw new Error("The vault name can use lowercase letters, digits, - and _, with no dots");
   }
   if (`${name}.${factory}`.length > ACCOUNT_LIMIT) throw new Error("That vault name is too long");
-  const agent = form.agent.trim();
+  const agent = form.agentMode === "create" ? agentAccountId(form.agentName, owner) : form.agent.trim();
   const guardian = form.guardian.trim();
   if (!agent) throw new Error("Name the account your agent uses");
   if (agent === owner || agent === guardian) {

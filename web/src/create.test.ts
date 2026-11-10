@@ -5,6 +5,7 @@ import { buildPolicy, buildRequest, parseUnits, payeeBytes, STARTING_FORM, type 
 const form: VaultForm = {
   ...STARTING_FORM,
   name: "acme",
+  agentMode: "existing",
   agent: "bot.testnet",
   payees: [{ label: "Host", chain: "Bitcoin", address: "tb1ql3d46g8n2ua8ulj8nu8fq8ulpm7vxfl6tjfxgs" }],
 };
@@ -69,14 +70,14 @@ describe("buildPolicy", () => {
   });
 
   it("lists a Solana payee's wallet and its USDC token account", () => {
-    // A devnet wallet and its real USDC account, read on 10 Nov.
+    // A devnet wallet, and its account for Tidepool's test USDC as the SDK derives it.
     const policy = buildPolicy({
       ...form,
       payees: [{ label: "Designer", chain: "Solana", address: "2SkT6DZgbfWjuLwzMR5UGZUs7pUdadyNrJv8TQ1QyKz6" }],
     });
     expect(policy.payees.map((payee) => payee.label)).toEqual(["Designer", "Designer (USDC)"]);
     expect(base58.encode(Uint8Array.from(policy.payees[1]?.to ?? []))).toBe(
-      "2n4w2JtCwgJEkF4kLx1JnE8UdTYCeuN8pyzH6t8qPTiA",
+      "4rvs6ocvYesLdVxNE4NYacagmcEc6RpuEUyU27AE1NiP",
     );
   });
 
@@ -96,13 +97,14 @@ describe("buildPolicy", () => {
     expect(policy.unlisted_veto_delay_ns).toBe(600_000_000_000);
   });
 
-  it("adds Tidepool's swap rules only when asked", () => {
-    expect(buildPolicy(form).swap).toBeNull();
-    const swap = buildPolicy({ ...form, allowSwaps: true }).swap;
+  it("adds Tidepool's swap rules unless they're turned off", () => {
+    expect(buildPolicy({ ...form, allowSwaps: false }).swap).toBeNull();
+    const swap = buildPolicy(form).swap;
     expect(base58.encode(Uint8Array.from(swap?.maker_key ?? []))).toBe("U1Mu4u1nHnHmgABpCkfDGXt2FZj8k29UGqhkMAu4iWY");
     expect(swap?.origins.map((origin) => origin.asset_id)).toEqual([
       "nep141:btc.tp-omft.testnet",
       "nep141:base.tp-omft.testnet",
+      "nep141:base-0x38d81431b9f76d9699af7517040d5221d9dea252.tp-omft.testnet",
       "nep141:sol.tp-omft.testnet",
     ]);
     expect(swap?.destinations).toContain("nep141:sol.tp-omft.testnet");
@@ -114,6 +116,18 @@ describe("buildPolicy", () => {
     expect(policy.unlisted).toBe("Refuse");
     expect(policy.unlisted_veto_delay_ns).toBe(policy.veto_delay_ns);
     expect(policy.caps.every((cap) => cap.unlisted_per_24h === "0")).toBe(true);
+  });
+});
+
+describe("buildRequest's agent", () => {
+  it("creates name.owner by default, or uses the account given", () => {
+    const fresh = buildRequest({ ...form, agentMode: "create", agentName: "bot" }, "vaults.testnet", "alice.testnet");
+    expect(fresh.args.agent).toBe("bot.alice.testnet");
+    const given = buildRequest({ ...form, agentMode: "existing", agent: "my-bot.testnet" }, "vaults.testnet", "alice.testnet");
+    expect(given.args.agent).toBe("my-bot.testnet");
+    expect(() => buildRequest({ ...form, agentMode: "existing", agent: "alice.testnet" }, "vaults.testnet", "alice.testnet")).toThrow(
+      "its own account",
+    );
   });
 });
 

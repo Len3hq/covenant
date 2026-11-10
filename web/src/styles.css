@@ -1472,3 +1472,36 @@ code,
 pre {
   font-variant-ligatures: none;
 }
+
+.faucet-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.faucet-links {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.agent-secret {
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  padding: 12px;
+  margin: 12px 0;
+}
+
+.agent-secret pre {
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.replace-agent {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}

@@ -177,6 +177,8 @@ pub enum CovenantEvent {
     PolicyUpdated { policy_hash: String },
     #[event_version("1.0.0")]
     GuardianUpdated { guardian: Option<AccountId> },
+    #[event_version("1.0.0")]
+    AgentUpdated { agent: AccountId },
 }
 
 #[near(contract_state)]
@@ -679,8 +681,23 @@ impl CovenantVault {
 
     pub fn set_guardian(&mut self, guardian: Option<AccountId>) {
         self.assert_owner();
+        if guardian.as_ref() == Some(&self.agent) {
+            env::panic_str("set_guardian: the agent can't also be the guardian");
+        }
         self.guardian = guardian.clone();
         CovenantEvent::GuardianUpdated { guardian }.emit();
+    }
+
+    /// Points the vault at another agent account, for example to retire a leaked key. The old agent
+    /// can't propose or execute from then on. A queued spend stays queued, and the new agent may
+    /// execute it after its window, because the vault checks it again either way.
+    pub fn set_agent(&mut self, agent: AccountId) {
+        self.assert_owner();
+        if agent == self.owner || Some(&agent) == self.guardian.as_ref() {
+            env::panic_str("set_agent: the agent can't also be the owner or guardian");
+        }
+        self.agent = agent.clone();
+        CovenantEvent::AgentUpdated { agent }.emit();
     }
 
     pub fn get_policy(&self) -> &Policy {

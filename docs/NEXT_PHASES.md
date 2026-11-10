@@ -439,6 +439,13 @@ The MCP `pay` tool, asked to "pay 5 USDC on Solana to <address>" from a BTC-fund
 
 ## Phase 3: create the agent's account from the dashboard
 
+**Status: built on 10 Nov, not yet deployed.** The vault has `set_agent`, and the create form
+defaults to "Create one for me". That's two wallet prompts, one for the agent account and one for
+the vault, sent in order, because not every wallet signs several transactions at once. If the vault
+fails, a retry reuses the agent made in the same visit. The vault page has the owner's "Replace
+agent" button. The key is shown once with its `.env` lines. Implicit (unnamed) owner accounts can't
+have subaccounts, so the page asks them to use an existing agent account instead.
+
 ### Flow
 
 1. The form field changes from "Your agent's NEAR account" to **"Agent name"**. Typing `bot`

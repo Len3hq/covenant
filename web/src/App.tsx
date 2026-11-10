@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { CreateVault } from "./CreateVault";
 import { Docs } from "./Docs";
+import { accountExists, agentAccountId, createAgentTransaction, newAgentKey } from "./agent";
+import { FAUCET_LINKS, requestTestTokens, type FaucetChain } from "./faucet";
 import {
   baseAmount,
   explorerFor,
@@ -53,6 +55,8 @@ import {
   parsePolicy,
   roleOf,
   act as runAction,
+  send,
+  vaultCall,
   walletConnector,
   type Role,
 } from "./wallet";
@@ -79,6 +83,10 @@ export interface Controls {
   connect(): void;
   disconnect(): void;
   act(method: string, args: object): void;
+  /** For the owner: a new agent account and key, then `set_agent` to it. */
+  replaceAgent?(name: string): void;
+  /** The key of an agent made on this page, shown once. */
+  newAgent?: { agent: string; secret: string } | null;
 }
 
 /** The clock, ticking once a second so countdowns move between refreshes. */
@@ -668,6 +676,22 @@ function ProvenanceLine({ provenance }: { provenance?: Provenance | null }) {
   );
 }
 
+function ReplaceAgent({ controls }: { controls: Controls }) {
+  const [name, setName] = useState("agent2");
+  return (
+    <div className="replace-agent">
+      <input aria-label="New agent name" value={name} onChange={(event) => setName(event.target.value)} />
+      <button type="button" onClick={() => controls.replaceAgent?.(name)}>
+        Replace agent
+      </button>
+      <p className="muted small">
+        Creates {name.trim() || "name"}.{controls.account} with a key for this vault only, then switches the vault
+        to it. Use this if the agent's key leaks.
+      </p>
+    </div>
+  );
+}
+
 function PowersCard({
   vault,
   provenance,
@@ -727,6 +751,16 @@ function PowersCard({
               Unfreeze
             </button>
           )}
+          {role === "owner" && controls.replaceAgent && <ReplaceAgent controls={controls} />}
+          {controls.newAgent && (
+            <div className="agent-secret">
+              <p>
+                <strong>Save {controls.newAgent.agent}'s key now.</strong> It's shown only this once. Point your agent
+                at it, and the old agent can no longer ask for payments.
+              </p>
+              <pre className="mono">{`AGENT_ACCOUNT_ID=${controls.newAgent.agent}\nAGENT_PRIVATE_KEY=${controls.newAgent.secret}`}</pre>
+            </div>
+          )}
           {role === "council" && (
             <p className="muted small">As a council member you propose and vote, so your wallet asks for two signatures.</p>
           )}
@@ -740,6 +774,53 @@ function PowersCard({
           )}
         </div>
       )}
+    </section>
+  );
+}
+
+/** Where to get test coins for this vault, with one click for Tidepool's USDC and USDT. */
+function TestFunds({ vault }: { vault: VaultState }) {
+  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [busy, setBusy] = useState<FaucetChain | null>(null);
+  const drip = async (chain: FaucetChain, address: string) => {
+    setBusy(chain);
+    setResult(await requestTestTokens(chain, address));
+    setBusy(null);
+  };
+  return (
+    <section className="card test-funds">
+      <h2>Get test funds</h2>
+      <p className="muted small">
+        Everything here is testnet, so the coins are free. Tidepool sends its test USDC and USDT, the
+        tokens this vault pays and swaps, once a week per address.
+      </p>
+      <div className="faucet-buttons">
+        <button type="button" disabled={busy !== null} onClick={() => void drip("base", vault.evmAddress)}>
+          {busy === "base" ? "Asking Tidepool…" : "Send test USDC to the vault on Base"}
+        </button>
+        {vault.solAddress && (
+          <button
+            type="button"
+            disabled={busy !== null}
+            onClick={() => void drip("sol", vault.solAddress as string)}
+          >
+            {busy === "sol" ? "Asking Tidepool…" : "Send test USDC to the vault on Solana"}
+          </button>
+        )}
+      </div>
+      {result && (
+        <p className={result.ok ? "small" : "small banner banner-frozen"} role="status">
+          {result.message}
+        </p>
+      )}
+      <ul className="faucet-links">
+        {FAUCET_LINKS.map((link) => (
+          <li key={link.url}>
+            <span className="muted">{link.coin}:</span> <a href={link.url}>{link.name} ↗</a>
+          </li>
+        ))}
+      </ul>
+      <p className="muted small">Send them to the vault's addresses at the bottom of this page.</p>
     </section>
   );
 }
@@ -840,6 +921,7 @@ function Ready({
           <BudgetCard balances={vault.balances} policy={vault.policy} />
           <RulesCard policy={vault.policy} rules={rules} controls={controls} />
           <PowersCard vault={vault} provenance={provenance} controls={controls} />
+          <TestFunds vault={vault} />
         </aside>
       </div>
       <Addresses accountId={accountId} vault={vault} />
@@ -851,6 +933,7 @@ export function App() {
   const [status, setStatus] = useState<VaultStatus>({ kind: "loading" });
   const [account, setAccount] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [newAgent, setNewAgent] = useState<{ agent: string; secret: string } | null>(null);
   const [provenance, setProvenance] = useState<Provenance | null>(null);
   const { accountId, rpcUrl } = config;
 
@@ -935,10 +1018,33 @@ export function App() {
     },
     [account, accountId, role, rpcUrl, vault],
   );
+  const replaceAgent = useCallback(
+    (name: string) => {
+      if (!account) return;
+      void (async () => {
+        try {
+          const agent = agentAccountId(name, account);
+          if (await accountExists(rpcUrl, agent)) throw new Error(`${agent} already exists; pick another name`);
+          const key = newAgentKey();
+          setMessage(`Sign 1 of 2: create ${agent}…`);
+          await send(rpcUrl, createAgentTransaction(agent, accountId, key.publicKey));
+          setNewAgent({ agent, secret: key.secretKey });
+          setMessage(`Sign 2 of 2: point the vault at ${agent}…`);
+          await send(rpcUrl, vaultCall(accountId, "set_agent", { agent }));
+          setMessage(`The vault's agent is now ${agent}. The page updates within a few seconds.`);
+        } catch (error) {
+          setMessage(`Replacing the agent failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      })();
+    },
+    [account, accountId, rpcUrl],
+  );
   const controls: Controls = {
     account,
     role,
     message,
+    replaceAgent,
+    newAgent,
     connect: () => {
       void walletConnector(rpcUrl)
         .then((connector) => connector.connect())
