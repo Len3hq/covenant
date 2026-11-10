@@ -8,6 +8,7 @@ import {
   AGENT_METHODS,
   createAgentTransaction,
   newAgentKey,
+  removeAgentKeyTransaction,
 } from "./agent";
 
 describe("newAgentKey", () => {
@@ -57,7 +58,17 @@ describe("agent transactions", () => {
 
   it("adds only the scoped key to an account that already exists", () => {
     const tx = addAgentKeyTransaction("bot.testnet", "acme.vaults.testnet", "ed25519:KEY");
+    expect(tx.receiverId).toBe("bot.testnet");
     expect(tx.actions.map((action) => action.type)).toEqual(["AddKey"]);
+    expect(JSON.stringify(tx)).toContain('"methodNames":["propose_spend","execute"]');
+    expect(JSON.stringify(tx)).not.toContain("FullAccess");
+  });
+
+  it("removes one key from the agent's own account", () => {
+    expect(removeAgentKeyTransaction("bot.testnet", "ed25519:KEY")).toEqual({
+      receiverId: "bot.testnet",
+      actions: [{ type: "DeleteKey", params: { publicKey: "ed25519:KEY" } }],
+    });
   });
 });
 

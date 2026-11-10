@@ -76,6 +76,11 @@ export function addAgentKeyTransaction(agent: string, vault: string, publicKey: 
   return { receiverId: agent, actions: [agentKeyAction(vault, publicKey)] };
 }
 
+/** Removes one key from the agent account, signed by the agent account's own wallet. */
+export function removeAgentKeyTransaction(agent: string, publicKey: string): Transaction {
+  return { receiverId: agent, actions: [{ type: "DeleteKey", params: { publicKey } }] };
+}
+
 export async function accountExists(rpcUrl: string, accountId: string, fetcher: typeof fetch = fetch): Promise<boolean> {
   const response = await fetcher(rpcUrl, {
     method: "POST",

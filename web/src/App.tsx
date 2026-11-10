@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { CreateVault } from "./CreateVault";
 import { Docs } from "./Docs";
-import { accountExists, agentAccountId, createAgentTransaction, newAgentKey } from "./agent";
+import {
+  accountExists,
+  addAgentKeyTransaction,
+  agentAccountId,
+  createAgentTransaction,
+  newAgentKey,
+  removeAgentKeyTransaction,
+} from "./agent";
 import { FAUCET_LINKS, requestTestTokens, type FaucetChain } from "./faucet";
 import {
   baseAmount,
@@ -87,6 +94,9 @@ export interface Controls {
   replaceAgent?(name: string): void;
   /** The key of an agent made on this page, shown once. */
   newAgent?: { agent: string; secret: string } | null;
+  /** For the agent account itself: a new key scoped to this vault, shown once. */
+  addAgentKey?(): void;
+  removeAgentKey?(publicKey: string): void;
 }
 
 /** The clock, ticking once a second so countdowns move between refreshes. */
@@ -676,6 +686,59 @@ function ProvenanceLine({ provenance }: { provenance?: Provenance | null }) {
   );
 }
 
+/** The agent's keys, and for the agent account itself, adding and removing vault keys. */
+function AgentKeysCard({ vault, controls }: { vault: VaultState; controls?: Controls }) {
+  const keys = vault.agentKeys ?? null;
+  const signedInAsAgent = controls?.account === vault.roles.agent;
+  const forVault = keys?.filter((key) => key.forVault) ?? [];
+  const full = keys?.some((key) => key.full) ?? false;
+  return (
+    <section className="card">
+      <div className="card-head">
+        <h2>Agent keys</h2>
+      </div>
+      {keys === null ? (
+        <p className="muted small">The agent's keys couldn't be read.</p>
+      ) : (
+        <>
+          <p className="muted small">
+            {forVault.length === 0
+              ? `${vault.roles.agent} has no key for this vault yet, so the agent can't ask for payments.`
+              : `${vault.roles.agent} has ${forVault.length} key${forVault.length === 1 ? "" : "s"} that can only ask this vault for payments.`}{" "}
+            {full ? "It also has a full-access key, held by whoever made it." : "It has no full-access key."}
+          </p>
+          <ul className="key-list">
+            {forVault.map((key) => (
+              <li key={key.publicKey}>
+                <span className="mono small">{key.publicKey.slice(0, 20)}…</span>{" "}
+                <span className="muted small">
+                  {key.allowance ? `${formatNear(key.allowance)} NEAR of gas left` : "no gas limit"}
+                </span>
+                {signedInAsAgent && full && controls?.removeAgentKey && (
+                  <button type="button" className="ghost" onClick={() => controls.removeAgentKey?.(key.publicKey)}>
+                    Remove
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {controls &&
+        (signedInAsAgent ? (
+          <button type="button" className="primary" onClick={() => controls.addAgentKey?.()}>
+            Create agent key
+          </button>
+        ) : (
+          <p className="muted small">
+            To add a key, connect the wallet of {vault.roles.agent}. An agent this dashboard created has no key a
+            wallet holds, so its owner uses Replace agent instead.
+          </p>
+        ))}
+    </section>
+  );
+}
+
 function ReplaceAgent({ controls }: { controls: Controls }) {
   const [name, setName] = useState("agent2");
   return (
@@ -921,6 +984,7 @@ function Ready({
           <BudgetCard balances={vault.balances} policy={vault.policy} />
           <RulesCard policy={vault.policy} rules={rules} controls={controls} />
           <PowersCard vault={vault} provenance={provenance} controls={controls} />
+          <AgentKeysCard vault={vault} {...(controls ? { controls } : {})} />
           <TestFunds vault={vault} />
         </aside>
       </div>
@@ -1039,12 +1103,38 @@ export function App() {
     },
     [account, accountId, rpcUrl],
   );
+  const addAgentKey = useCallback(() => {
+    if (!account) return;
+    void (async () => {
+      try {
+        const key = newAgentKey();
+        setMessage(`Waiting for your wallet to add a key to ${account}…`);
+        await send(rpcUrl, addAgentKeyTransaction(account, accountId, key.publicKey));
+        setNewAgent({ agent: account, secret: key.secretKey });
+        setMessage(`Added a key that can only ask ${accountId} for payments. Save it below.`);
+      } catch (error) {
+        setMessage(`Adding the key failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    })();
+  }, [account, accountId, rpcUrl]);
+  const removeAgentKey = useCallback(
+    (publicKey: string) => {
+      if (!account) return;
+      setMessage(`Waiting for your wallet to remove ${publicKey.slice(0, 20)}…`);
+      send(rpcUrl, removeAgentKeyTransaction(account, publicKey))
+        .then(() => setMessage("Key removed. The page updates within a few seconds."))
+        .catch((error: unknown) => setMessage(`Removing the key failed: ${String(error)}`));
+    },
+    [account, rpcUrl],
+  );
   const controls: Controls = {
     account,
     role,
     message,
     replaceAgent,
     newAgent,
+    addAgentKey,
+    removeAgentKey,
     connect: () => {
       void walletConnector(rpcUrl)
         .then((connector) => connector.connect())

@@ -10,7 +10,8 @@ import { z } from "zod";
 import type { World } from "./runtime.js";
 import { connectVault } from "@covenant/sdk";
 
-const USDC = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
+/** Tidepool's test USDC, which scripts/policy.testnet.json caps. */
+const USDC = "0x38d81431B9f76d9699AF7517040D5221D9dEA252";
 const BASE_SEPOLIA = 84532;
 /** Coins the simulated Bitcoin chain says the vault holds. */
 const COINS = [400_000n, 300_000n, 200_000n];

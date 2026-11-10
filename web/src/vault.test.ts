@@ -182,6 +182,7 @@ describe("loadVault", () => {
       activity: null,
       nearBalance: null,
       agentAllowance: null,
+      agentKeys: null,
     });
   });
 
@@ -336,5 +337,20 @@ describe("swaps in the log", () => {
       deadline_ns: "0",
     });
     expect(line).toBe("Swapped through Tidepool: at least 97020000 base units of the native coin on Solana, for 4zMM");
+  });
+});
+
+describe("agent keys", () => {
+  it("finds the lowest allowance among the vault's keys only", async () => {
+    const { lowestAllowance } = await import("./vault");
+    const keys = [
+      { publicKey: "a", full: true, forVault: false, allowance: null },
+      { publicKey: "b", full: false, forVault: true, allowance: "900" },
+      { publicKey: "c", full: false, forVault: true, allowance: "300" },
+      { publicKey: "d", full: false, forVault: false, allowance: "1" },
+    ];
+    expect(lowestAllowance(keys)).toBe("300");
+    expect(lowestAllowance([])).toBeNull();
+    expect(lowestAllowance(null)).toBeNull();
   });
 });

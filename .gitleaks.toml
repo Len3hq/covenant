@@ -5,3 +5,12 @@ useDefault = true
 [[allowlists]]
 description = "Base Sepolia USDC contract, in tests/vectors/evm_hash.json"
 regexes = ['''^036cbd53842c5426634e7929541ec2318f3dcf7e$''', '''^38d81431b9f76d9699af7517040d5221d9dea252$''']
+
+# Public keys, not secrets. Keep this to exact values.
+[[allowlists]]
+description = "Public keys in tests and config: RFC 8032's test key, a test Solana key, and Tidepool's quote-signing key"
+regexes = [
+  '''d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a''',
+  '''9ojZDfccWSPQ9xjaFBhHZqTgeP3xiErzRo8pSpfh7rog''',
+  '''U1Mu4u1nHnHmgABpCkfDGXt2FZj8k29UGqhkMAu4iWY''',
+]

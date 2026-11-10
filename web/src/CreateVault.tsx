@@ -155,7 +155,8 @@ function NextSteps({ vault, agent, secret }: { vault: string; agent: string; sec
         </li>
         {!secret && (
           <li>
-            Give your agent a key that can only ask this vault for payments. From a clone of the repo:
+            Give your agent a key that can only ask this vault for payments: on the vault's page, connect{" "}
+            {agent}'s wallet and press <strong>Create agent key</strong>. From a terminal instead:
             <pre className="mono">{`VAULT_ACCOUNT_ID=${vault} AGENT_ACCOUNT_ID=${agent} make agent-key`}</pre>
           </li>
         )}

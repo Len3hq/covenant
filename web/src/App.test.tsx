@@ -126,6 +126,44 @@ describe("Dashboard", () => {
         />,
       );
 
+    it("offers Create agent key only to the agent account, and lists its vault keys", () => {
+      const keyed: VaultState = {
+        ...queued,
+        agentKeys: [
+          { publicKey: "ed25519:AAAAAAAAAAAAAAAAAAAAAAAA", full: false, forVault: true, allowance: "900000000000000000000000" },
+        ],
+      };
+      const asAgent = render(keyed, "none", "agent.testnet").replaceAll("<!-- -->", "");
+      expect(asAgent).toContain("Create agent key</button>");
+      expect(asAgent).toContain("1 key that can only ask this vault");
+      expect(asAgent).toContain("It has no full-access key.");
+      expect(asAgent).not.toContain("Remove</button>");
+      const asOwner = render(keyed, "owner", "owner.testnet").replaceAll("<!-- -->", "");
+      expect(asOwner).not.toContain("Create agent key</button>");
+      expect(asOwner).toContain("connect the wallet of agent.testnet");
+    });
+
+    it("lets an agent with a full-access key remove its vault keys", () => {
+      const keyed: VaultState = {
+        ...queued,
+        agentKeys: [
+          { publicKey: "ed25519:FULLFULLFULLFULLFULLFULL", full: true, forVault: false, allowance: null },
+          { publicKey: "ed25519:AAAAAAAAAAAAAAAAAAAAAAAA", full: false, forVault: true, allowance: null },
+        ],
+      };
+      const controls: Controls = {
+        account: "agent.testnet",
+        role: "none",
+        message: null,
+        connect: () => undefined,
+        disconnect: () => undefined,
+        act: () => undefined,
+        removeAgentKey: () => undefined,
+      };
+      const html = renderToString(<Dashboard accountId="v" status={{ kind: "ready", vault: keyed }} controls={controls} />);
+      expect(html).toContain("Remove</button>");
+    });
+
     it("offers only a wallet connection to a visitor", () => {
       const html = render(queued, "none", null);
       expect(html).toContain("Connect a NEAR wallet");

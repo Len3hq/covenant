@@ -4,7 +4,8 @@
       "asset": "Btc",
       "per_tx": "500000",
       "per_24h": "2000000",
-      "queue_at": "250000"
+      "queue_at": "250000",
+      "unlisted_per_24h": "0"
     },
     {
       "asset": {
@@ -14,7 +15,8 @@
       },
       "per_tx": "10000000000000000",
       "per_24h": "50000000000000000",
-      "queue_at": "5000000000000000"
+      "queue_at": "5000000000000000",
+      "unlisted_per_24h": "0"
     },
     {
       "asset": {
@@ -46,13 +48,15 @@
       },
       "per_tx": "50000000",
       "per_24h": "200000000",
-      "queue_at": "25000000"
+      "queue_at": "25000000",
+      "unlisted_per_24h": "0"
     },
     {
       "asset": "Sol",
       "per_tx": "50000000",
       "per_24h": "200000000",
-      "queue_at": "25000000"
+      "queue_at": "25000000",
+      "unlisted_per_24h": "0"
     },
     {
       "asset": {
@@ -95,7 +99,8 @@
       },
       "per_tx": "50000000",
       "per_24h": "200000000",
-      "queue_at": "25000000"
+      "queue_at": "25000000",
+      "unlisted_per_24h": "0"
     }
   ],
   "payees": [
@@ -348,5 +353,7 @@
     "payees": [],
     "max_slippage_bps": 100,
     "min_deposit_window_ns": 3600000000000
-  }
+  },
+  "unlisted": "Refuse",
+  "unlisted_veto_delay_ns": 120000000000
 }

@@ -236,6 +236,18 @@ export interface VaultState {
   nearBalance: string | null;
   /** The smallest allowance left on the agent's function-call keys, in yoctoNEAR. */
   agentAllowance: string | null;
+  /** The agent account's keys, when they could be read. */
+  agentKeys?: AgentKeyInfo[] | null;
+}
+
+export interface AgentKeyInfo {
+  publicKey: string;
+  /** Full access, which can add and remove keys. Agents made by the dashboard have none. */
+  full: boolean;
+  /** A function-call key for this vault, which is what the agent pays with. */
+  forVault: boolean;
+  /** yoctoNEAR of gas left, for a function-call key with an allowance. */
+  allowance: string | null;
 }
 
 const YOCTO = 10n ** 24n;
@@ -585,21 +597,34 @@ async function nearBalance(config: VaultConfig, fetcher: typeof fetch): Promise<
   }
 }
 
-async function agentAllowance(config: VaultConfig, agent: string, fetcher: typeof fetch): Promise<string | null> {
+async function loadAgentKeys(config: VaultConfig, agent: string, fetcher: typeof fetch): Promise<AgentKeyInfo[] | null> {
   try {
     const { keys } = await rpcQuery<{
-      keys: { access_key: { permission: unknown } }[];
+      keys: { public_key: string; access_key: { permission: unknown } }[];
     }>(config, { request_type: "view_access_key_list", account_id: agent }, fetcher);
-    const allowances = keys.flatMap(({ access_key: { permission } }) => {
-      if (typeof permission !== "object" || !permission || !("FunctionCall" in permission)) return [];
-      const call = (permission as { FunctionCall: { allowance: string | null; receiver_id: string } }).FunctionCall;
-      return call.receiver_id === config.accountId && call.allowance ? [BigInt(call.allowance)] : [];
+    return keys.map(({ public_key, access_key: { permission } }) => {
+      if (permission === "FullAccess") return { publicKey: public_key, full: true, forVault: false, allowance: null };
+      const call =
+        typeof permission === "object" && permission && "FunctionCall" in permission
+          ? (permission as { FunctionCall: { allowance: string | null; receiver_id: string } }).FunctionCall
+          : null;
+      return {
+        publicKey: public_key,
+        full: false,
+        forVault: call?.receiver_id === config.accountId,
+        allowance: call?.allowance ?? null,
+      };
     });
-    if (allowances.length === 0) return null;
-    return allowances.reduce((low, value) => (value < low ? value : low)).toString();
   } catch {
     return null;
   }
+}
+
+/** The smallest allowance left on the agent's keys for this vault. */
+export function lowestAllowance(keys: AgentKeyInfo[] | null): string | null {
+  const allowances = (keys ?? []).flatMap((key) => (key.forVault && key.allowance ? [BigInt(key.allowance)] : []));
+  if (allowances.length === 0) return null;
+  return allowances.reduce((low, value) => (value < low ? value : low)).toString();
 }
 
 /** The id of the proposal with this proposer and description, searching from `from`. */
@@ -654,10 +679,10 @@ export async function loadVault(
     view<Pending[]>(config, "get_queue", fetcher),
     loadActivity(config, fetcher).catch(() => null),
   ]);
-  const [guardianDao, near, allowance] = await Promise.all([
+  const [guardianDao, near, agentKeys] = await Promise.all([
     loadGuardianDao(config, roles.guardian, fetcher),
     nearBalance(config, fetcher),
-    agentAllowance(config, roles.agent, fetcher),
+    loadAgentKeys(config, roles.agent, fetcher),
   ]);
   const btc = btcAddress(addresses.btc_pubkey);
   const balances = await Promise.all(
@@ -688,7 +713,8 @@ export async function loadVault(
           : entry,
       ) ?? null,
     nearBalance: near,
-    agentAllowance: allowance,
+    agentAllowance: lowestAllowance(agentKeys),
+    agentKeys,
   };
 }
 

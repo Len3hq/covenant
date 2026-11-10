@@ -973,4 +973,23 @@ mod tests {
             assert_eq!(rules.caps[0].unlisted_per_24h, U128(0));
         }
     }
+
+    /// The policies `make set-policy` applies must pass the checks `set_policy` runs.
+    #[test]
+    fn the_testnet_policy_files_are_valid() {
+        for (name, text) in [
+            (
+                "policy.testnet.json",
+                include_str!("../../../scripts/policy.testnet.json"),
+            ),
+            (
+                "policy.open.testnet.json",
+                include_str!("../../../scripts/policy.open.testnet.json"),
+            ),
+        ] {
+            let rules: Policy = near_sdk::serde_json::from_str(text).expect(name);
+            assert_eq!(rules.validate(), Ok(()), "{name}");
+            assert!(rules.swap.is_some(), "{name} allows swaps");
+        }
+    }
 }

@@ -518,6 +518,12 @@ A fresh testnet account creates an agent and a vault from the dashboard with no 
 
 ## Phase 4: "Create agent key" button
 
+**Status: built on 10 Nov, not yet deployed.** The vault page has an **Agent keys** card. It lists
+the agent's keys for the vault with the gas each has left. Connected as the agent account, it offers
+**Create agent key** and, if that account has a full-access key, **Remove** on each vault key. The
+create form's "Use one I already have" path now points here instead of `make agent-key`. The live
+test steps are in [RUNBOOK.md](RUNBOOK.md).
+
 Phase 3 covers new vaults. This button covers an **existing** agent account, for example one
 the user created themselves, or the original `covenant` agent.
 

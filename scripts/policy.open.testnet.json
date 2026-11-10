@@ -1,0 +1,359 @@
+{
+  "caps": [
+    {
+      "asset": "Btc",
+      "per_tx": "500000",
+      "per_24h": "2000000",
+      "queue_at": "250000",
+      "unlisted_per_24h": "400000"
+    },
+    {
+      "asset": {
+        "EvmNative": {
+          "chain_id": 84532
+        }
+      },
+      "per_tx": "10000000000000000",
+      "per_24h": "50000000000000000",
+      "queue_at": "5000000000000000",
+      "unlisted_per_24h": "10000000000000000"
+    },
+    {
+      "asset": {
+        "Erc20": {
+          "chain_id": 84532,
+          "token": [
+            56,
+            216,
+            20,
+            49,
+            185,
+            247,
+            109,
+            150,
+            153,
+            175,
+            117,
+            23,
+            4,
+            13,
+            82,
+            33,
+            217,
+            222,
+            162,
+            82
+          ]
+        }
+      },
+      "per_tx": "50000000",
+      "per_24h": "200000000",
+      "queue_at": "25000000",
+      "unlisted_per_24h": "40000000"
+    },
+    {
+      "asset": "Sol",
+      "per_tx": "50000000",
+      "per_24h": "200000000",
+      "queue_at": "25000000",
+      "unlisted_per_24h": "40000000"
+    },
+    {
+      "asset": {
+        "Spl": {
+          "mint": [
+            101,
+            86,
+            122,
+            98,
+            185,
+            141,
+            65,
+            172,
+            177,
+            20,
+            87,
+            145,
+            157,
+            30,
+            108,
+            176,
+            117,
+            221,
+            68,
+            236,
+            111,
+            100,
+            109,
+            217,
+            27,
+            107,
+            132,
+            190,
+            94,
+            121,
+            71,
+            1
+          ]
+        }
+      },
+      "per_tx": "50000000",
+      "per_24h": "200000000",
+      "queue_at": "25000000",
+      "unlisted_per_24h": "40000000"
+    }
+  ],
+  "payees": [
+    {
+      "chain": "Bitcoin",
+      "to": [
+        0,
+        20,
+        252,
+        91,
+        93,
+        32,
+        243,
+        87,
+        58,
+        126,
+        126,
+        71,
+        159,
+        14,
+        144,
+        31,
+        159,
+        14,
+        252,
+        195,
+        39,
+        250
+      ],
+      "label": "Acme Hosting"
+    },
+    {
+      "chain": "Evm",
+      "to": [
+        138,
+        109,
+        92,
+        1,
+        26,
+        154,
+        20,
+        128,
+        168,
+        155,
+        32,
+        235,
+        20,
+        130,
+        187,
+        232,
+        155,
+        174,
+        248,
+        41
+      ],
+      "label": "DesignCo"
+    },
+    {
+      "chain": "Solana",
+      "to": [
+        14,
+        50,
+        61,
+        130,
+        81,
+        76,
+        182,
+        216,
+        252,
+        166,
+        86,
+        129,
+        66,
+        238,
+        251,
+        113,
+        245,
+        3,
+        84,
+        202,
+        76,
+        228,
+        55,
+        74,
+        187,
+        130,
+        194,
+        23,
+        154,
+        126,
+        37,
+        203
+      ],
+      "label": "Acme Hosting"
+    },
+    {
+      "chain": "Solana",
+      "to": [
+        255,
+        137,
+        141,
+        98,
+        217,
+        164,
+        209,
+        88,
+        189,
+        5,
+        111,
+        155,
+        244,
+        233,
+        249,
+        211,
+        21,
+        95,
+        128,
+        142,
+        100,
+        82,
+        210,
+        95,
+        39,
+        8,
+        177,
+        61,
+        187,
+        26,
+        235,
+        146
+      ],
+      "label": "Acme Hosting (USDC)"
+    }
+  ],
+  "btc_max_fee_rate": 50,
+  "btc_max_inputs": 3,
+  "evm_chain_ids": [
+    84532
+  ],
+  "evm_max_gas_cost": "1000000000000000",
+  "veto_delay_ns": 120000000000,
+  "sol_max_fee": "100000",
+  "swap": {
+    "maker_key": [
+      6,
+      235,
+      22,
+      216,
+      170,
+      210,
+      199,
+      146,
+      202,
+      104,
+      197,
+      173,
+      237,
+      45,
+      75,
+      49,
+      234,
+      181,
+      78,
+      142,
+      10,
+      29,
+      246,
+      15,
+      121,
+      58,
+      48,
+      247,
+      139,
+      208,
+      246,
+      77
+    ],
+    "origins": [
+      {
+        "asset_id": "nep141:btc.tp-omft.testnet",
+        "asset": "Btc"
+      },
+      {
+        "asset_id": "nep141:base.tp-omft.testnet",
+        "asset": {
+          "EvmNative": {
+            "chain_id": 84532
+          }
+        }
+      },
+      {
+        "asset_id": "nep141:base-0x38d81431b9f76d9699af7517040d5221d9dea252.tp-omft.testnet",
+        "asset": {
+          "Erc20": {
+            "chain_id": 84532,
+            "token": [
+              56,
+              216,
+              20,
+              49,
+              185,
+              247,
+              109,
+              150,
+              153,
+              175,
+              117,
+              23,
+              4,
+              13,
+              82,
+              33,
+              217,
+              222,
+              162,
+              82
+            ]
+          }
+        }
+      },
+      {
+        "asset_id": "nep141:sol.tp-omft.testnet",
+        "asset": "Sol"
+      }
+    ],
+    "destinations": [
+      "nep141:base-0x38d81431b9f76d9699af7517040d5221d9dea252.tp-omft.testnet",
+      "nep141:base-0xc15cf5600225302675604310094f134e88705e62.tp-omft.testnet",
+      "nep141:base.tp-omft.testnet",
+      "nep141:arb-0x38d81431b9f76d9699af7517040d5221d9dea252.tp-omft.testnet",
+      "nep141:arb-0xc15cf5600225302675604310094f134e88705e62.tp-omft.testnet",
+      "nep141:arb.tp-omft.testnet",
+      "nep141:eth-0x2e6ad9e6d59bb4585ea0e6762c3b637dde29dad2.tp-omft.testnet",
+      "nep141:eth-0x650f12ba31777de8ded47287a8cc86be737646fe.tp-omft.testnet",
+      "nep141:eth.tp-omft.testnet",
+      "nep141:bsc-0x38d81431b9f76d9699af7517040d5221d9dea252.tp-omft.testnet",
+      "nep141:bsc-0xc15cf5600225302675604310094f134e88705e62.tp-omft.testnet",
+      "nep141:sol.tp-omft.testnet",
+      "nep141:sol-d48c1adc423a64867ac91ed2e1c0df76da323235.tp-omft.testnet",
+      "nep141:sol-4c5179da74eb695eb57e01b787c4937157cf2833.tp-omft.testnet",
+      "nep141:stellar.tp-omft.testnet",
+      "nep141:stellar-0da9087074a12ebeb5dcdc8bcf33cf163ab498fc.tp-omft.testnet",
+      "nep141:stellar-c36e358585c12ac3f684b98be0c6682ca9c4665f.tp-omft.testnet",
+      "nep141:sui.tp-omft.testnet",
+      "nep141:sui-f6ecfe107e72d22b7a646dd2cc4f1b2876349c0c.tp-omft.testnet",
+      "nep141:sui-add896332c906e599cee03f2154d067937d12a26.tp-omft.testnet",
+      "nep141:xrp.tp-omft.testnet",
+      "nep141:btc.tp-omft.testnet"
+    ],
+    "payees": [],
+    "max_slippage_bps": 100,
+    "min_deposit_window_ns": 3600000000000
+  },
+  "unlisted": "Hold",
+  "unlisted_veto_delay_ns": 600000000000
+}

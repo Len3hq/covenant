@@ -5,7 +5,7 @@ MOCK_SIGNER_MANIFEST := tests/mock-signer/Cargo.toml
 FACTORY_MANIFEST := contracts/covenant-factory/Cargo.toml
 
 .DEFAULT_GOAL := help
-.PHONY: help setup fmt lint wasm test build check addresses deploy deploy-factory deploy-dashboard set-policy pay-btc pay-eth demo demo-pay demo-attack demo-queue agent-key veto freeze unfreeze set-guardian dao-freeze dao-veto pay-usdc pay-sol sol-nonce testnet-smoke
+.PHONY: help setup fmt lint wasm test build check addresses deploy deploy-factory deploy-dashboard set-policy pay-btc pay-eth demo demo-pay demo-attack demo-queue agent-key veto freeze unfreeze set-guardian dao-freeze dao-veto pay-usdc pay-sol pay-swap execute sol-nonce testnet-smoke
 
 help: ## List the targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-15s %s\n", $$1, $$2}'
@@ -53,8 +53,8 @@ deploy-dashboard: ## Build and publish the dashboard on Railway (needs the railw
 agent-key: ## Create the agent's restricted key and save it to .env (needs the agent account's full key)
 	node --env-file=.env scripts/src/create-agent-key.ts
 
-set-policy: ## Apply scripts/policy.testnet.json to the deployed vault (needs the owner's key)
-	node --env-file=.env scripts/src/set-policy.ts
+set-policy: ## Apply a policy to the deployed vault: make set-policy [POLICY=scripts/policy.open.testnet.json] (needs the owner's key)
+	node --env-file=.env scripts/src/set-policy.ts $(POLICY)
 
 pay-btc: ## Pay from the vault: make pay-btc TO=<address> SATS=<amount> (needs AGENT_PRIVATE_KEY)
 	pnpm --filter "@covenant/agent..." build
@@ -71,6 +71,14 @@ pay-usdc: ## Pay USDC from the vault: make pay-usdc TO=<address> AMOUNT=<base un
 pay-sol: ## Pay on Solana devnet: make pay-sol TO=<address> AMOUNT=<lamports> [TOKEN=USDC] (needs AGENT_PRIVATE_KEY, SOL_NONCE_ACCOUNTS)
 	pnpm --filter "@covenant/agent..." build
 	node --env-file=.env agent/dist/pay-sol.js $(TO) $(AMOUNT) $(TOKEN)
+
+pay-swap: ## Pay across chains through Tidepool: make pay-swap ASSET=BTC AMOUNT=20000 TO_CHAIN=solana TO_ASSET=USDC TO=<address> [REF=<reference>]
+	pnpm --filter "@covenant/agent..." build
+	node --env-file=.env agent/dist/pay-swap.js $(ASSET) $(AMOUNT) $(TO_CHAIN) $(TO_ASSET) $(TO) $(REF)
+
+execute: ## Sign a held payment made with pay-swap or the MCP server, after its window: make execute ID=<spend id>
+	pnpm --filter "@covenant/agent..." build
+	node --env-file=.env agent/dist/execute.js $(ID)
 
 sol-nonce: ## Create a durable nonce account the vault controls, for Solana payments (funds it from SOL_FUNDER_KEY)
 	node --env-file=.env scripts/src/create-nonce.ts
