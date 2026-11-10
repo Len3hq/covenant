@@ -13,6 +13,27 @@ use std::path::Path;
 const VAULT_WASM: &str = "../../target/near/covenant_vault/covenant_vault.wasm";
 const SIGNER_WASM: &str = "../../target/near/covenant_mock_signer/covenant_mock_signer.wasm";
 pub const PUBKEY: [u8; 33] = [0x02; 33];
+/// The vault's Ed25519 key in the sandbox.
+pub const SOL_VAULT: [u8; 32] = [0x5a; 32];
+pub const SOL_PAYEE: [u8; 32] = [0xaa; 32];
+/// The payee's USDC token account, which is what a token payee lists.
+pub const SOL_PAYEE_TOKENS: [u8; 32] = [0xab; 32];
+pub const SOL_VAULT_TOKENS: [u8; 32] = [0x5b; 32];
+pub const SOL_NONCE: [u8; 32] = [0x22; 32];
+pub const SOL_USDC: [u8; 32] = [0x3b; 32];
+pub const SYSTEM_PROGRAM: [u8; 32] = [0; 32];
+pub const TOKEN_PROGRAM: [u8; 32] = [
+    0x06, 0xdd, 0xf6, 0xe1, 0xd7, 0x65, 0xa1, 0x93, 0xd9, 0xcb, 0xe1, 0x46, 0xce, 0xeb, 0x79, 0xac,
+    0x1c, 0xb4, 0x85, 0xed, 0x5f, 0x5b, 0x37, 0x91, 0x3a, 0x8c, 0xf5, 0x85, 0x7e, 0xff, 0x00, 0xa9,
+];
+pub const COMPUTE_BUDGET_PROGRAM: [u8; 32] = [
+    0x03, 0x06, 0x46, 0x6f, 0xe5, 0x21, 0x17, 0x32, 0xff, 0xec, 0xad, 0xba, 0x72, 0xc3, 0x9b, 0xe7,
+    0xbc, 0x8c, 0xe5, 0xbb, 0xc5, 0xf7, 0x12, 0x6b, 0x2c, 0x43, 0x9b, 0x3a, 0x40, 0x00, 0x00, 0x00,
+];
+pub const RECENT_BLOCKHASHES_SYSVAR: [u8; 32] = [
+    0x06, 0xa7, 0xd5, 0x17, 0x19, 0x2c, 0x56, 0x8e, 0xe0, 0x8a, 0x84, 0x5f, 0x73, 0xd2, 0x97, 0x88,
+    0xcf, 0x03, 0x5c, 0x31, 0x45, 0xb2, 0x1a, 0xb3, 0x44, 0xd8, 0x06, 0x2e, 0xa9, 0x40, 0x00, 0x00,
+];
 pub const COIN: u64 = 100_000;
 
 pub struct Setup {
@@ -127,6 +148,115 @@ pub fn evm_proposal() -> Value {
     json!({ "chain": "Evm", "tx": STANDARD.encode(tx), "meta": "Evm" })
 }
 
+fn short_vec(mut value: usize) -> Vec<u8> {
+    let mut out = Vec::new();
+    loop {
+        let byte = (value & 0x7f) as u8;
+        value >>= 7;
+        if value == 0 {
+            out.push(byte);
+            return out;
+        }
+        out.push(byte | 0x80);
+    }
+}
+
+/// A legacy Solana message from the vault. Keys are added in the order instructions name them.
+pub struct SolMessage {
+    pub header: [u8; 3],
+    pub keys: Vec<[u8; 32]>,
+    pub instructions: Vec<(usize, Vec<usize>, Vec<u8>)>,
+}
+
+impl SolMessage {
+    /// Starts with the durable-nonce advance every vault message needs.
+    pub fn new() -> Self {
+        let message = SolMessage {
+            header: [1, 0, 0],
+            keys: vec![SOL_VAULT],
+            instructions: vec![],
+        };
+        message.instruction(
+            SYSTEM_PROGRAM,
+            &[SOL_NONCE, RECENT_BLOCKHASHES_SYSVAR, SOL_VAULT],
+            4u32.to_le_bytes().to_vec(),
+        )
+    }
+
+    /// No nonce advance, so its blockhash would expire.
+    pub fn without_nonce() -> Self {
+        SolMessage {
+            header: [1, 0, 0],
+            keys: vec![SOL_VAULT],
+            instructions: vec![],
+        }
+    }
+
+    fn key(&mut self, key: [u8; 32]) -> usize {
+        if let Some(index) = self.keys.iter().position(|k| *k == key) {
+            return index;
+        }
+        self.keys.push(key);
+        self.keys.len() - 1
+    }
+
+    pub fn instruction(mut self, program: [u8; 32], accounts: &[[u8; 32]], data: Vec<u8>) -> Self {
+        let accounts = accounts.iter().map(|key| self.key(*key)).collect();
+        let program = self.key(program);
+        self.instructions.push((program, accounts, data));
+        self
+    }
+
+    pub fn sol(self, from: [u8; 32], to: [u8; 32], lamports: u64) -> Self {
+        let data = [2u32.to_le_bytes().to_vec(), lamports.to_le_bytes().to_vec()].concat();
+        self.instruction(SYSTEM_PROGRAM, &[from, to], data)
+    }
+
+    pub fn token(self, mint: [u8; 32], to: [u8; 32], amount: u64) -> Self {
+        let mut data = vec![12];
+        data.extend(amount.to_le_bytes());
+        data.push(6);
+        self.instruction(
+            TOKEN_PROGRAM,
+            &[SOL_VAULT_TOKENS, mint, to, SOL_VAULT],
+            data,
+        )
+    }
+
+    pub fn priority(self, units: u32, micro_lamports: u64) -> Self {
+        let limit = [vec![2], units.to_le_bytes().to_vec()].concat();
+        let price = [vec![3], micro_lamports.to_le_bytes().to_vec()].concat();
+        self.instruction(COMPUTE_BUDGET_PROGRAM, &[], limit)
+            .instruction(COMPUTE_BUDGET_PROGRAM, &[], price)
+    }
+
+    pub fn bytes(&self) -> Vec<u8> {
+        let mut out = self.header.to_vec();
+        out.extend(short_vec(self.keys.len()));
+        for key in &self.keys {
+            out.extend(key);
+        }
+        out.extend([0x55; 32]);
+        out.extend(short_vec(self.instructions.len()));
+        for (program, accounts, data) in &self.instructions {
+            out.push(*program as u8);
+            out.extend(short_vec(accounts.len()));
+            out.extend(accounts.iter().map(|index| *index as u8));
+            out.extend(short_vec(data.len()));
+            out.extend(data);
+        }
+        out
+    }
+
+    pub fn proposal(&self) -> Value {
+        solana_proposal(&self.bytes())
+    }
+}
+
+pub fn solana_proposal(message: &[u8]) -> Value {
+    json!({ "chain": "Solana", "tx": STANDARD.encode(message), "meta": "Solana" })
+}
+
 pub fn policy(btc: &BtcCap) -> Value {
     let usdc = decode_hex(evm_vector()["token"].as_str().unwrap());
     json!({
@@ -137,17 +267,24 @@ pub fn policy(btc: &BtcCap) -> Value {
               "per_tx": "50000000", "per_24h": "200000000", "queue_at": "25000000" },
             { "asset": { "EvmNative": { "chain_id": 84532 } },
               "per_tx": "10000000000000000", "per_24h": "50000000000000000",
-              "queue_at": "5000000000000000" }
+              "queue_at": "5000000000000000" },
+            { "asset": "Sol", "per_tx": "100000000", "per_24h": "500000000",
+              "queue_at": "50000000" },
+            { "asset": { "Spl": { "mint": SOL_USDC } },
+              "per_tx": "50000000", "per_24h": "200000000", "queue_at": "25000000" }
         ],
         "payees": [
             { "chain": "Bitcoin", "to": payee_script(), "label": "supplier" },
-            { "chain": "Evm", "to": vec![0xaau8; 20], "label": "supplier" }
+            { "chain": "Evm", "to": vec![0xaau8; 20], "label": "supplier" },
+            { "chain": "Solana", "to": SOL_PAYEE, "label": "supplier" },
+            { "chain": "Solana", "to": SOL_PAYEE_TOKENS, "label": "supplier USDC" }
         ],
         "btc_max_fee_rate": 1000,
         "btc_max_inputs": 8,
         "evm_chain_ids": [84532],
         "evm_max_gas_cost": "1000000000000000",
-        "veto_delay_ns": 120000000000u64
+        "veto_delay_ns": 120000000000u64,
+        "sol_max_fee": "100000"
     })
 }
 
@@ -182,6 +319,7 @@ pub async fn setup(btc: &BtcCap) -> anyhow::Result<Setup> {
             "paths": { "btc": "btc-vault-1", "evm": "evm-vault-1", "sol": "sol-vault-1" },
             "btc_pubkey": STANDARD.encode(PUBKEY),
             "evm_address": vec![9u8; 20],
+            "sol_pubkey": SOL_VAULT,
             "policy": policy(btc),
         }))
         .transact()

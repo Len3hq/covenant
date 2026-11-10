@@ -563,6 +563,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "covenant-adapter-solana"
+version = "0.1.0"
+dependencies = [
+ "covenant-policy",
+ "near-sdk",
+ "proptest",
+]
+
+[[package]]
 name = "covenant-factory"
 version = "0.1.0"
 dependencies = [
@@ -588,6 +597,7 @@ dependencies = [
 name = "covenant-mock-signer"
 version = "0.1.0"
 dependencies = [
+ "hex",
  "near-sdk",
 ]
 
@@ -604,6 +614,7 @@ version = "0.1.0"
 dependencies = [
  "covenant-adapter-bitcoin",
  "covenant-adapter-evm",
+ "covenant-adapter-solana",
  "covenant-policy",
  "hex",
  "near-sdk",

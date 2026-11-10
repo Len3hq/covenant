@@ -19,6 +19,7 @@ const BTC_PATH: &str = "btc-vault-1";
 const EVM_PATH: &str = "evm-vault-1";
 const SOL_PATH: &str = "sol-vault-1";
 const SECP256K1_DOMAIN: u32 = 0;
+const ED25519_DOMAIN: u32 = 1;
 
 const KEY_GAS: Gas = Gas::from_tgas(15);
 const NEW_GAS: Gas = Gas::from_tgas(60);
@@ -35,7 +36,9 @@ const MIN_DEPOSIT: NearToken = NearToken::from_millinear(1100);
 /// Well above the signer's answer, which is under 100 bytes.
 const MAX_KEY_LEN: usize = 256;
 const SECP256K1_TAG: u8 = 1;
+const ED25519_TAG: u8 = 0;
 const POINT_LEN: usize = 64;
+const ED25519_LEN: usize = 32;
 
 /// NEP-297 events. Each logs as `EVENT_JSON:{"standard":"covenant-factory",...}`.
 #[near(event_json(standard = "covenant-factory"))]
@@ -88,12 +91,27 @@ fn parse_point(answer: &[u8]) -> Option<[u8; POINT_LEN]> {
     point.try_into().ok()
 }
 
+/// The key in the signer's `ed25519:<base58>` answer, which is the vault's Solana address.
+fn parse_ed25519(answer: &[u8]) -> Option<[u8; ED25519_LEN]> {
+    let text: String = serde_json::from_slice(answer).ok()?;
+    let key: PublicKey = text.parse().ok()?;
+    let (tag, key) = key.as_bytes().split_first()?;
+    if *tag != ED25519_TAG {
+        return None;
+    }
+    key.try_into().ok()
+}
+
 fn key_result(index: u64) -> Option<[u8; POINT_LEN]> {
     parse_point(&env::promise_result_checked(index, MAX_KEY_LEN).ok()?)
 }
 
-fn derive_key(signer: &AccountId, path: &str, vault: &AccountId) -> Promise {
-    let args = json!({ "path": path, "predecessor": vault, "domain_id": SECP256K1_DOMAIN });
+fn ed25519_result(index: u64) -> Option<[u8; ED25519_LEN]> {
+    parse_ed25519(&env::promise_result_checked(index, MAX_KEY_LEN).ok()?)
+}
+
+fn derive_key(signer: &AccountId, path: &str, vault: &AccountId, domain_id: u32) -> Promise {
+    let args = json!({ "path": path, "predecessor": vault, "domain_id": domain_id });
     Promise::new(signer.clone()).function_call(
         "derived_public_key",
         args.to_string().into_bytes(),
@@ -146,8 +164,9 @@ impl CovenantFactory {
         if let Err(reason) = policy.validate() {
             env::panic_str(reason);
         }
-        derive_key(&self.signer, BTC_PATH, &vault)
-            .and(derive_key(&self.signer, EVM_PATH, &vault))
+        derive_key(&self.signer, BTC_PATH, &vault, SECP256K1_DOMAIN)
+            .and(derive_key(&self.signer, EVM_PATH, &vault, SECP256K1_DOMAIN))
+            .and(derive_key(&self.signer, SOL_PATH, &vault, ED25519_DOMAIN))
             .then(
                 Self::ext(env::current_account_id())
                     .with_static_gas(ON_KEYS_GAS)
@@ -166,7 +185,8 @@ impl CovenantFactory {
         policy: Policy,
         deposit: NearToken,
     ) -> PromiseOrValue<bool> {
-        let (Some(btc), Some(evm)) = (key_result(0), key_result(1)) else {
+        let (Some(btc), Some(evm), Some(sol)) = (key_result(0), key_result(1), ed25519_result(2))
+        else {
             return refund(vault, owner, deposit, "the signer gave no key");
         };
         let args = json!({
@@ -177,6 +197,7 @@ impl CovenantFactory {
             "paths": { "btc": BTC_PATH, "evm": EVM_PATH, "sol": SOL_PATH },
             "btc_pubkey": Base64VecU8(compressed(&btc).to_vec()),
             "evm_address": evm_address(&evm),
+            "sol_pubkey": sol,
             "policy": policy,
         });
         let balance = deposit.saturating_sub(REGISTRY_FEE);
@@ -332,6 +353,23 @@ mod tests {
         let ed25519 = serde_json::to_vec("ed25519:DHYDwovVbWb7Fhjm7HghjHmuMh5ZgYTtF1qJWWZ1YaEj");
         assert_eq!(parse_point(&ed25519.unwrap()), None);
         assert_eq!(parse_point(b"not json"), None);
+    }
+
+    /// The live signer's key for `covenant.len3hq.testnet` and `sol-vault-1`, read on 10 Nov.
+    #[test]
+    fn reads_the_solana_key_and_nothing_else() {
+        let answer = serde_json::to_vec("ed25519:GnSDBdzbso6EgokmsndtcYbDdH7Vg3kczwf1Ro4mZA6T");
+        let key = parse_ed25519(&answer.unwrap()).unwrap();
+        assert_eq!(
+            near_sdk::bs58::encode(key).into_string(),
+            "GnSDBdzbso6EgokmsndtcYbDdH7Vg3kczwf1Ro4mZA6T"
+        );
+        let secp = format!(
+            "secp256k1:{}",
+            near_sdk::bs58::encode(point()).into_string()
+        );
+        assert_eq!(parse_ed25519(&serde_json::to_vec(&secp).unwrap()), None);
+        assert_eq!(parse_ed25519(b"not json"), None);
     }
 
     #[test]

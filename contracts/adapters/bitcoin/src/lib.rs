@@ -1,7 +1,9 @@
 //! Bitcoin adapter: P2WPKH vault inputs, SIGHASH_ALL, allow-listed outputs, change to the vault.
 //! See docs/SPEC.md, "Bitcoin adapter spec", and corrections C1 and C2 in docs/BUILD_PLAN.md.
 
-use covenant_policy::{AssetId, ChainKind, CovenantError, ParsedTx, Payment, Policy, TxMeta};
+use covenant_policy::{
+    AssetId, ChainKind, CovenantError, ParsedTx, Payment, Policy, SignPayload, TxMeta,
+};
 use near_sdk::env;
 use near_sdk::json_types::U128;
 
@@ -311,7 +313,10 @@ pub fn parse(
         payments,
         fee: fee as u128,
         fee_asset: AssetId::Btc,
-        signing_hashes: sighashes(&unsigned, &amounts, &pubkey_hash),
+        signing_payloads: sighashes(&unsigned, &amounts, &pubkey_hash)
+            .into_iter()
+            .map(SignPayload::Ecdsa)
+            .collect(),
         vsize: vsize as u64,
     })
 }
@@ -319,6 +324,17 @@ pub fn parse(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn hashes(parsed: &ParsedTx) -> Vec<[u8; 32]> {
+        parsed
+            .signing_payloads
+            .iter()
+            .map(|payload| match payload {
+                SignPayload::Ecdsa(hash) => *hash,
+                SignPayload::Eddsa(_) => panic!("bitcoin signs hashes"),
+            })
+            .collect()
+    }
     use covenant_policy::Payee;
     use near_sdk::serde_json::{self, Value};
 
@@ -356,6 +372,7 @@ mod tests {
             evm_chain_ids: vec![84532],
             evm_max_gas_cost: U128(1),
             veto_delay_ns: 1,
+            sol_max_fee: U128(0),
         }
     }
 
@@ -736,9 +753,9 @@ mod tests {
             .iter()
             .map(|amount| amount.as_u64().unwrap())
             .collect();
-        let hashes = sighashes(&tx, &amounts, &hash160(&pubkey));
+        let computed = sighashes(&tx, &amounts, &hash160(&pubkey));
         assert_eq!(
-            hashes[official["input"].as_u64().unwrap() as usize].to_vec(),
+            computed[official["input"].as_u64().unwrap() as usize].to_vec(),
             hex_field(&official["sighash"])
         );
 
@@ -779,7 +796,7 @@ mod tests {
                 .iter()
                 .map(|hash| hex_field(hash).try_into().unwrap())
                 .collect();
-            assert_eq!(parsed.signing_hashes, expected, "{name}");
+            assert_eq!(hashes(&parsed), expected, "{name}");
         }
     }
 
@@ -821,14 +838,8 @@ mod tests {
         let parsed = run(&tx, &[&prev]).unwrap();
         let read = read_unsigned(&tx, 3).unwrap();
         let pubkey_hash = hash160(&PUBKEY);
-        assert_eq!(
-            parsed.signing_hashes,
-            sighashes(&read, &[100_000], &pubkey_hash)
-        );
-        assert_ne!(
-            parsed.signing_hashes,
-            sighashes(&read, &[100_001], &pubkey_hash)
-        );
+        assert_eq!(hashes(&parsed), sighashes(&read, &[100_000], &pubkey_hash));
+        assert_ne!(hashes(&parsed), sighashes(&read, &[100_001], &pubkey_hash));
     }
 
     proptest::proptest! {
@@ -858,7 +869,7 @@ mod tests {
                 proptest::prop_assert!(
                     parsed.fee <= policy().btc_max_fee_rate as u128 * parsed.vsize as u128
                 );
-                proptest::prop_assert_ne!(parsed.signing_hashes, allowed.signing_hashes.clone());
+                proptest::prop_assert_ne!(hashes(&parsed), hashes(&allowed));
             }
         }
     }

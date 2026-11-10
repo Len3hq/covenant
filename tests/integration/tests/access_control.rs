@@ -78,6 +78,7 @@ fn init_args(owner: &Account, guardian: &Account, agent: &Account) -> Value {
         "paths": { "btc": "btc-vault-1", "evm": "evm-vault-1", "sol": "sol-vault-1" },
         "btc_pubkey": STANDARD.encode(btc_pubkey),
         "evm_address": vec![9u8; 20],
+        "sol_pubkey": vec![5u8; 32],
         "policy": policy(50)
     })
 }

@@ -21,3 +21,7 @@ path = "../attacks/bitcoin.rs"
 [[test]]
 name = "attacks_evm"
 path = "../attacks/evm.rs"
+
+[[test]]
+name = "attacks_solana"
+path = "../attacks/solana.rs"

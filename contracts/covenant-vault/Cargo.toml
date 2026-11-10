@@ -15,6 +15,7 @@ hex.workspace = true
 covenant-policy.workspace = true
 covenant-adapter-bitcoin.workspace = true
 covenant-adapter-evm.workspace = true
+covenant-adapter-solana.workspace = true
 
 [dev-dependencies]
 near-sdk = { workspace = true, features = ["unit-testing"] }

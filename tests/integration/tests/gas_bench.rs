@@ -89,6 +89,29 @@ async fn measured_spends_fit_the_transaction_gas_limit() -> anyhow::Result<()> {
     );
     assert!(must_prepay <= TX_GAS_LIMIT_TGAS * TGAS);
 
+    for (name, message) in [
+        (
+            "Solana, SOL transfer",
+            SolMessage::new().sol(SOL_VAULT, SOL_PAYEE, 1_000_000),
+        ),
+        (
+            "Solana, USDC transfer with priority fee",
+            SolMessage::new()
+                .token(SOL_USDC, SOL_PAYEE_TOKENS, 1_000_000)
+                .priority(10_000, 1_000_000),
+        ),
+    ] {
+        let measured = measure(&s.agent, &s.vault, message.proposal(), 1).await?;
+        let must_prepay = required(measured.first_receipt, 1);
+        println!(
+            "| {name} | n/a | {} | {} | {} |",
+            tgas(measured.first_receipt),
+            tgas(must_prepay),
+            tgas(measured.total),
+        );
+        assert!(must_prepay <= TX_GAS_LIMIT_TGAS * TGAS);
+    }
+
     println!("wasm: vault {} bytes", wasm(VAULT_WASM)?.len());
     Ok(())
 }

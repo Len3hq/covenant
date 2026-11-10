@@ -36,13 +36,23 @@ pub struct Scalar {
 }
 
 #[near(serializers = [json])]
+#[serde(tag = "scheme")]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SignResponse {
-    pub scheme: String,
-    pub big_r: AffinePoint,
-    pub s: Scalar,
-    pub recovery_id: u8,
+pub enum SignResponse {
+    Secp256k1 {
+        big_r: AffinePoint,
+        s: Scalar,
+        recovery_id: u8,
+    },
+    Ed25519 {
+        signature: Vec<u8>,
+    },
 }
+
+const SECP256K1_DOMAIN: u32 = 0;
+const ED25519_DOMAIN: u32 = 1;
+/// The range the live signer documents for Eddsa payloads.
+const EDDSA_PAYLOAD: std::ops::RangeInclusive<usize> = 32..=1232;
 
 #[near(contract_state)]
 #[derive(Default)]
@@ -80,6 +90,9 @@ impl MockSigner {
             env::panic_str("mock signer: failing on demand");
         }
         let x = env::sha256(format!("{predecessor}/{path}/{domain_id}").as_bytes());
+        if domain_id == ED25519_DOMAIN {
+            return format!("ed25519:{}", near_sdk::bs58::encode(x).into_string());
+        }
         let point = [x.clone(), env::sha256(&x)].concat();
         format!("secp256k1:{}", near_sdk::bs58::encode(point).into_string())
     }
@@ -100,20 +113,33 @@ impl MockSigner {
         if self.fail || self.fail_after.is_some_and(|calls| self.calls >= calls) {
             env::panic_str("mock signer: failing on demand");
         }
-        let Payload::Ecdsa(payload) = request.payload_v2 else {
-            env::panic_str("mock signer: only Ecdsa is supported");
+        let response = match (request.payload_v2, request.domain_id) {
+            (Payload::Ecdsa(payload), SECP256K1_DOMAIN) => {
+                if payload.len() != 64 {
+                    env::panic_str("Ecdsa payload must be 32 bytes of hex");
+                }
+                SignResponse::Secp256k1 {
+                    big_r: AffinePoint {
+                        affine_point: format!("02{payload}"),
+                    },
+                    s: Scalar { scalar: payload },
+                    recovery_id: 0,
+                }
+            }
+            (Payload::Eddsa(payload), ED25519_DOMAIN) => {
+                let bytes = hex::decode(&payload)
+                    .unwrap_or_else(|_| env::panic_str("Eddsa payload must be hex"));
+                if !EDDSA_PAYLOAD.contains(&bytes.len()) {
+                    env::panic_str("Eddsa payload must be 32 to 1232 bytes");
+                }
+                let first = env::sha256(&bytes);
+                SignResponse::Ed25519 {
+                    signature: [first.clone(), env::sha256(&first)].concat(),
+                }
+            }
+            _ => env::panic_str("mock signer: payload doesn't match the domain"),
         };
-        if payload.len() != 64 {
-            env::panic_str("Ecdsa payload must be 32 bytes of hex");
-        }
         self.calls += 1;
-        SignResponse {
-            scheme: "Secp256k1".to_string(),
-            big_r: AffinePoint {
-                affine_point: format!("02{payload}"),
-            },
-            s: Scalar { scalar: payload },
-            recovery_id: 0,
-        }
+        response
     }
 }

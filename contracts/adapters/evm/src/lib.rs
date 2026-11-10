@@ -1,7 +1,7 @@
 //! EVM adapter: EIP-1559 only, native transfer or one exact ERC-20 `transfer`.
 //! See docs/SPEC.md, "EVM adapter spec".
 
-use covenant_policy::{AssetId, ChainKind, CovenantError, ParsedTx, Payment, Policy};
+use covenant_policy::{AssetId, ChainKind, CovenantError, ParsedTx, Payment, Policy, SignPayload};
 use near_sdk::env;
 use near_sdk::json_types::U128;
 
@@ -174,7 +174,7 @@ pub fn parse(tx: &[u8], policy: &Policy) -> Result<ParsedTx, CovenantError> {
         payments: vec![payment],
         fee: gas_cost,
         fee_asset: AssetId::EvmNative { chain_id },
-        signing_hashes: vec![env::keccak256_array(tx)],
+        signing_payloads: vec![SignPayload::Ecdsa(env::keccak256_array(tx))],
         vsize: 0,
     })
 }
@@ -249,6 +249,7 @@ mod tests {
             evm_chain_ids: vec![CHAIN],
             evm_max_gas_cost: U128(MAX_GAS_COST),
             veto_delay_ns: 1,
+            sol_max_fee: U128(0),
         }
     }
 
@@ -653,7 +654,11 @@ mod tests {
 
             let parsed = parse(&hex_field(&vector["serialized"]), &policy).unwrap();
             let hash: [u8; 32] = hex_field(&vector["hash"]).try_into().unwrap();
-            assert_eq!(parsed.signing_hashes, vec![hash], "{name}");
+            assert_eq!(
+                parsed.signing_payloads,
+                vec![SignPayload::Ecdsa(hash)],
+                "{name}"
+            );
             assert_eq!(
                 parsed.payments,
                 vec![Payment {
@@ -749,7 +754,7 @@ mod tests {
             if let Ok(parsed) = parse(&mutated, &policy()) {
                 proptest::prop_assert!(parsed.payments.iter().all(|p| p.to == PAYEE));
                 proptest::prop_assert!(parsed.fee <= MAX_GAS_COST);
-                proptest::prop_assert_ne!(parsed.signing_hashes, allowed.signing_hashes);
+                proptest::prop_assert_ne!(parsed.signing_payloads, allowed.signing_payloads);
             }
         }
     }

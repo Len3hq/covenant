@@ -4,7 +4,8 @@
 
 use covenant_adapter_bitcoin::BitcoinVault;
 use covenant_policy::{
-    AssetId, ChainKind, Charge, CovenantError, Decision, ParsedTx, Payment, Policy, TxMeta,
+    AssetCap, AssetId, ChainKind, Charge, CovenantError, Decision, ParsedTx, Payee, Payment,
+    Policy, SignPayload, TxMeta,
 };
 use near_sdk::json_types::{Base64VecU8, U128, U64};
 use near_sdk::serde_json::{self, json};
@@ -16,6 +17,8 @@ const NS_PER_24H: u64 = 86_400_000_000_000;
 const SIGN_GAS: Gas = Gas::from_tgas(30);
 const CALLBACK_GAS: Gas = Gas::from_tgas(20);
 const SECP256K1_DOMAIN: u32 = 0;
+const ED25519_DOMAIN: u32 = 1;
+const ED25519_SIGNATURE_LEN: usize = 64;
 /// Well above a signature's JSON, which is under 300 bytes.
 const MAX_SIGNATURE_LEN: usize = 1024;
 /// The vault pays for queue storage, so an agent must not be able to grow it without limit.
@@ -37,7 +40,7 @@ pub struct Pending {
     pub payments: Vec<Payment>,
     pub fee: U128,
     pub fee_asset: AssetId,
-    pub signing_hashes: Vec<[u8; 32]>,
+    pub signing_payloads: Vec<SignPayload>,
     pub vsize: u64,
     pub charges: Vec<Charge>,
     pub queued_at: U64,
@@ -50,7 +53,7 @@ impl Pending {
             payments: self.payments.clone(),
             fee: self.fee.0,
             fee_asset: self.fee_asset.clone(),
-            signing_hashes: self.signing_hashes.clone(),
+            signing_payloads: self.signing_payloads.clone(),
             vsize: self.vsize,
         }
     }
@@ -78,14 +81,29 @@ pub struct Scalar {
     pub scalar: String,
 }
 
-/// The signature returned by the MPC signer, as recorded in docs/SPIKE.md.
+/// A signature from the MPC signer, in the shapes recorded in docs/SPIKE.md: secp256k1 for Bitcoin
+/// and EVM, Ed25519 for Solana.
 #[near(serializers = [json])]
+#[serde(tag = "scheme")]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct MpcSignature {
-    pub scheme: String,
-    pub big_r: AffinePoint,
-    pub s: Scalar,
-    pub recovery_id: u8,
+pub enum MpcSignature {
+    Secp256k1 {
+        big_r: AffinePoint,
+        s: Scalar,
+        recovery_id: u8,
+    },
+    Ed25519 {
+        signature: Vec<u8>,
+    },
+}
+
+impl MpcSignature {
+    fn well_formed(&self) -> bool {
+        match self {
+            MpcSignature::Secp256k1 { .. } => true,
+            MpcSignature::Ed25519 { signature } => signature.len() == ED25519_SIGNATURE_LEN,
+        }
+    }
 }
 
 #[near(serializers = [json])]
@@ -107,6 +125,8 @@ pub enum SpendOutcome {
 pub struct Addresses {
     pub btc_pubkey: String,
     pub evm_address: String,
+    /// Base58, as Solana writes it.
+    pub sol_address: String,
 }
 
 #[near(serializers = [json])]
@@ -165,6 +185,37 @@ pub struct CovenantVault {
     ledger: LookupMap<AssetId, Vec<(u64, u128)>>,
     queue: IterableMap<u64, Pending>,
     next_id: u64,
+    sol_pubkey: [u8; 32],
+}
+
+/// The policy as stored before Solana support.
+#[near(serializers = [borsh])]
+struct PolicyV1 {
+    caps: Vec<AssetCap>,
+    payees: Vec<Payee>,
+    btc_max_fee_rate: u64,
+    btc_max_inputs: u8,
+    evm_chain_ids: Vec<u64>,
+    evm_max_gas_cost: U128,
+    veto_delay_ns: u64,
+}
+
+/// The vault's state before Solana support. Its queue values have the old shape, so `migrate`
+/// only accepts an empty queue and never reads one.
+#[near(serializers = [borsh])]
+struct VaultV1 {
+    owner: AccountId,
+    guardian: Option<AccountId>,
+    agent: AccountId,
+    signer: AccountId,
+    paths: Paths,
+    btc_pubkey: [u8; 33],
+    evm_address: [u8; 20],
+    policy: PolicyV1,
+    frozen: bool,
+    ledger: LookupMap<AssetId, Vec<(u64, u128)>>,
+    queue: IterableMap<u64, Pending>,
+    next_id: u64,
 }
 
 fn fail(error: CovenantError) -> ! {
@@ -189,6 +240,7 @@ impl CovenantVault {
         paths: Paths,
         btc_pubkey: Base64VecU8,
         evm_address: [u8; 20],
+        sol_pubkey: [u8; 32],
         policy: Policy,
     ) -> Self {
         checked_policy(&policy);
@@ -212,6 +264,53 @@ impl CovenantVault {
             ledger: LookupMap::new(b"l"),
             queue: IterableMap::new(b"q"),
             next_id: 0,
+            sol_pubkey,
+        }
+    }
+
+    /// Moves a vault deployed before Solana support to this code, in the same batch as the deploy.
+    /// Its policy gets `sol_max_fee` of zero, so Solana stays refused until the owner sets a policy
+    /// that allows it. The ledger, roles, freeze and spend ids carry over.
+    #[private]
+    #[init(ignore_state)]
+    pub fn migrate(sol_pubkey: [u8; 32]) -> Self {
+        let old: VaultV1 =
+            env::state_read().unwrap_or_else(|| env::panic_str("migrate: no state to migrate"));
+        if !old.queue.is_empty() {
+            env::panic_str("migrate: veto or execute every queued spend first");
+        }
+        let PolicyV1 {
+            caps,
+            payees,
+            btc_max_fee_rate,
+            btc_max_inputs,
+            evm_chain_ids,
+            evm_max_gas_cost,
+            veto_delay_ns,
+        } = old.policy;
+        Self {
+            owner: old.owner,
+            guardian: old.guardian,
+            agent: old.agent,
+            signer: old.signer,
+            paths: old.paths,
+            btc_pubkey: old.btc_pubkey,
+            evm_address: old.evm_address,
+            policy: Policy {
+                caps,
+                payees,
+                btc_max_fee_rate,
+                btc_max_inputs,
+                evm_chain_ids,
+                evm_max_gas_cost,
+                veto_delay_ns,
+                sol_max_fee: U128(0),
+            },
+            frozen: old.frozen,
+            ledger: old.ledger,
+            queue: old.queue,
+            next_id: old.next_id,
+            sol_pubkey,
         }
     }
 
@@ -283,7 +382,8 @@ impl CovenantVault {
         let signatures: Option<Vec<MpcSignature>> = (0..count)
             .map(|index| {
                 let bytes = env::promise_result_checked(index, MAX_SIGNATURE_LEN).ok()?;
-                serde_json::from_slice(&bytes).ok()
+                let signature: MpcSignature = serde_json::from_slice(&bytes).ok()?;
+                signature.well_formed().then_some(signature)
             })
             .collect();
         let event = SpendEvent {
@@ -414,6 +514,7 @@ impl CovenantVault {
         Addresses {
             btc_pubkey: hex::encode(self.btc_pubkey),
             evm_address: format!("0x{}", hex::encode(self.evm_address)),
+            sol_address: near_sdk::bs58::encode(self.sol_pubkey).into_string(),
         }
     }
 
@@ -449,7 +550,10 @@ impl CovenantVault {
             }
             (ChainKind::Evm, TxMeta::Evm) => covenant_adapter_evm::parse(tx, &self.policy),
             (ChainKind::Evm, _) => Err(CovenantError::MalformedTx),
-            (ChainKind::Solana, _) => env::panic_str("propose_spend: solana not implemented"),
+            (ChainKind::Solana, TxMeta::Solana) => {
+                covenant_adapter_solana::parse(tx, &self.policy, &self.sol_pubkey)
+            }
+            (ChainKind::Solana, _) => Err(CovenantError::MalformedTx),
         }
     }
 
@@ -468,7 +572,7 @@ impl CovenantVault {
             payments: parsed.payments,
             fee: U128(parsed.fee),
             fee_asset: parsed.fee_asset,
-            signing_hashes: parsed.signing_hashes,
+            signing_payloads: parsed.signing_payloads,
             vsize: parsed.vsize,
             charges,
             queued_at: U64(at),
@@ -514,16 +618,24 @@ impl CovenantVault {
             ChainKind::Evm => &self.paths.evm,
             ChainKind::Solana => &self.paths.sol,
         };
-        let count = parsed.signing_hashes.len() as u64;
+        let count = parsed.signing_payloads.len() as u64;
         parsed
-            .signing_hashes
+            .signing_payloads
             .iter()
-            .map(|hash| {
+            .map(|payload| {
+                let (payload, domain_id) = match payload {
+                    SignPayload::Ecdsa(hash) => {
+                        (json!({ "Ecdsa": hex::encode(hash) }), SECP256K1_DOMAIN)
+                    }
+                    SignPayload::Eddsa(message) => {
+                        (json!({ "Eddsa": hex::encode(&message.0) }), ED25519_DOMAIN)
+                    }
+                };
                 let args = json!({
                     "request": {
-                        "payload_v2": { "Ecdsa": hex::encode(hash) },
+                        "payload_v2": payload,
                         "path": path,
-                        "domain_id": SECP256K1_DOMAIN,
+                        "domain_id": domain_id,
                     }
                 });
                 Promise::new(self.signer.clone()).function_call(
@@ -634,6 +746,7 @@ mod tests {
             evm_chain_ids: vec![84532],
             evm_max_gas_cost: U128(1_000_000_000_000_000),
             veto_delay_ns: 120_000_000_000,
+            sol_max_fee: U128(0),
         }
     }
 
@@ -653,6 +766,7 @@ mod tests {
             },
             btc_pubkey.into(),
             [9u8; 20],
+            [5u8; 32],
             policy(100, 50),
         )
     }
@@ -666,7 +780,82 @@ mod tests {
             "recovery_id": 1
         }"#;
         let signature: MpcSignature = near_sdk::serde_json::from_str(live).unwrap();
-        assert_eq!(signature.recovery_id, 1);
+        assert!(matches!(
+            signature,
+            MpcSignature::Secp256k1 { recovery_id: 1, .. }
+        ));
+        assert_eq!(
+            near_sdk::serde_json::to_value(&signature).unwrap()["scheme"],
+            "Secp256k1"
+        );
+    }
+
+    /// From the Ed25519 spike on 10 Nov, BeX39ENFf3Ud1E95eoBqZAj1fo3U5F7TCpLD7D1wDms2.
+    #[test]
+    fn mpc_signature_parses_a_live_ed25519_response() {
+        let live = r#"{"scheme":"Ed25519","signature":[97,251,183,179,192,76,246,136,162,16,72,121,244,115,181,19,27,184,113,154,193,37,226,149,57,95,40,113,74,164,146,225,209,182,8,45,63,199,220,120,165,136,222,244,151,216,126,242,66,132,195,38,207,254,231,28,238,197,202,34,193,236,87,1]}"#;
+        let signature: MpcSignature = near_sdk::serde_json::from_str(live).unwrap();
+        assert!(signature.well_formed());
+        let short: MpcSignature =
+            near_sdk::serde_json::from_str(r#"{"scheme":"Ed25519","signature":[1,2,3]}"#).unwrap();
+        assert!(!short.well_formed());
+    }
+
+    #[test]
+    fn addresses_include_the_solana_key_in_base58() {
+        let addresses = vault().get_addresses();
+        assert_eq!(
+            addresses.sol_address,
+            near_sdk::bs58::encode([5u8; 32]).into_string()
+        );
+    }
+
+    #[test]
+    fn migrate_keeps_state_and_refuses_solana_until_the_owner_allows_it() {
+        call_as("vault.testnet");
+        let mut queue: IterableMap<u64, Pending> = IterableMap::new(b"q");
+        queue.flush();
+        let mut ledger = LookupMap::new(b"l");
+        ledger.insert(AssetId::Btc, vec![(1u64, 700u128)]);
+        ledger.flush();
+        let old = VaultV1 {
+            owner: account("owner.testnet"),
+            guardian: None,
+            agent: account("agent.testnet"),
+            signer: account("v1.signer-prod.testnet"),
+            paths: Paths {
+                btc: "btc-vault-1".into(),
+                evm: "evm-vault-1".into(),
+                sol: "sol-vault-1".into(),
+            },
+            btc_pubkey: [2; 33],
+            evm_address: [9; 20],
+            policy: PolicyV1 {
+                caps: policy(100, 50).caps,
+                payees: vec![],
+                btc_max_fee_rate: 50,
+                btc_max_inputs: 3,
+                evm_chain_ids: vec![84532],
+                evm_max_gas_cost: U128(1),
+                veto_delay_ns: 7,
+            },
+            frozen: true,
+            ledger,
+            queue,
+            next_id: 42,
+        };
+        env::state_write(&old);
+        let vault = CovenantVault::migrate([5; 32]);
+        assert_eq!(vault.next_id, 42);
+        assert!(vault.is_frozen());
+        assert_eq!(vault.get_policy().veto_delay_ns, 7);
+        assert_eq!(vault.get_policy().sol_max_fee, U128(0));
+        assert_eq!(vault.get_roles().owner, account("owner.testnet"));
+        assert_eq!(
+            vault.ledger.get(&AssetId::Btc).cloned(),
+            Some(vec![(1, 700)])
+        );
+        assert_eq!(vault.sol_pubkey, [5; 32]);
     }
 
     #[test]
@@ -742,11 +931,19 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "solana not implemented")]
-    fn solana_fails_closed() {
+    #[should_panic(expected = "MalformedTx")]
+    fn solana_garbage_panics() {
         let mut vault = vault();
         call_as("agent.testnet");
         let _ = vault.propose_spend(ChainKind::Solana, vec![].into(), TxMeta::Solana);
+    }
+
+    #[test]
+    #[should_panic(expected = "MalformedTx")]
+    fn solana_with_evm_meta_panics() {
+        let mut vault = vault();
+        call_as("agent.testnet");
+        let _ = vault.propose_spend(ChainKind::Solana, vec![].into(), TxMeta::Evm);
     }
 
     #[test]

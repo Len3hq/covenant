@@ -80,6 +80,11 @@ both ([EVIDENCE.md](EVIDENCE.md)).
 - **The agent spends the vault's own unconfirmed change.** Others' unconfirmed coins are refused,
   because their senders could replace them. This is the agent's choice; the contract doesn't see
   confirmations.
+- **A Solana message names no cluster.** Nothing in it says devnet or mainnet. It can only land
+  where its nonce account exists with that nonce value, which ties it to one cluster in practice.
+- **Solana token payees are token accounts.** The contract can't derive an associated token account
+  without curve arithmetic, so the owner lists the payee's token account itself. The SDK and
+  dashboard derive it from the payee's wallet.
 - **Unaudited.** For testnets only.
 
 ## Invariant to test map
@@ -96,4 +101,7 @@ Each row moves to "Passing" when all of its named tests pass in CI.
 | Large spends wait out the veto window | `queued_spend_not_executable_before_delay`, `vetoed_spend_cannot_execute`, `execute_rechecks_tightened_policy` | Passing |
 | Agent can't escalate; freeze stops everything | `agent_key_cannot_call_set_policy`, `frozen_blocks_propose_and_execute`, `guardian_can_freeze_not_unfreeze` | Passing |
 | A factory vault belongs to its creator, can't change, and refunds on failure | the 7 tests in `tests/integration/tests/factory.rs`, and `derives_the_published_addresses_for_a_known_key` | Passing |
-| A hijacked agent's attacks never reach the signer | the 13 tests in `tests/attacks/bitcoin.rs` and 14 in `tests/attacks/evm.rs` | Passing |
+| Solana: only a durable-nonce message from the vault alone, moving SOL or a capped SPL token | `sol_accepts_system_transfer`, `sol_accepts_usdc_transfer_checked`, `sol_rejects_unknown_program`, `sol_rejects_token_2022`, `sol_rejects_spl_approve_and_close`, `sol_rejects_v0_with_lookup_tables`, `sol_rejects_missing_nonce_advance`, `sol_rejects_a_second_signer_or_readonly_payer`, `sol_rejects_transfer_from_another_account` | Passing |
+| Solana: priority fees bounded, and the vault signs exactly the bytes it checked | `sol_rejects_priority_fee_above_cap`, `sol_signs_exactly_the_checked_message`, `prop_mutated_solana_message_never_pays_elsewhere`, `solana_spend_signs_the_message_the_contract_checked` | Passing |
+| A vault from before Solana support moves to the new code without losing state, and refuses Solana until its owner allows it | `migrate_keeps_state_and_refuses_solana_until_the_owner_allows_it`, `policy_without_a_solana_fee_cap_refuses_solana` | Passing |
+| A hijacked agent's attacks never reach the signer | the 13 tests in `tests/attacks/bitcoin.rs`, 14 in `tests/attacks/evm.rs` and 15 in `tests/attacks/solana.rs` | Passing |

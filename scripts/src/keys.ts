@@ -1,3 +1,4 @@
+import { ed25519 } from "@noble/curves/ed25519.js";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { ripemd160 } from "@noble/hashes/legacy.js";
 import { sha256 } from "@noble/hashes/sha2.js";
@@ -5,6 +6,7 @@ import { keccak_256 } from "@noble/hashes/sha3.js";
 import { base58, bech32, hex } from "@scure/base";
 
 const NEAR_SECP_PREFIX = "secp256k1:";
+const NEAR_ED25519_PREFIX = "ed25519:";
 
 /** Decodes a NEAR `secp256k1:<base58>` key, which is the 64-byte `x || y` point. */
 export function parseNearSecp256k1(key: string): Uint8Array {
@@ -13,6 +15,20 @@ export function parseNearSecp256k1(key: string): Uint8Array {
   if (point.length !== 64) throw new Error(`expected 64 bytes, got ${point.length}`);
   return point;
 }
+
+/** Decodes a NEAR `ed25519:<base58>` key. Its 32 bytes, in base58, are the Solana address. */
+export function parseNearEd25519(key: string): Uint8Array {
+  if (!key.startsWith(NEAR_ED25519_PREFIX)) throw new Error(`not an ed25519 key: ${key}`);
+  const bytes = base58.decode(key.slice(NEAR_ED25519_PREFIX.length));
+  if (bytes.length !== 32) throw new Error(`expected 32 bytes, got ${bytes.length}`);
+  return bytes;
+}
+
+export const solanaAddress = (key: Uint8Array): string => base58.encode(key);
+
+/** An Ed25519 signature from the MPC signer, which signs the message itself. */
+export const verifyMpcEd25519 = (signature: number[], message: Uint8Array, key: Uint8Array): boolean =>
+  ed25519.verify(Uint8Array.from(signature), message, key);
 
 export function compressPubkey(point: Uint8Array): Uint8Array {
   const y = point[63];

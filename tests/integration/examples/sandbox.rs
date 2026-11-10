@@ -14,6 +14,8 @@ const POLICY: &str = "../../scripts/policy.testnet.json";
 /// The public key for secret key 1, so the demo's Bitcoin and EVM addresses are valid ones.
 const BTC_PUBKEY: &str = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
 const EVM_ADDRESS: &str = "7e5f4552091a69125d5dfcb7b8c2659029395bdf";
+/// RFC 8032 test 1. The mock signer never uses it; it only gives the vault a Solana address.
+const SOL_PUBKEY: &str = "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a";
 
 fn read(path: &str) -> anyhow::Result<Vec<u8>> {
     std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join(path))
@@ -58,6 +60,7 @@ async fn main() -> anyhow::Result<()> {
             "paths": { "btc": "btc-vault-1", "evm": "evm-vault-1", "sol": "sol-vault-1" },
             "btc_pubkey": STANDARD.encode(decode_hex(BTC_PUBKEY)),
             "evm_address": decode_hex(EVM_ADDRESS),
+            "sol_pubkey": decode_hex(SOL_PUBKEY),
             "policy": policy,
         }))
         .transact()

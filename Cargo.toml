@@ -6,6 +6,7 @@ members = [
     "contracts/policy",
     "contracts/adapters/bitcoin",
     "contracts/adapters/evm",
+    "contracts/adapters/solana",
     "tests/integration",
     "tests/mock-signer",
 ]
@@ -21,6 +22,7 @@ hex = "0.4"
 covenant-policy = { path = "contracts/policy" }
 covenant-adapter-bitcoin = { path = "contracts/adapters/bitcoin" }
 covenant-adapter-evm = { path = "contracts/adapters/evm" }
+covenant-adapter-solana = { path = "contracts/adapters/solana" }
 
 [profile.release]
 codegen-units = 1

@@ -9,6 +9,7 @@ console.log(
       btc_address: keys.btcAddress,
       btc_pubkey: hex.encode(keys.btcPubkey),
       evm_address: keys.evmAddress,
+      sol_address: keys.solAddress,
     },
     null,
     2,

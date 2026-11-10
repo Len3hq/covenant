@@ -181,6 +181,20 @@ async fn factory_gives_each_vault_its_own_addresses_from_the_signer() -> anyhow:
         .json()?;
     assert_ne!(one["btc_pubkey"], two["btc_pubkey"]);
     assert_ne!(one["evm_address"], two["evm_address"]);
+    assert_ne!(one["sol_address"], two["sol_address"]);
+    // The Solana address is the signer's Ed25519 key for the vault, not one the caller chose.
+    let key: String = s
+        .signer
+        .view("derived_public_key")
+        .args_json(
+            json!({ "path": "sol-vault-1", "predecessor": s.vault_id("one"), "domain_id": 1 }),
+        )
+        .await?
+        .json()?;
+    assert_eq!(
+        format!("ed25519:{}", one["sol_address"].as_str().unwrap()),
+        key
+    );
     Ok(())
 }
 

@@ -5,9 +5,38 @@ import {
   evmAddress,
   type MpcEcdsaSignature,
   p2wpkhAddress,
+  parseNearEd25519,
   parseNearSecp256k1,
+  solanaAddress,
+  verifyMpcEd25519,
   verifyMpcSignature,
 } from "./keys.ts";
+
+// A real Ed25519 response from v1.signer-prod.testnet, requested by len3hq.testnet on path
+// sol-spike-1. Transaction BeX39ENFf3Ud1E95eoBqZAj1fo3U5F7TCpLD7D1wDms2.
+const ED_KEY = parseNearEd25519("ed25519:9ojZDfccWSPQ9xjaFBhHZqTgeP3xiErzRo8pSpfh7rog");
+const ED_MESSAGE = new TextEncoder().encode("covenant solana spike ".repeat(4)).slice(0, 80);
+const ED_SIGNATURE = [
+  97, 251, 183, 179, 192, 76, 246, 136, 162, 16, 72, 121, 244, 115, 181, 19, 27, 184, 113, 154, 193, 37, 226, 149,
+  57, 95, 40, 113, 74, 164, 146, 225, 209, 182, 8, 45, 63, 199, 220, 120, 165, 136, 222, 244, 151, 216, 126, 242,
+  66, 132, 195, 38, 207, 254, 231, 28, 238, 197, 202, 34, 193, 236, 87, 1,
+];
+
+describe("verifyMpcEd25519", () => {
+  it("accepts a real MPC signature over the whole message", () => {
+    expect(verifyMpcEd25519(ED_SIGNATURE, ED_MESSAGE, ED_KEY)).toBe(true);
+  });
+
+  it("rejects it for another message", () => {
+    const tampered = Uint8Array.from(ED_MESSAGE, (byte, index) => (index === 0 ? byte ^ 1 : byte));
+    expect(verifyMpcEd25519(ED_SIGNATURE, tampered, ED_KEY)).toBe(false);
+  });
+
+  it("writes the key as a Solana address", () => {
+    expect(solanaAddress(ED_KEY)).toBe("9ojZDfccWSPQ9xjaFBhHZqTgeP3xiErzRo8pSpfh7rog");
+    expect(() => parseNearEd25519("secp256k1:abc")).toThrow();
+  });
+});
 
 // secp256k1 generator: the key for private key 1, which has well-known addresses.
 const GENERATOR = hex.decode(

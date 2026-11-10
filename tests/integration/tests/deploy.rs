@@ -37,6 +37,7 @@ async fn vault_deploys_and_answers_views() -> anyhow::Result<()> {
             "paths": { "btc": "btc-vault-1", "evm": "evm-vault-1", "sol": "sol-vault-1" },
             "btc_pubkey": STANDARD.encode(btc_pubkey),
             "evm_address": vec![9u8; 20],
+            "sol_pubkey": vec![5u8; 32],
             "policy": {
                 "caps": [{ "asset": "Btc", "per_tx": "100000", "per_24h": "500000", "queue_at": "50000" }],
                 "payees": [],

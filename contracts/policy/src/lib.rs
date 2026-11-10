@@ -37,16 +37,26 @@ pub struct Payment {
     pub amount: U128,
 }
 
+/// What the MPC signer is asked to sign. Bitcoin and EVM sign a 32-byte hash the adapter computed;
+/// Solana's Ed25519 signs the whole message the adapter checked, so nothing else can be signed in
+/// its place.
+#[near(serializers = [borsh, json])]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SignPayload {
+    Ecdsa([u8; 32]),
+    Eddsa(Base64VecU8),
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ParsedTx {
     /// External outputs only; Bitcoin change is removed.
     pub payments: Vec<Payment>,
-    /// Sats, or max wei.
+    /// Sats, max wei, or max lamports.
     pub fee: u128,
     /// The asset the fee is paid in, which for an ERC-20 spend differs from the payment's.
     pub fee_asset: AssetId,
-    /// One per Bitcoin input; one for EVM.
-    pub signing_hashes: Vec<[u8; 32]>,
+    /// One per Bitcoin input; one for EVM and Solana.
+    pub signing_payloads: Vec<SignPayload>,
     /// Bitcoin virtual size, which the fee-rate cap needs. Zero on EVM.
     pub vsize: u64,
 }
@@ -98,6 +108,10 @@ pub struct Policy {
     pub evm_max_gas_cost: U128,
     /// Demo: 120 s. Real: 24 h.
     pub veto_delay_ns: u64,
+    /// Lamports: the base fee plus the most the priority fee can cost. A policy written before
+    /// Solana support leaves it out, and zero refuses every Solana spend.
+    #[serde(default)]
+    pub sol_max_fee: U128,
 }
 
 impl Policy {
@@ -230,7 +244,7 @@ pub fn recheck_parsed(
     }
     match (chain, &parsed.fee_asset) {
         (ChainKind::Bitcoin, _) => {
-            if parsed.signing_hashes.len() > policy.btc_max_inputs as usize {
+            if parsed.signing_payloads.len() > policy.btc_max_inputs as usize {
                 return Err(CovenantError::TooManyInputs);
             }
             if parsed.fee > policy.btc_max_fee_rate as u128 * parsed.vsize as u128 {
@@ -243,6 +257,11 @@ pub fn recheck_parsed(
             }
             if parsed.fee > policy.evm_max_gas_cost.0 {
                 return Err(CovenantError::GasCostTooHigh);
+            }
+        }
+        (ChainKind::Solana, AssetId::Sol) => {
+            if parsed.fee > policy.sol_max_fee.0 {
+                return Err(CovenantError::FeeTooHigh);
             }
         }
         _ => return Err(CovenantError::MalformedTx),
@@ -280,6 +299,7 @@ mod tests {
             evm_chain_ids: vec![84532],
             evm_max_gas_cost: U128(1_000_000_000_000_000),
             veto_delay_ns: 120_000_000_000,
+            sol_max_fee: U128(100_000),
         }
     }
 
@@ -295,7 +315,7 @@ mod tests {
                 .collect(),
             fee,
             fee_asset: AssetId::Btc,
-            signing_hashes: vec![[0; 32]],
+            signing_payloads: vec![SignPayload::Ecdsa([0; 32])],
             vsize: 100,
         }
     }
@@ -391,7 +411,7 @@ mod tests {
             }],
             fee: 5,
             fee_asset: gas.clone(),
-            signing_hashes: vec![[0; 32]],
+            signing_payloads: vec![SignPayload::Ecdsa([0; 32])],
             vsize: 0,
         };
         let mut token_cap = cap(100, 500, 50);
@@ -450,7 +470,7 @@ mod tests {
             }],
             fee: 5,
             fee_asset: AssetId::EvmNative { chain_id: 84532 },
-            signing_hashes: vec![[0; 32]],
+            signing_payloads: vec![SignPayload::Ecdsa([0; 32])],
             vsize: 0,
         };
         let mut rules = policy(vec![]);
@@ -473,6 +493,51 @@ mod tests {
             recheck_parsed(ChainKind::Evm, &spend, &lower_gas),
             Err(CovenantError::GasCostTooHigh)
         );
+    }
+
+    #[test]
+    fn recheck_catches_each_tightened_solana_rule() {
+        let spend = ParsedTx {
+            payments: vec![Payment {
+                asset: AssetId::Sol,
+                to: vec![0xaa; 32],
+                amount: U128(40),
+            }],
+            fee: 5_000,
+            fee_asset: AssetId::Sol,
+            signing_payloads: vec![SignPayload::Eddsa(vec![1; 100].into())],
+            vsize: 0,
+        };
+        let mut rules = policy(vec![]);
+        rules.payees = vec![Payee {
+            chain: ChainKind::Solana,
+            to: vec![0xaa; 32],
+            label: "supplier".into(),
+        }];
+        assert_eq!(recheck_parsed(ChainKind::Solana, &spend, &rules), Ok(()));
+
+        let mut other_chain = rules.clone();
+        other_chain.payees[0].chain = ChainKind::Evm;
+        assert_eq!(
+            recheck_parsed(ChainKind::Solana, &spend, &other_chain),
+            Err(CovenantError::OutputNotWhitelisted)
+        );
+        let mut lower_fee = rules;
+        lower_fee.sol_max_fee = U128(4_999);
+        assert_eq!(
+            recheck_parsed(ChainKind::Solana, &spend, &lower_fee),
+            Err(CovenantError::FeeTooHigh)
+        );
+    }
+
+    #[test]
+    fn policy_without_a_solana_fee_cap_refuses_solana() {
+        let old = near_sdk::serde_json::json!({
+            "caps": [], "payees": [], "btc_max_fee_rate": 50, "btc_max_inputs": 3,
+            "evm_chain_ids": [84532], "evm_max_gas_cost": "1", "veto_delay_ns": 1u64,
+        });
+        let policy: Policy = near_sdk::serde_json::from_value(old).unwrap();
+        assert_eq!(policy.sol_max_fee, U128(0));
     }
 
     #[test]
