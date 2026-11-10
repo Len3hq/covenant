@@ -18,17 +18,35 @@ const SIGN_WAIT_MS = 60_000;
 const RECOVER_TIMEOUT_MS = 120_000;
 const RECOVER_POLL_MS = 3_000;
 
+const ecdsaSchema = z.object({
+  big_r: z.object({ affine_point: z.string() }),
+  s: z.object({ scalar: z.string() }),
+  recovery_id: z.number(),
+});
+const eddsaSchema = z.object({
+  scheme: z.literal("Ed25519"),
+  signature: z.array(z.number().int().min(0).max(255)),
+});
+
+/** A Bitcoin or EVM signature. */
+export type EcdsaSignature = z.infer<typeof ecdsaSchema>;
+/** A Solana signature over the whole message. */
+export type EddsaSignature = z.infer<typeof eddsaSchema>;
+export type VaultSignature = EcdsaSignature | EddsaSignature;
+
+/** Bitcoin and EVM spends are signed with secp256k1; an Ed25519 one is a mismatch to stop on. */
+export function ecdsa(signatures: VaultSignature[]): EcdsaSignature[] {
+  return signatures.map((signature) => {
+    if ("signature" in signature) throw new Error("expected a secp256k1 signature, got Ed25519");
+    return signature;
+  });
+}
+
 const outcomeSchema = z.union([
   z.object({
     Signed: z.object({
       id: z.string(),
-      signatures: z.array(
-        z.object({
-          big_r: z.object({ affine_point: z.string() }),
-          s: z.object({ scalar: z.string() }),
-          recovery_id: z.number(),
-        }),
-      ),
+      signatures: z.array(z.union([eddsaSchema, ecdsaSchema])),
     }),
   }),
   z.object({ Queued: z.object({ id: z.string(), executable_at: z.string() }) }),
@@ -54,8 +72,11 @@ export interface VaultClient {
   btcPubkey(): Promise<Uint8Array>;
   btcLimits(): Promise<{ maxInputs: number; maxFeeRate: bigint }>;
   evmAddress(): Promise<string>;
+  /** The vault's Ed25519 key, whose base58 is its Solana address. */
+  solPubkey(): Promise<Uint8Array>;
   proposeBitcoin(proposal: BitcoinProposal, beforeSend?: BeforeSend): Promise<Proposed>;
   proposeEvm(tx: Uint8Array, beforeSend?: BeforeSend): Promise<Proposed>;
+  proposeSolana(message: Uint8Array, beforeSend?: BeforeSend): Promise<Proposed>;
 }
 
 export interface PolicyPayee {
@@ -159,6 +180,11 @@ export function connectVault(config: {
       const { evm_address } = await view<{ evm_address: string }>("get_addresses");
       return evm_address;
     },
+    async solPubkey() {
+      const { sol_address } = await view<{ sol_address?: string }>("get_addresses");
+      if (!sol_address) throw new Error(`${config.vault} runs code from before Solana support`);
+      return base58.decode(sol_address);
+    },
     proposeBitcoin: ({ tx, prevTxs }, beforeSend) =>
       send(
         "propose_spend",
@@ -171,6 +197,8 @@ export function connectVault(config: {
       ),
     proposeEvm: (tx, beforeSend) =>
       send("propose_spend", { chain: "Evm", tx: base64(tx), meta: "Evm" }, beforeSend),
+    proposeSolana: (message, beforeSend) =>
+      send("propose_spend", { chain: "Solana", tx: base64(message), meta: "Solana" }, beforeSend),
     async payees() {
       return (await view<{ payees: PolicyPayee[] }>("get_policy")).payees;
     },

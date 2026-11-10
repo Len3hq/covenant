@@ -106,6 +106,10 @@ Those additions are in the [test tracker](#named-test-tracker). They also give t
 | C13 | Queue entries are specified as "raw tx ≤ 2 KB", but `execute` also needs each input's amounts, which come from prev txs that could be far larger. | Store the parsed payments, fee and signing hashes in `Pending`, and re-check those. Don't store prev txs. The current `Pending` struct is a placeholder. | M5 |
 | C14 | The Makefile list has no `demo` target, though the done-check runs `make demo`. | Added. It runs all three scenarios. | Done |
 | C16 | The spec has the agent spend confirmed coins only. Testnet4 blocks are about 20 minutes apart and each payment's change is unconfirmed, so a second payment in that window finds nothing to spend. | The agent also spends unconfirmed change from the vault's own payments, and still refuses anyone else's unconfirmed coins. | Done |
+| C17 | The Solana spec has no fee cap in `Policy`, no error for a message paid for by someone else, and a `TxMeta::Solana` with nothing to carry. | `Policy.sol_max_fee` in lamports, read as zero when absent so old policies refuse Solana. A fee payer or transfer source that isn't the vault returns `InputNotOwned`; a fee over the cap returns `FeeTooHigh`. `TxMeta::Solana` stays empty. | Done |
+| C18 | "Destination ATA allow-listed" needs the contract to derive a token account, which takes curve arithmetic it doesn't have. | The owner lists the payee's token account itself. The SDK and dashboard derive it from the wallet, and the create form lists both. Token-2022 is refused, since its hooks and fees make a transfer do more than it says. | Done |
+| C19 | A queued spend's durable nonce is invalidated by any other message that advances it. | Each unfinished Solana spend holds one nonce account, as Bitcoin spends hold their coins. `make sol-nonce` adds more. | Done |
+| C20 | New vault state can't be read by the code already on `covenant.len3hq.testnet`. | `migrate(sol_pubkey)` runs in the same batch as the deploy, needs an empty queue, and leaves `sol_max_fee` at zero. Factory vaults can't change their code, so Solana needs a new factory. | Done |
 | C15 | `ChangeNotToVault` can't fire under Bitcoin rule 3. Nothing in a transaction marks an output as change, so change sent to a foreign script is just an unlisted output. | That case returns `OutputNotWhitelisted`, and `btc_rejects_change_to_foreign_script` asserts it. Say so in the README and video. The variant stays unused. | Done |
 
 ### Already changed in the scaffold
@@ -116,7 +120,7 @@ Those additions are in the [test tracker](#named-test-tracker). They also give t
 | `btc_pubkey: [u8; 33]` in `new` | `Base64VecU8`, validated to 33 compressed bytes | serde arrays stop at 32 elements |
 | Node 20 | Node 22 | Node 20 reached end of life in April 2026 |
 | `policy` crate is no_std-friendly | Depends on `near-sdk` for serialization only | Keeps ABI generation simple; the logic stays pure |
-| Solana crate in the layout | README only, not a workspace member | Stretch work starts after gate 3 |
+| Solana crate in the layout | A workspace member since 10 Nov | Built after the Ed25519 spike below |
 
 ### Verified facts
 
@@ -133,6 +137,7 @@ Checked on 2 Nov 2026. Use these instead of the matching "verify" notes in the s
 | `domain_id` | 0 is secp256k1 (Bitcoin and EVM), 1 is Ed25519 | Live `state` view, [spike](SPIKE.md) |
 | Signature format | `s` is already low-s; `r` is bytes 1 to 33 of compressed `big_r` | MPC docs |
 | Solana payload size | Eddsa accepts 32 to 1232 bytes, so the spec's 32-byte worry doesn't apply | MPC docs |
+| Ed25519 signing | `domain_id` 1 signs the raw message and returns `{"scheme":"Ed25519","signature":[64 bytes]}`, which verifies against `derived_public_key` for domain 1 | [BeX39ENF…](https://testnet.nearblocks.io/txns/BeX39ENFf3Ud1E95eoBqZAj1fo3U5F7TCpLD7D1wDms2), 10 Nov, checked in `scripts/src/keys.test.ts` |
 | Base Sepolia USDC | `0x036CbD53842c5426634e7929541eC2318f3dCF7e` returns symbol `USDC`, 6 decimals | Live `eth_call` |
 | Testnet4 API | Responding; tip at height 158613; all fee rates 1 sat/vB | Live request |
 | Toolchain | Rust 1.99.0, near-sdk 5.30.0 and cargo-near 0.22.0 build a 208 KB wasm that deploys and runs in the sandbox | `vault_deploys_and_answers_views` |
@@ -347,6 +352,8 @@ Passed on 6 Nov: `make demo` passes all three with no `.env` at all, in about 8 
 - [ ] **Lead:** make the repo public after a final gitleaks run (D3), and settle D8
 - [ ] **All:** tag `rc1` at end of day. Bug fixes only after this
 - [ ] Stretch only if gate 3 passed, in this order: Solana, then Heirloom, then the TEE reviewer
+  - [x] Solana: adapter, Ed25519 signing, factory key, SDK, MCP, dashboard and tests (10 Nov)
+  - [ ] Solana live: migrate the vault, publish the new code and factory, and land a devnet payment
 
 **Exit check:** `main` tagged `rc1`, and the repo is public.
 

@@ -3,6 +3,10 @@ import { createPublicClient, erc20Abi, getAddress, http, type Address } from "vi
 import { Mempool } from "./bitcoin/mempool.js";
 import type { EvmChain } from "./evm/pay.js";
 import type { Broadcasters } from "./payer.js";
+import { associatedTokenAccount } from "./solana/message.js";
+import type { SolanaDeps } from "./solana/pay.js";
+import { SolanaRpc } from "./solana/rpc.js";
+import { base58 } from "@scure/base";
 import { connectVault, type AgentVault } from "./vault.js";
 
 /** Public testnet endpoints. Each can be replaced. */
@@ -12,6 +16,9 @@ export const TESTNET = {
   evmRpcUrl: "https://sepolia.base.org",
   evmChainId: 84532,
   usdc: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+  solRpcUrl: "https://api.devnet.solana.com",
+  /** Circle's devnet USDC. */
+  solUsdcMint: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
 } as const;
 
 export interface ConnectOptions {
@@ -26,12 +33,21 @@ export interface ConnectOptions {
   evmRpcUrl?: string;
   evmChainId?: number;
   usdc?: string;
+  solRpcUrl?: string;
+  solUsdcMint?: string;
+  /**
+   * Durable nonce accounts whose authority is the vault, from `make sol-nonce`. Solana payments need
+   * at least one, and each unfinished payment holds one.
+   */
+  solNonceAccounts?: string[];
 }
 
 export interface ChainReads {
   btcBalance(): Promise<bigint>;
   ethBalance(): Promise<bigint>;
   tokenBalance(): Promise<bigint>;
+  solBalance(): Promise<bigint>;
+  solTokenBalance(): Promise<bigint>;
 }
 
 /** The vault, Bitcoin testnet4 and Base Sepolia, wired together. */
@@ -53,6 +69,15 @@ export function connectTestnet(options: ConnectOptions) {
     broadcast: (serializedTransaction) => client.sendRawTransaction({ serializedTransaction }),
   };
   const evmAddress = async () => (await vault.evmAddress()) as Address;
+  const solRpc = new SolanaRpc(options.solRpcUrl ?? TESTNET.solRpcUrl);
+  const solUsdcMint = base58.decode(options.solUsdcMint ?? TESTNET.solUsdcMint);
+  const solana: SolanaDeps = {
+    rpc: solRpc,
+    vaultKey: () => vault.solPubkey(),
+    nonceAccounts: options.solNonceAccounts ?? [],
+    usdcMint: solUsdcMint,
+  };
+  const solAddress = async () => base58.encode(await vault.solPubkey());
   const btcAddress = async () => {
     const own = payments.p2wpkh({ pubkey: await vault.btcPubkey(), network: networks.testnet }).address;
     if (!own) throw new Error("could not derive the vault address");
@@ -66,6 +91,7 @@ export function connectTestnet(options: ConnectOptions) {
       await client.waitForTransactionReceipt({ hash });
       return hash;
     },
+    solana: (signedHex) => solRpc.sendAndConfirm(Buffer.from(signedHex, "hex")),
   };
   const reads: ChainReads = {
     async btcBalance() {
@@ -75,6 +101,9 @@ export function connectTestnet(options: ConnectOptions) {
     ethBalance: async () => client.getBalance({ address: await evmAddress() }),
     tokenBalance: async () =>
       client.readContract({ address: usdc, abi: erc20Abi, functionName: "balanceOf", args: [await evmAddress()] }),
+    solBalance: async () => solRpc.balance(await vault.solPubkey()),
+    solTokenBalance: async () =>
+      solRpc.tokenBalance(associatedTokenAccount(await vault.solPubkey(), solUsdcMint)),
   };
-  return { vault, mempool, chain, usdc, broadcast, reads, btcAddress, evmAddress };
+  return { vault, mempool, chain, usdc, broadcast, reads, btcAddress, evmAddress, solana, solAddress };
 }

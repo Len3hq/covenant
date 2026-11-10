@@ -304,6 +304,8 @@ The adapter accepts two transaction shapes and refuses everything else: a plain 
 
 ## Solana adapter spec (stretch, start only after 12 Nov freeze is safe)
 
+> Built on 10 Nov. Corrections C17 to C20 in [BUILD_PLAN.md](BUILD_PLAN.md#spec-corrections) win where they differ.
+
 Solana is worth adding only if a durable-nonce transfer signs and lands on devnet in the first half-day. Otherwise skip it and mention it under "next steps".
 
 - **Accepted message:** legacy format only. Versioned v0 messages with address lookup tables → `MalformedTx`, because the accounts they reference can't be checked. The fee payer (account 0) is the vault's Ed25519 address.

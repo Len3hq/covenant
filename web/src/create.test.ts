@@ -1,3 +1,4 @@
+import { base58 } from "@scure/base";
 import { describe, expect, it } from "vitest";
 import { buildPolicy, buildRequest, parseUnits, payeeBytes, STARTING_FORM, type VaultForm } from "./create";
 
@@ -40,6 +41,8 @@ describe("payeeBytes", () => {
     expect(() => payeeBytes("Bitcoin", "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")).toThrow("tb1q");
     expect(() => payeeBytes("Evm", "0x1234")).toThrow("isn't an EVM");
     expect(payeeBytes("Evm", `0x${"Ab".repeat(20)}`)).toHaveLength(20);
+    expect(() => payeeBytes("Solana", "0xabc")).toThrow("isn't a Solana");
+    expect(payeeBytes("Solana", "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU")).toHaveLength(32);
   });
 });
 
@@ -49,6 +52,20 @@ describe("buildPolicy", () => {
     expect(policy.caps[0]).toEqual({ asset: "Btc", per_tx: "500000", per_24h: "2000000", queue_at: "250000" });
     expect(policy.caps[2]?.per_tx).toBe("50000000");
     expect(policy.veto_delay_ns).toBe(120_000_000_000);
+    expect(policy.caps[3]).toEqual({ asset: "Sol", per_tx: "100000000", per_24h: "500000000", queue_at: "50000000" });
+    expect(policy.sol_max_fee).toBe("100000");
+  });
+
+  it("lists a Solana payee's wallet and its USDC token account", () => {
+    // A devnet wallet and its real USDC account, read on 10 Nov.
+    const policy = buildPolicy({
+      ...form,
+      payees: [{ label: "Designer", chain: "Solana", address: "2SkT6DZgbfWjuLwzMR5UGZUs7pUdadyNrJv8TQ1QyKz6" }],
+    });
+    expect(policy.payees.map((payee) => payee.label)).toEqual(["Designer", "Designer (USDC)"]);
+    expect(base58.encode(Uint8Array.from(policy.payees[1]?.to ?? []))).toBe(
+      "2n4w2JtCwgJEkF4kLx1JnE8UdTYCeuN8pyzH6t8qPTiA",
+    );
   });
 
   it("refuses limits the contract would refuse", () => {

@@ -1,4 +1,5 @@
 import { base64 } from "@scure/base";
+import { solanaPayments } from "./solana";
 import type { Payment } from "./vault";
 
 /*
@@ -122,6 +123,7 @@ export function requestedPayments(argsBase64: string): Payment[] {
     const tx = base64.decode(args.tx);
     if (args.chain === "Bitcoin") return bitcoinOutputs(tx);
     if (args.chain === "Evm") return evmPayments(tx);
+    if (args.chain === "Solana") return solanaPayments(tx);
     return [];
   } catch {
     return [];

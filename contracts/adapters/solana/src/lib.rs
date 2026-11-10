@@ -458,6 +458,59 @@ mod tests {
         assert_eq!(parsed.fee_asset, AssetId::Sol);
     }
 
+    /// Messages built by @solana/web3.js, so the parser is checked against an outside encoder.
+    #[test]
+    fn sol_parses_the_web3_js_vectors() {
+        use near_sdk::serde_json::{self, Value};
+        let vectors: Value = serde_json::from_str(include_str!(
+            "../../../../tests/vectors/solana_message.json"
+        ))
+        .unwrap();
+        for vector in vectors["vectors"].as_array().unwrap() {
+            let field = |name: &str| hex::decode(vector[name].as_str().unwrap()).unwrap();
+            let name = vector["name"].as_str().unwrap();
+            let vault: [u8; 32] = field("vault").try_into().unwrap();
+            let payee = field("payee");
+            let asset = match vector["asset"].as_str().unwrap() {
+                "Sol" => AssetId::Sol,
+                _ => AssetId::Spl {
+                    mint: field("mint").try_into().unwrap(),
+                },
+            };
+            let mut rules = policy();
+            rules.caps.push(AssetCap {
+                asset: asset.clone(),
+                per_tx: U128(u128::MAX),
+                per_24h: U128(u128::MAX),
+                queue_at: U128(u128::MAX),
+            });
+            rules.payees.push(Payee {
+                chain: ChainKind::Solana,
+                to: payee.clone(),
+                label: "vector".into(),
+            });
+            let message = field("message");
+            let parsed = parse(&message, &rules, &vault).unwrap_or_else(|e| panic!("{name}: {e}"));
+            let amount: u128 = vector["amount"].as_str().unwrap().parse().unwrap();
+            assert_eq!(
+                parsed.payments,
+                vec![Payment {
+                    asset,
+                    to: payee,
+                    amount: U128(amount),
+                }],
+                "{name}"
+            );
+            let fee: u128 = vector["fee"].as_str().unwrap().parse().unwrap();
+            assert_eq!(parsed.fee, fee, "{name}");
+            assert_eq!(
+                parsed.signing_payloads,
+                vec![SignPayload::Eddsa(message.into())],
+                "{name}"
+            );
+        }
+    }
+
     #[test]
     fn sol_signs_exactly_the_checked_message() {
         let message = sol_payment().build();

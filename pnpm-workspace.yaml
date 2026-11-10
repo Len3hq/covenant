@@ -4,3 +4,7 @@ packages:
   - mcp
   - web
   - scripts
+allowBuilds:
+  # Optional native speedups for ws, pulled in by @solana/web3.js in scripts' vector generator.
+  bufferutil: false
+  utf-8-validate: false

@@ -59,7 +59,10 @@ function Payees({ payees, onChange }: { payees: PayeeForm[]; onChange(payees: Pa
   return (
     <fieldset className="payee-list">
       <legend>Who it may pay</legend>
-      <p className="muted small">Everything else is refused. Bitcoin payees must be tb1q addresses.</p>
+      <p className="muted small">
+        Everything else is refused. Bitcoin payees must be tb1q addresses. A Solana payee's USDC account is
+        listed for you, and must already exist.
+      </p>
       {payees.map((payee, index) => (
         <div className="payee-row" key={index}>
           <input
@@ -75,11 +78,12 @@ function Payees({ payees, onChange }: { payees: PayeeForm[]; onChange(payees: Pa
           >
             <option value="Bitcoin">Bitcoin</option>
             <option value="Evm">Base</option>
+            <option value="Solana">Solana</option>
           </select>
           <input
             aria-label="Payee address"
             className="mono"
-            placeholder={payee.chain === "Bitcoin" ? "tb1q…" : "0x…"}
+            placeholder={payee.chain === "Bitcoin" ? "tb1q…" : payee.chain === "Solana" ? "Solana address" : "0x…"}
             value={payee.address}
             onChange={(event) => update(index, { address: event.target.value })}
           />
@@ -114,7 +118,12 @@ function NextSteps({ vault, agent }: { vault: string; agent: string }) {
           <pre className="mono">{`VAULT_ACCOUNT_ID=${vault} AGENT_ACCOUNT_ID=${agent} make agent-key`}</pre>
         </li>
         <li>
-          Point your agent at it with the same two settings in <code>.env</code>.
+          For Solana, create a durable nonce account the vault controls. It lets a payment held for a veto
+          still land afterwards:
+          <pre className="mono">{`VAULT_ACCOUNT_ID=${vault} make sol-nonce`}</pre>
+        </li>
+        <li>
+          Point your agent at it with the same settings in <code>.env</code>.
         </li>
       </ol>
     </section>
@@ -185,7 +194,7 @@ export function CreateVault({
         <p className="eyebrow">Create a vault</p>
         <h1>Your agent's spending rules, enforced on-chain.</h1>
         <p className="lede">
-          You'll own a separate NEAR contract with its own Bitcoin and Base addresses. It runs code nobody can
+          You'll own a separate NEAR contract with its own Bitcoin, Base and Solana addresses. It runs code nobody can
           change, including us, and we hold no keys or funds. Testnet only, and not audited.
         </p>
         {mine.length > 0 && (
@@ -232,6 +241,12 @@ export function CreateVault({
           <CapFields name="BTC" cap={form.btc} onChange={(btc) => setForm({ ...form, btc })} />
           <CapFields name="USDC" cap={form.usdc} onChange={(usdc) => setForm({ ...form, usdc })} />
           <CapFields name="ETH" cap={form.eth} onChange={(eth) => setForm({ ...form, eth })} />
+          <CapFields name="SOL" cap={form.sol} onChange={(sol) => setForm({ ...form, sol })} />
+          <CapFields
+            name="USDC on Solana"
+            cap={form.solUsdc}
+            onChange={(solUsdc) => setForm({ ...form, solUsdc })}
+          />
         </div>
         <Field
           label="Veto window, in seconds"

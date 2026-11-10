@@ -21,6 +21,7 @@ const config = {
   evmRpcUrl: "https://evm.example",
   evmChainId: 84532,
   txApiUrl: "https://tx.example",
+  solRpcUrl: "https://sol.example",
 };
 const USDC = hex.decode("036cbd53842c5426634e7929541ec2318f3dcf7e");
 const PUBKEY = "020377b2259fc3aab0f22b7f433de1695908c943a24e47028206c300da365b6ef7";
@@ -119,7 +120,7 @@ describe("describeActivity", () => {
   it("names the error on a refusal and marks it as stopped", () => {
     expect(
       describeActivity({ event: "spend_rejected", error: "FeeTooHigh", payments: [], txHash: "", at: 0 }),
-    ).toEqual({ outcome: "Refused, because its fee rate was above the cap (FeeTooHigh)", stopped: true });
+    ).toEqual({ outcome: "Refused, because its fee was above the cap (FeeTooHigh)", stopped: true });
   });
 });
 

@@ -1,4 +1,5 @@
-// Writes tests/vectors/btc_sighash.json and evm_hash.json from libraries the contract doesn't use,
+// Writes tests/vectors/btc_sighash.json, evm_hash.json and solana_message.json from libraries the
+// contract doesn't use,
 // so its hashes are checked against an outside implementation. Inputs are fixed, so the output is
 // reproducible: run `pnpm --filter @covenant/scripts vectors` and expect no diff.
 import { hex } from "@scure/base";
@@ -7,6 +8,14 @@ import { ripemd160 } from "@noble/hashes/legacy.js";
 import { Transaction } from "bitcoinjs-lib";
 import { writeFileSync } from "node:fs";
 import { keccak256, serializeTransaction, type TransactionSerializableEIP1559 } from "viem";
+import {
+  ComputeBudgetProgram,
+  Keypair,
+  PublicKey,
+  SystemProgram,
+  Transaction as SolanaTransaction,
+  TransactionInstruction,
+} from "@solana/web3.js";
 
 const OUT = new URL("../../tests/vectors/", import.meta.url);
 
@@ -190,5 +199,89 @@ function write(name: string, source: string, vectors: unknown[]) {
   writeFileSync(new URL(name, OUT), `${JSON.stringify(body, null, 2)}\n`);
 }
 
+// Solana: fixed keys, so the output is reproducible.
+const solKey = (fill: number) => Keypair.fromSeed(new Uint8Array(32).fill(fill)).publicKey;
+const SOL_VAULT = solKey(1);
+const SOL_NONCE = solKey(2);
+const SOL_PAYEE = solKey(3);
+const NONCE_VALUE = new PublicKey(new Uint8Array(32).fill(0x55)).toBase58();
+const TOKEN_PROGRAM = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+const ATA_PROGRAM = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
+const SOL_USDC = new PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
+const ata = (wallet: PublicKey) =>
+  PublicKey.findProgramAddressSync([wallet.toBuffer(), TOKEN_PROGRAM.toBuffer(), SOL_USDC.toBuffer()], ATA_PROGRAM)[0];
+
+function transferChecked(amount: bigint): TransactionInstruction {
+  const data = Buffer.alloc(10);
+  data[0] = 12;
+  data.writeBigUInt64LE(amount, 1);
+  data[9] = 6;
+  return new TransactionInstruction({
+    programId: TOKEN_PROGRAM,
+    keys: [
+      { pubkey: ata(SOL_VAULT), isSigner: false, isWritable: true },
+      { pubkey: SOL_USDC, isSigner: false, isWritable: false },
+      { pubkey: ata(SOL_PAYEE), isSigner: false, isWritable: true },
+      { pubkey: SOL_VAULT, isSigner: true, isWritable: false },
+    ],
+    data,
+  });
+}
+
+const solanaCases: {
+  name: string;
+  instructions: TransactionInstruction[];
+  asset: "Sol" | "Spl";
+  payee: PublicKey;
+  amount: bigint;
+  fee: bigint;
+}[] = [
+  {
+    name: "SOL transfer",
+    instructions: [SystemProgram.transfer({ fromPubkey: SOL_VAULT, toPubkey: SOL_PAYEE, lamports: 1_000_000n })],
+    asset: "Sol",
+    payee: SOL_PAYEE,
+    amount: 1_000_000n,
+    fee: 5_000n,
+  },
+  {
+    name: "USDC transfer with a priority fee",
+    instructions: [
+      ComputeBudgetProgram.setComputeUnitLimit({ units: 20_000 }),
+      ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1_000_000n }),
+      transferChecked(2_500_000n),
+    ],
+    asset: "Spl",
+    payee: ata(SOL_PAYEE),
+    amount: 2_500_000n,
+    fee: 25_000n,
+  },
+];
+
+function solanaVector({ name, instructions, asset, payee, amount, fee }: (typeof solanaCases)[number]) {
+  const tx = new SolanaTransaction({
+    feePayer: SOL_VAULT,
+    nonceInfo: {
+      nonce: NONCE_VALUE,
+      nonceInstruction: SystemProgram.nonceAdvance({ noncePubkey: SOL_NONCE, authorizedPubkey: SOL_VAULT }),
+    },
+  }).add(...instructions);
+  return {
+    name,
+    message: tx.serializeMessage().toString("hex"),
+    vault: SOL_VAULT.toBuffer().toString("hex"),
+    nonce_account: SOL_NONCE.toBase58(),
+    nonce: NONCE_VALUE,
+    payee_wallet: SOL_PAYEE.toBase58(),
+    payee: payee.toBuffer().toString("hex"),
+    vault_token_account: ata(SOL_VAULT).toBase58(),
+    asset,
+    mint: asset === "Spl" ? SOL_USDC.toBuffer().toString("hex") : null,
+    amount: amount.toString(),
+    fee: fee.toString(),
+  };
+}
+
 write("btc_sighash.json", "bitcoinjs-lib", bitcoinCases.map(bitcoinVector));
+write("solana_message.json", "@solana/web3.js", solanaCases.map(solanaVector));
 write("evm_hash.json", "viem", evmCases.map(evmVector));

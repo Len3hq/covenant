@@ -6,6 +6,7 @@ const wallet = Covenant.connect({
   vault: "acme.${FACTORY_ID}",
   agentAccount: "my-agent.testnet",
   agentKey: process.env.AGENT_PRIVATE_KEY!, // the restricted key, never a full-access one
+  solNonceAccounts: ["<from make sol-nonce>"], // only for Solana payments
 });
 
 const result = await wallet.pay({
@@ -32,7 +33,8 @@ const MCP_DESKTOP = `{
         "VAULT_ACCOUNT_ID": "acme.${FACTORY_ID}",
         "AGENT_ACCOUNT_ID": "my-agent.testnet",
         "AGENT_PRIVATE_KEY": "ed25519:…",
-        "SPENDS_FILE": "/path/to/covenant-spends.json"
+        "SPENDS_FILE": "/path/to/covenant-spends.json",
+        "SOL_NONCE_ACCOUNTS": "<from make sol-nonce, for Solana>"
       }
     }
   }
@@ -76,7 +78,7 @@ export function Docs() {
         <h1>Give your agent a wallet it can't be talked out of.</h1>
         <p className="lede">
           Your agent asks for payments. A Covenant vault, a contract on NEAR, checks each one against rules you set,
-          and only then does NEAR's MPC network sign it on Bitcoin or Base. A fooled or hijacked agent can ask for
+          and only then does NEAR's MPC network sign it on Bitcoin, Base or Solana. A fooled or hijacked agent can ask for
           anything, but it can't get a signature for a payment the rules forbid.
         </p>
 
@@ -84,7 +86,7 @@ export function Docs() {
           <h2>How it works</h2>
           <ol>
             <li>
-              <strong>The agent proposes.</strong> It builds an unsigned Bitcoin or EVM transaction and calls{" "}
+              <strong>The agent proposes.</strong> It builds an unsigned Bitcoin, EVM or Solana transaction and calls{" "}
               <code>propose_spend</code> with a key that can call nothing else.
             </li>
             <li>
@@ -113,7 +115,7 @@ export function Docs() {
               changed by anyone, including us.
             </li>
             <li>
-              <strong>Fund it.</strong> Open your vault's dashboard for its Bitcoin testnet4 and Base Sepolia addresses,
+              <strong>Fund it.</strong> Open your vault's dashboard for its Bitcoin testnet4, Base Sepolia and Solana devnet addresses,
               and send testnet funds to them.
             </li>
             <li>
@@ -149,7 +151,8 @@ export function Docs() {
             <tbody>
               <tr>
                 <td><code>pay({"{ asset, to, amount, reference }"})</code></td>
-                <td>Asks the vault to pay. <code>asset</code> is <code>BTC</code>, <code>ETH</code> or <code>USDC</code>, and <code>amount</code> is a bigint in base units.</td>
+                <td>Asks the vault to pay. <code>asset</code> is <code>BTC</code>, <code>ETH</code>, <code>USDC</code> (on Base), <code>SOL</code> or{" "}
+                  <code>USDC-SOL</code>, and <code>amount</code> is a bigint in base units.</td>
               </tr>
               <tr>
                 <td><code>execute(id)</code></td>
@@ -169,12 +172,12 @@ export function Docs() {
               </tr>
               <tr>
                 <td><code>addresses()</code></td>
-                <td>The vault's Bitcoin and Base addresses.</td>
+                <td>The vault's Bitcoin, Base and Solana addresses.</td>
               </tr>
             </tbody>
           </table>
           <p className="muted small">
-            Amounts are always integers: sats, wei, and USDC's 6 decimals, so 1 USDC is <code>1_000_000n</code>. Keep{" "}
+            Amounts are always integers: sats, wei, lamports, and USDC's 6 decimals, so 1 USDC is <code>1_000_000n</code>. Keep{" "}
             <code>spendsFile</code> on storage that survives restarts.
           </p>
         </section>

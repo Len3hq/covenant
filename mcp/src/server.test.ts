@@ -34,6 +34,22 @@ describe("the Covenant MCP server", () => {
     expect(body(result)).toMatchObject({ status: "rejected", error: "OutputNotWhitelisted" });
   });
 
+  it("pays SOL and Solana USDC, and refuses an asset it doesn't know", async () => {
+    const pay = vi.fn(async () => ({ status: "broadcast" as const, links: {} }));
+    const client = await connect({ pay });
+    for (const asset of ["SOL", "USDC-SOL"]) {
+      await client.callTool({ name: "pay", arguments: { asset, to: "Acme", amount: "5", reference: `INV-${asset}` } });
+    }
+    expect(pay).toHaveBeenCalledTimes(2);
+    expect(pay).toHaveBeenLastCalledWith({ asset: "USDC-SOL", to: "Acme", amount: 5n, reference: "INV-USDC-SOL" });
+    const unknown = await client.callTool({
+      name: "pay",
+      arguments: { asset: "DOGE", to: "Acme", amount: "5", reference: "INV-3" },
+    });
+    expect(unknown.isError).toBe(true);
+    expect(pay).toHaveBeenCalledTimes(2);
+  });
+
   it("refuses an amount that isn't a whole number before asking the vault", async () => {
     const pay = vi.fn();
     const client = await connect({ pay });

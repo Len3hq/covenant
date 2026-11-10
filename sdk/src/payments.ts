@@ -3,19 +3,33 @@ import { address, networks } from "bitcoinjs-lib";
 import { getAddress, type Address, type Hex } from "viem";
 import { prepareBitcoin, type PayDeps } from "./bitcoin/pay.js";
 import { contractCall, prepareEvm, transferData, type EvmChain } from "./evm/pay.js";
+import { prepareSolana, type SolanaDeps } from "./solana/pay.js";
+import { base58 } from "@scure/base";
 import type { Prepared } from "./store.js";
 import type { AgentVault, PolicyPayee } from "./vault.js";
 
 const TRANSFER_GAS = 21_000n;
 
-/** What a payment moves. Amounts are always whole base units: sats, wei, or USDC's 6 decimals. */
-export type Asset = "BTC" | "ETH" | "USDC";
+/**
+ * What a payment moves. Amounts are always whole base units: sats, wei, lamports, or USDC's 6
+ * decimals. `USDC` is on Base; `USDC-SOL` is on Solana.
+ */
+export type Asset = "BTC" | "ETH" | "USDC" | "SOL" | "USDC-SOL";
 
-const CHAIN_OF: Record<Asset, PolicyPayee["chain"]> = { BTC: "Bitcoin", ETH: "Evm", USDC: "Evm" };
+export const ASSETS = ["BTC", "ETH", "USDC", "SOL", "USDC-SOL"] as const satisfies readonly Asset[];
+
+const CHAIN_OF: Record<Asset, PolicyPayee["chain"]> = {
+  BTC: "Bitcoin",
+  ETH: "Evm",
+  USDC: "Evm",
+  SOL: "Solana",
+  "USDC-SOL": "Solana",
+};
 
 /** A payee's address as its chain writes it. */
 export function payeeAddress(payee: PolicyPayee): string {
   const bytes = Uint8Array.from(payee.to);
+  if (payee.chain === "Solana") return base58.encode(bytes);
   return payee.chain === "Bitcoin"
     ? address.fromOutputScript(bytes, networks.testnet)
     : getAddress(`0x${hex.encode(bytes)}`);
@@ -34,6 +48,7 @@ export interface PrepareDeps {
   bitcoin: PayDeps;
   chain: EvmChain;
   usdc: Address;
+  solana?: SolanaDeps;
   /** Coins an unfinished spend holds, as `txid:vout`, which this payment must not use. */
   heldCoins?: () => Set<string>;
 }
@@ -53,6 +68,10 @@ export async function preparePayment(
   destination: string,
   amount: bigint,
 ): Promise<Prepared> {
+  if (asset === "SOL" || asset === "USDC-SOL") {
+    if (!deps.solana) throw new Error("this client isn't set up for Solana");
+    return prepareSolana(deps.solana, asset, destination, amount);
+  }
   if (asset === "BTC") {
     const held = deps.heldCoins?.() ?? new Set<string>();
     const { mempool } = deps.bitcoin;

@@ -108,8 +108,14 @@ export async function sandboxWorld(): Promise<World> {
       btcBalance: async () => COINS.reduce((total, value) => total + value, 0n),
       ethBalance: async () => 50_000_000_000_000_000n,
       tokenBalance: async () => 20_000_000n,
+      solBalance: async () => 0n,
+      solTokenBalance: async () => 0n,
     },
-    broadcast: { bitcoin: async () => "not broadcast", evm: async () => "not broadcast" },
+    broadcast: {
+      bitcoin: async () => "not broadcast",
+      evm: async () => "not broadcast",
+      solana: async () => "not broadcast",
+    },
     // The mock signer's signatures aren't real, so they're recorded instead of being checked.
     assemble: async (prepared, signatures) => ({
       signedHex: "",

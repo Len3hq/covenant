@@ -5,7 +5,9 @@ import type { SpendOutcome } from "./vault.js";
 /** Enough to finish a spend after a restart, without proposing it again. */
 export type Prepared =
   | { chain: "Bitcoin"; unsignedHex: string; prevTxs: string[]; inputValues: string[] }
-  | { chain: "Evm"; unsignedHex: string };
+  | { chain: "Evm"; unsignedHex: string }
+  /** `unsignedHex` is the legacy message, which is what Ed25519 signs. */
+  | { chain: "Solana"; unsignedHex: string; nonceAccount: string };
 
 export type SpendStatus =
   | "prepared" // Built, and not yet sent to NEAR.
@@ -64,6 +66,16 @@ export class SpendStore {
       for (const input of Transaction.fromHex(prepared.unsignedHex).ins) {
         held.add(`${Buffer.from(input.hash).reverse().toString("hex")}:${input.index}`);
       }
+    }
+    return held;
+  }
+
+  /** Nonce accounts that an unfinished Solana spend's message advances, for the same reason. */
+  heldNonces(): Set<string> {
+    const finished = new Set(["broadcast", "rejected", "failed"]);
+    const held = new Set<string>();
+    for (const { status, prepared } of this.records.values()) {
+      if (prepared.chain === "Solana" && !finished.has(status)) held.add(prepared.nonceAccount);
     }
     return held;
   }

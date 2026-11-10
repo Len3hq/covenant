@@ -16,6 +16,8 @@ signed.
 | The signatures are joined with `Promise::and`, then checked in one callback | [lib.rs:536-538](contracts/covenant-vault/src/lib.rs#L536-L538) |
 | The callback reads each result, and keeps the reservation if a freeze landed meanwhile | [lib.rs:285](contracts/covenant-vault/src/lib.rs#L285) |
 | The vault's addresses come from `derived_public_key`, for the contract account and its paths | [vault-keys.ts:7-11](scripts/src/vault-keys.ts#L7-L11) |
+| Solana spends are signed in the Ed25519 domain, over the exact message the contract checked | [lib.rs](contracts/covenant-vault/src/lib.rs), `sign_all` |
+| The factory derives each vault's Solana address from `derived_public_key` with `domain_id` 1 | [covenant-factory](contracts/covenant-factory/src/lib.rs), `create_vault` |
 | The hashes it signs are computed in the contract: BIP143 for Bitcoin, keccak256 for EVM | [bitcoin/lib.rs:166](contracts/adapters/bitcoin/src/lib.rs#L166), [evm/lib.rs:177](contracts/adapters/evm/src/lib.rs#L177) |
 | NEAR's host functions do the hashing, with no C dependency in the contract | [bitcoin/lib.rs:105-109](contracts/adapters/bitcoin/src/lib.rs#L105-L109) |
 

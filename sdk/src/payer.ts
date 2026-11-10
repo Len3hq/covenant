@@ -2,11 +2,11 @@ import { hex } from "@scure/base";
 import type { Address, Hex } from "viem";
 import type { BitcoinPrepared } from "./bitcoin/pay.js";
 import { signBitcoin } from "./bitcoin/pay.js";
-import type { MpcSignature } from "./bitcoin/witness.js";
-import { signEvm, type EvmSignature } from "./evm/pay.js";
+import { signEvm } from "./evm/pay.js";
 import type { Log } from "./log.js";
 import type { Prepared, SpendRecord, SpendStore } from "./store.js";
-import { ContractPanic, type AgentVault, type Proposed } from "./vault.js";
+import { signSolana, type SolanaPrepared } from "./solana/pay.js";
+import { ContractPanic, ecdsa, type AgentVault, type Proposed, type VaultSignature } from "./vault.js";
 
 const ALREADY_KNOWN = /already known|already in (block|mempool|chain)|txn-already|known transaction/i;
 
@@ -27,10 +27,11 @@ export interface SpendReport {
 
 export function links(record: Pick<SpendRecord, "prepared" | "nearTx" | "chainTx">): Links {
   const { prepared, nearTx, chainTx } = record;
-  const chain =
-    prepared.chain === "Bitcoin"
-      ? `https://mempool.space/testnet4/tx/${chainTx}`
-      : `https://sepolia.basescan.org/tx/${chainTx}`;
+  const chain = {
+    Bitcoin: `https://mempool.space/testnet4/tx/${chainTx}`,
+    Evm: `https://sepolia.basescan.org/tx/${chainTx}`,
+    Solana: `https://explorer.solana.com/tx/${chainTx}?cluster=devnet`,
+  }[prepared.chain];
   return {
     ...(nearTx ? { near: `https://testnet.nearblocks.io/txns/${nearTx}` } : {}),
     ...(chainTx ? { chain } : {}),
@@ -49,12 +50,14 @@ export const report = (record: SpendRecord, linker = links): SpendReport => ({
 /** Turns signatures into a broadcastable transaction. Live, this checks each signature first. */
 export type Assemble = (
   prepared: Prepared,
-  signatures: (MpcSignature & EvmSignature)[],
+  signatures: VaultSignature[],
 ) => Promise<{ signedHex: string; chainTx: string }>;
 
 export interface Broadcasters {
   bitcoin(signedHex: string): Promise<string>;
   evm(signedHex: Hex): Promise<string>;
+  /** Resolves once the transaction is confirmed, so its nonce account has advanced. */
+  solana(signedHex: string): Promise<string>;
 }
 
 /**
@@ -144,7 +147,9 @@ export class Payer {
             },
             beforeSend,
           )
-        : this.vault.proposeEvm(hex.decode(prepared.unsignedHex.slice(2)), beforeSend),
+        : prepared.chain === "Solana"
+          ? this.vault.proposeSolana(hex.decode(prepared.unsignedHex), beforeSend)
+          : this.vault.proposeEvm(hex.decode(prepared.unsignedHex.slice(2)), beforeSend),
     );
   }
 
@@ -196,20 +201,25 @@ export class Payer {
 
   private async assemble(
     prepared: Prepared,
-    signatures: (MpcSignature & EvmSignature)[],
+    signatures: VaultSignature[],
   ): Promise<{ signedHex: string; chainTx: string }> {
     if (this.assembleWith) return this.assembleWith(prepared, signatures);
     if (prepared.chain === "Bitcoin") {
-      return signBitcoin(prepared satisfies BitcoinPrepared, signatures, await this.vault.btcPubkey());
+      return signBitcoin(prepared satisfies BitcoinPrepared, ecdsa(signatures), await this.vault.btcPubkey());
+    }
+    if (prepared.chain === "Solana") {
+      return signSolana(prepared satisfies SolanaPrepared, signatures, await this.vault.solPubkey());
     }
     const from = (await this.vault.evmAddress()) as Address;
-    return signEvm(prepared.unsignedHex as Hex, signatures, from);
+    return signEvm(prepared.unsignedHex as Hex, ecdsa(signatures), from);
   }
 
   private async send(record: SpendRecord): Promise<SpendReport> {
     const signedHex = record.signedHex as string;
     try {
-      if (record.prepared.chain === "Bitcoin") await this.broadcast.bitcoin(signedHex);
+      const { chain } = record.prepared;
+      if (chain === "Bitcoin") await this.broadcast.bitcoin(signedHex);
+      else if (chain === "Solana") await this.broadcast.solana(signedHex);
       else await this.broadcast.evm(signedHex as Hex);
     } catch (error) {
       if (!ALREADY_KNOWN.test(String(error))) throw error;

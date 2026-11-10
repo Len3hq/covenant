@@ -1,3 +1,4 @@
+import { ed25519 } from "@noble/curves/ed25519.js";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { hex } from "@scure/base";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -11,6 +12,8 @@ import { SpendStore, type Prepared } from "./store.js";
 import { ContractPanic, type AgentVault, type BeforeSend, type Proposed, type SpendOutcome } from "./vault.js";
 
 const SECRET = new Uint8Array(32).fill(7);
+const SOL_SECRET = new Uint8Array(32).fill(8);
+const SOL_VAULT = ed25519.getPublicKey(SOL_SECRET);
 const VAULT = publicKeyToAddress(bytesToHex(secp256k1.getPublicKey(SECRET, false)));
 const UNSIGNED = serializeTransaction({
   type: "eip1559",
@@ -57,10 +60,16 @@ function harness(propose: (beforeSend?: BeforeSend) => Promise<Proposed>) {
     evmAddress: async () => VAULT,
     btcPubkey: async () => new Uint8Array(),
     proposeEvm: vi.fn((_tx: Uint8Array, beforeSend?: BeforeSend) => propose(beforeSend)),
+    proposeSolana: vi.fn((_message: Uint8Array, beforeSend?: BeforeSend) => propose(beforeSend)),
+    solPubkey: async () => SOL_VAULT,
     execute: vi.fn((_id: string, beforeSend?: BeforeSend) => propose(beforeSend)),
     recover: vi.fn(async (nearTx: string): Promise<Proposed> => ({ outcome: signed(), nearTx })),
   };
-  const broadcast = { bitcoin: vi.fn(async () => "txid"), evm: vi.fn<(signedHex: Hex) => Promise<string>>(async () => "0xhash") };
+  const broadcast = {
+    bitcoin: vi.fn(async () => "txid"),
+    evm: vi.fn<(signedHex: Hex) => Promise<string>>(async () => "0xhash"),
+    solana: vi.fn<(signedHex: string) => Promise<string>>(async () => "sig"),
+  };
   const payer = () =>
     new Payer({
       vault: vault as unknown as AgentVault,
@@ -190,6 +199,52 @@ describe("Payer", () => {
   it("refuses to execute a spend it has no record of", async () => {
     const h = harness(async () => ({ outcome: signed(), nearTx: "n" }));
     await expect(h.payer().execute("404")).rejects.toThrow("no record");
+  });
+});
+
+describe("Payer on Solana", () => {
+  const message = Uint8Array.from([1, 0, 1, 1, ...SOL_VAULT, ...new Uint8Array(32), 0]);
+  const solana: Prepared = { chain: "Solana", unsignedHex: hex.encode(message), nonceAccount: "nonce-1" };
+
+  it("proposes the message, checks the Ed25519 signature and broadcasts the transaction", async () => {
+    const signature = ed25519.sign(message, SOL_SECRET);
+    const h = harness(async () => ({
+      outcome: { Signed: { id: "3", signatures: [{ scheme: "Ed25519" as const, signature: [...signature] }] } },
+      nearTx: "near-s",
+    }));
+    const result = await h.payer().spend("s", "pay", async () => solana);
+    expect(h.vault.proposeSolana).toHaveBeenCalledWith(message, expect.any(Function));
+    expect(h.broadcast.solana).toHaveBeenCalledWith(hex.encode(Uint8Array.from([1, ...signature, ...message])));
+    expect(result.status).toBe("broadcast");
+    expect(result.links.chain).toMatch(/^https:\/\/explorer\.solana\.com\/tx\/.+\?cluster=devnet$/);
+  });
+
+  it("won't broadcast a signature from another key", async () => {
+    const forged = ed25519.sign(message, new Uint8Array(32).fill(1));
+    const h = harness(async () => ({
+      outcome: { Signed: { id: "3", signatures: [{ scheme: "Ed25519" as const, signature: [...forged] }] } },
+      nearTx: "near-s",
+    }));
+    await expect(h.payer().spend("s", "pay", async () => solana)).rejects.toThrow("doesn't verify");
+    expect(h.broadcast.solana).not.toHaveBeenCalled();
+  });
+
+  it("won't put an Ed25519 signature on an EVM transaction", async () => {
+    const h = harness(async () => ({
+      outcome: { Signed: { id: "3", signatures: [{ scheme: "Ed25519" as const, signature: new Array(64).fill(0) }] } },
+      nearTx: "near-s",
+    }));
+    await expect(h.payer().spend("e", "pay", prepare)).rejects.toThrow("expected a secp256k1 signature");
+  });
+
+  it("holds a queued spend's nonce account until it's final", () => {
+    const dir = mkdtempSync(join(tmpdir(), "covenant-"));
+    dirs.push(dir);
+    const store = new SpendStore(join(dir, "spends.json"));
+    store.put({ key: "q", description: "", status: "queued", prepared: solana });
+    expect(store.heldNonces()).toEqual(new Set(["nonce-1"]));
+    store.put({ key: "q", description: "", status: "broadcast", prepared: solana });
+    expect(store.heldNonces().size).toBe(0);
   });
 });
 

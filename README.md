@@ -1,21 +1,22 @@
 # Covenant
 
 A policy-enforced vault for AI agents across chains. One NEAR contract controls vault addresses on
-Bitcoin and EVM chains through Chain Signatures, and it signs a spend only after parsing the
+Bitcoin, EVM chains and Solana through Chain Signatures, and it signs a spend only after parsing the
 transaction itself and checking it against one policy. The agent can ask for anything. The contract
 decides what gets signed.
 
 > **Status: in active build.** The vault on NEAR testnet now parses, checks and signs real spends,
 > with confirmed payments on Bitcoin testnet4 and Base Sepolia ([EVIDENCE.md](EVIDENCE.md)). Live payments now
 > include USDC, sent with the agent's restricted key. Large spends wait in a veto queue, which the
-> owner or guardian DAO can clear, and an LLM agent can now drive payments through the contract. Progress
+> owner or guardian DAO can clear, and an LLM agent can now drive payments through the contract. Solana
+> (SOL and SPL USDC, signed with Ed25519) is built and tested in the sandbox, and not yet live. Progress
 > is tracked in [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md).
 
 ## How a spend works
 
 1. The agent builds an unsigned transaction and calls `propose_spend`, using a function-call key that can't reach any owner method.
-2. The contract parses the raw bytes with a per-chain adapter and computes the signing hash itself. It never accepts a hash from the caller.
-3. The policy checks caps, payees, tokens, fees and chain ID.
+2. The contract parses the raw bytes with a per-chain adapter and computes the signing hash itself. It never accepts a hash from the caller. On Solana, Ed25519 signs the checked message itself.
+3. The policy checks caps, payees, tokens, fees and chain ID. A Solana message must come from the vault alone and advance a durable nonce, so a payment held for a veto can still land.
 4. Rejected spends are logged, large ones wait out a veto window, and the rest go to the MPC signer.
 
 ## Live dashboard
@@ -72,9 +73,11 @@ NEAR limits a transaction to 300 Tgas. A proposal must prepay its own execution,
 | Bitcoin, 8 inputs | About 220 bytes | 6.8 | 266.8 | 20.9 |
 | Bitcoin, 8 inputs | About 10,000 bytes | 14.7 | 274.7 | 33.7 |
 | EVM, USDC transfer | n/a | 2.8 | 52.8 | 6.6 |
+| Solana, SOL transfer | n/a | 2.8 | 52.8 | 6.8 |
+| Solana, USDC transfer with priority fee | n/a | 3.1 | 53.1 | 7.3 |
 
 `btc_max_inputs` is 3, the spec's target, which needs at most 116.9 Tgas. Measured on 4 Nov in the
-sandbox on the 263 KB vault itself, including its policy checks and ledger, against the mock signer.
+sandbox on the 263 KB vault itself (the Solana rows on 10 Nov, on the 305 KB vault), including its policy checks and ledger, against the mock signer.
 "Total burnt" therefore excludes the real MPC network's work. To reproduce:
 `make wasm && cargo test -p covenant-integration-tests --test gas_bench -- --nocapture`.
 
@@ -84,7 +87,7 @@ sandbox on the 263 KB vault itself, including its policy checks and ledger, agai
 | --- | --- |
 | [contracts/covenant-vault](contracts/covenant-vault) | The NEAR contract |
 | [contracts/policy](contracts/policy) | Core types and pure policy checks |
-| [contracts/adapters](contracts/adapters) | Bitcoin and EVM parsers and signing hashes |
+| [contracts/adapters](contracts/adapters) | Bitcoin, EVM and Solana parsers and signing payloads |
 | [tests](tests) | Vectors, sandbox tests, attack suites |
 | [agent](agent) | TypeScript agent service |
 | [web](web) | Dashboard |

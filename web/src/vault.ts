@@ -1,7 +1,8 @@
 import { ripemd160 } from "@noble/hashes/legacy.js";
 import { sha256 } from "@noble/hashes/sha2.js";
-import { bech32, hex } from "@scure/base";
+import { base58, bech32, hex } from "@scure/base";
 import { requestedPayments } from "./decode";
+import { associatedTokenAccount, SOL_USDC_DEVNET } from "./solana";
 
 export interface VaultConfig {
   rpcUrl: string;
@@ -10,6 +11,7 @@ export interface VaultConfig {
   evmRpcUrl: string;
   evmChainId: number;
   txApiUrl: string;
+  solRpcUrl: string;
 }
 
 const USDC_BASE_SEPOLIA = "036cbd53842c5426634e7929541ec2318f3dcf7e";
@@ -22,7 +24,10 @@ export const defaultConfig: VaultConfig = {
   evmRpcUrl: import.meta.env.VITE_EVM_RPC_URL ?? "https://sepolia.base.org",
   evmChainId: 84532,
   txApiUrl: import.meta.env.VITE_NEAR_TX_API_URL ?? "https://tx.test.fastnear.com",
+  solRpcUrl: import.meta.env.VITE_SOL_RPC_URL ?? "https://api.devnet.solana.com",
 };
+
+const SOL_USDC_DEVNET_HEX = hex.encode(base58.decode(SOL_USDC_DEVNET));
 
 /** Creates vaults that nobody, including us, can change. */
 export const FACTORY_ID: string = import.meta.env.VITE_FACTORY_ACCOUNT_ID ?? "vaults.len3hq.testnet";
@@ -100,6 +105,8 @@ export interface Policy {
   evm_chain_ids: number[];
   evm_max_gas_cost: string;
   veto_delay_ns: number;
+  /** Lamports. Absent on vaults from before Solana support, which refuse Solana. */
+  sol_max_fee?: string;
 }
 
 /** Amounts are integer strings in the asset's base unit. */
@@ -165,6 +172,8 @@ export interface VaultState {
   frozen: boolean;
   btcAddress: string;
   evmAddress: string;
+  /** Absent on vaults from before Solana support. */
+  solAddress?: string;
   policy: Policy;
   balances: Balance[];
   queue: Pending[];
@@ -214,6 +223,13 @@ export function formatNear(yocto: string): string {
 interface Addresses {
   btc_pubkey: string;
   evm_address: string;
+  sol_address?: string;
+}
+
+interface ChainAddresses {
+  btc: string;
+  evm: string;
+  sol?: string;
 }
 
 async function view<T>(
@@ -291,14 +307,43 @@ async function evmRead(
   return BigInt(result);
 }
 
+async function solRead(
+  config: VaultConfig,
+  method: string,
+  address: string,
+  fetcher: typeof fetch,
+): Promise<bigint> {
+  const response = await fetcher(config.solRpcUrl, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: method, method, params: [address, { commitment: "confirmed" }] }),
+    signal: AbortSignal.timeout(OUTSIDE_TIMEOUT_MS),
+  });
+  if (!response.ok) throw new Error(`Solana RPC returned ${response.status}`);
+  const body = (await response.json()) as {
+    result?: { value: number | { amount: string } };
+    error?: { message?: string; code?: number };
+  };
+  // A token account that doesn't exist yet holds nothing.
+  if (method === "getTokenAccountBalance" && body.error) return 0n;
+  const value = body.result?.value;
+  if (value === undefined) throw new Error(`${method}: ${body.error?.message ?? "no result"}`);
+  return BigInt(typeof value === "number" ? value : value.amount);
+}
+
 function chainBalance(
   config: VaultConfig,
   asset: Asset,
-  addresses: { btc: string; evm: string },
+  addresses: ChainAddresses,
   fetcher: typeof fetch,
 ): Promise<bigint> | null {
   if (asset === "Btc") return btcBalance(config, addresses.btc, fetcher);
-  if (asset === "Sol" || "Spl" in asset) return null;
+  if (asset === "Sol" || "Spl" in asset) {
+    if (!addresses.sol) return null;
+    if (asset === "Sol") return solRead(config, "getBalance", addresses.sol, fetcher);
+    const account = associatedTokenAccount(base58.decode(addresses.sol), Uint8Array.from(asset.Spl.mint));
+    return solRead(config, "getTokenAccountBalance", base58.encode(account), fetcher);
+  }
   if ("EvmNative" in asset) {
     if (asset.EvmNative.chain_id !== config.evmChainId) return null;
     return evmRead(config, "eth_getBalance", [addresses.evm, "latest"], fetcher);
@@ -313,7 +358,7 @@ function chainBalance(
 async function loadBalance(
   config: VaultConfig,
   cap: AssetCap,
-  addresses: { btc: string; evm: string },
+  addresses: ChainAddresses,
   fetcher: typeof fetch,
 ): Promise<Balance> {
   const [spent24h, balance] = await Promise.all([
@@ -564,7 +609,12 @@ export async function loadVault(
   const btc = btcAddress(addresses.btc_pubkey);
   const balances = await Promise.all(
     policy.caps.map((cap) =>
-      loadBalance(config, cap, { btc, evm: addresses.evm_address }, fetcher),
+      loadBalance(
+        config,
+        cap,
+        { btc, evm: addresses.evm_address, ...(addresses.sol_address ? { sol: addresses.sol_address } : {}) },
+        fetcher,
+      ),
     ),
   );
   return {
@@ -573,6 +623,7 @@ export async function loadVault(
     frozen,
     btcAddress: btc,
     evmAddress: addresses.evm_address,
+    ...(addresses.sol_address ? { solAddress: addresses.sol_address } : {}),
     policy,
     balances,
     queue,
@@ -604,7 +655,8 @@ export function describeAsset(asset: Asset): { name: string; unit: string } {
     if (bytesToHex(token) === USDC_BASE_SEPOLIA) return { name: "USDC", unit: "base units" };
     return { name: `ERC-20 0x${bytesToHex(token)} (chain ${chain_id})`, unit: "base units" };
   }
-  return { name: `SPL ${bytesToHex(asset.Spl.mint)}`, unit: "base units" };
+  if (bytesToHex(asset.Spl.mint) === SOL_USDC_DEVNET_HEX) return { name: "USDC on Solana", unit: "base units" };
+  return { name: `SPL ${base58.encode(Uint8Array.from(asset.Spl.mint))}`, unit: "base units" };
 }
 
 /** The testnet address for a P2WPKH output script, or its raw bytes for anything else. */
@@ -618,7 +670,15 @@ export function scriptAddress(script: number[]): string {
 
 /** Where a payment goes, as a person would read it. */
 export function payeeAddress(chain: Payee["chain"], to: number[]): string {
+  if (chain === "Solana") return base58.encode(Uint8Array.from(to));
   return chain === "Bitcoin" ? scriptAddress(to) : `0x${bytesToHex(to)}`;
+}
+
+/** Which chain an asset lives on. */
+export function chainOfAsset(asset: Asset): Payee["chain"] {
+  if (asset === "Btc") return "Bitcoin";
+  if (asset === "Sol" || "Spl" in asset) return "Solana";
+  return "Evm";
 }
 
 export function describePayee(payee: Payee): string {
@@ -633,12 +693,12 @@ export const REFUSALS: Record<string, string> = {
   ValueWithTokenCall: "it sent ETH along with a token call",
   WrongChainId: "it was signed for another chain",
   GasCostTooHigh: "its gas could cost more than the cap",
-  FeeTooHigh: "its fee rate was above the cap",
+  FeeTooHigh: "its fee was above the cap",
   PerTxCapExceeded: "it was larger than one payment may be",
   DailyCapExceeded: "it would pass the 24-hour limit",
   AssetNotCapped: "the policy sets no limit for that asset",
   PrevTxMismatch: "it lied about a coin's value",
-  InputNotOwned: "it spent a coin the vault doesn't own",
+  InputNotOwned: "it spent from something the vault doesn't own",
   TooManyInputs: "it used more coins than one spend may",
   UnsupportedScript: "it used an output type the vault refuses",
   NotYetExecutable: "it was still in its veto window",
@@ -654,8 +714,7 @@ export const explainRefusal = (error: string | undefined) =>
 export function describePayment(payment: Payment, policy: Policy): string {
   const { unit, name } = describeAsset(payment.asset);
   const payee = policy.payees.find((p) => bytesToHex(p.to) === bytesToHex(payment.to));
-  const chain = "Btc" === payment.asset ? "Bitcoin" : "Evm";
-  return `${payment.amount} ${unit} of ${name} to ${payee?.label ?? payeeAddress(chain, payment.to)}`;
+  return `${payment.amount} ${unit} of ${name} to ${payee?.label ?? payeeAddress(chainOfAsset(payment.asset), payment.to)}`;
 }
 
 /** Whole seconds until a nanosecond timestamp from the contract, never below zero. */

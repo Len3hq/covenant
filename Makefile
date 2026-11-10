@@ -5,7 +5,7 @@ MOCK_SIGNER_MANIFEST := tests/mock-signer/Cargo.toml
 FACTORY_MANIFEST := contracts/covenant-factory/Cargo.toml
 
 .DEFAULT_GOAL := help
-.PHONY: help setup fmt lint wasm test build check addresses deploy deploy-factory deploy-dashboard set-policy pay-btc pay-eth demo demo-pay demo-attack demo-queue agent-key veto freeze unfreeze set-guardian dao-freeze dao-veto pay-usdc testnet-smoke
+.PHONY: help setup fmt lint wasm test build check addresses deploy deploy-factory deploy-dashboard set-policy pay-btc pay-eth demo demo-pay demo-attack demo-queue agent-key veto freeze unfreeze set-guardian dao-freeze dao-veto pay-usdc pay-sol sol-nonce testnet-smoke
 
 help: ## List the targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-15s %s\n", $$1, $$2}'
@@ -67,6 +67,13 @@ pay-eth: ## Pay from the vault: make pay-eth TO=<address> WEI=<amount> (needs AG
 pay-usdc: ## Pay USDC from the vault: make pay-usdc TO=<address> AMOUNT=<base units> (needs AGENT_PRIVATE_KEY)
 	pnpm --filter "@covenant/agent..." build
 	node --env-file=.env agent/dist/pay-usdc.js $(TO) $(AMOUNT)
+
+pay-sol: ## Pay on Solana devnet: make pay-sol TO=<address> AMOUNT=<lamports> [TOKEN=USDC] (needs AGENT_PRIVATE_KEY, SOL_NONCE_ACCOUNTS)
+	pnpm --filter "@covenant/agent..." build
+	node --env-file=.env agent/dist/pay-sol.js $(TO) $(AMOUNT) $(TOKEN)
+
+sol-nonce: ## Create a durable nonce account the vault controls, for Solana payments (funds it from SOL_FUNDER_KEY)
+	node --env-file=.env scripts/src/create-nonce.ts
 
 DEMO_FLAGS = $(if $(LIVE),--live) $(if $(LLM),--llm) $(if $(RECORD),--record)
 DEMO_ENV = $(if $(wildcard .env),--env-file=.env)

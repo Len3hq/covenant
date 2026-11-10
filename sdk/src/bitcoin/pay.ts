@@ -1,7 +1,7 @@
 import { hex } from "@scure/base";
 import { address, networks, payments, Transaction } from "bitcoinjs-lib";
 import type { Prepared } from "../store.js";
-import type { SpendOutcome, VaultClient } from "../vault.js";
+import { ecdsa, type SpendOutcome, type VaultClient } from "../vault.js";
 import type { Mempool } from "./mempool.js";
 import { buildSpend, stripWitness } from "./tx.js";
 import { attachWitnesses, type MpcSignature } from "./witness.js";
@@ -73,7 +73,7 @@ export async function payBitcoin(deps: PayDeps, to: string, amount: bigint): Pro
   });
   if (!("Signed" in outcome)) return { status: "not_signed", outcome, nearTx };
 
-  const { signedHex } = signBitcoin(prepared, outcome.Signed.signatures, await vault.btcPubkey());
+  const { signedHex } = signBitcoin(prepared, ecdsa(outcome.Signed.signatures), await vault.btcPubkey());
   const txid = await mempool.broadcast(signedHex);
   return { status: "broadcast", id: outcome.Signed.id, nearTx, txid, fee };
 }

@@ -1,5 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { Covenant } from "@covenant/sdk";
+import { ASSETS, type Covenant } from "@covenant/sdk";
 import { z } from "zod";
 
 /** The parts of a Covenant wallet the tools use, so tests can stand in for the chains. */
@@ -26,9 +26,9 @@ export function createServer(wallet: Wallet): McpServer {
     {
       title: "Pay from the vault",
       description:
-        "Pays from the Covenant vault. `amount` is a whole number of base units: sats for BTC, wei for ETH, and 1000000 is 1 USDC. `to` is a payee's name from list_payees, or an address. `reference` names what the payment is for, such as an invoice number; the same reference never pays twice. The result is `broadcast` (paid), `queued` (large, waiting out a veto window), or `rejected` with the rule it broke. A rejection is final: don't retry it another way.",
+        "Pays from the Covenant vault. `amount` is a whole number of base units: sats for BTC, wei for ETH, lamports for SOL, and 1000000 is 1 USDC. `USDC` is on Base and `USDC-SOL` is on Solana. `to` is a payee's name from list_payees, or an address. `reference` names what the payment is for, such as an invoice number; the same reference never pays twice. The result is `broadcast` (paid), `queued` (large, waiting out a veto window), or `rejected` with the rule it broke. A rejection is final: don't retry it another way.",
       inputSchema: {
-        asset: z.enum(["BTC", "ETH", "USDC"]),
+        asset: z.enum(ASSETS),
         to: z.string().min(1),
         amount: z.string().regex(/^\d+$/, "a whole number of base units"),
         reference: z.string().min(1),
@@ -55,7 +55,7 @@ export function createServer(wallet: Wallet): McpServer {
 
   server.registerTool(
     "get_addresses",
-    { title: "Vault addresses", description: "The vault's Bitcoin testnet4 and Base Sepolia addresses, to fund it." },
+    { title: "Vault addresses", description: "The vault's Bitcoin testnet4, Base Sepolia and Solana devnet addresses, to fund it." },
     async () => text(await wallet.addresses()),
   );
 

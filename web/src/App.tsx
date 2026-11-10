@@ -757,8 +757,16 @@ function Addresses({ accountId, vault }: { accountId: string; vault: VaultState 
           {vault.evmAddress}
         </a>
       </div>
+      {vault.solAddress && (
+        <div>
+          <p className="label">Vault on Solana devnet</p>
+          <a className="mono" href={explorerFor("Solana", vault.solAddress)}>
+            {vault.solAddress}
+          </a>
+        </div>
+      )}
       <div>
-        <p className="label">Both addresses are derived from</p>
+        <p className="label">{vault.solAddress ? "All three addresses are" : "Both addresses are"} derived from</p>
         <span className="mono">{accountId}</span> <span className="muted">via NEAR Chain Signatures</span>
       </div>
       <div>

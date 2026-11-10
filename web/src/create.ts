@@ -1,4 +1,5 @@
-import { bech32, hex } from "@scure/base";
+import { base58, bech32, hex } from "@scure/base";
+import { associatedTokenAccount, SOL_USDC_DEVNET, solanaKey } from "./solana";
 import type { AssetCap, Payee, Policy } from "./vault";
 
 /*
@@ -25,6 +26,7 @@ export function parseUnits(text: string, decimals: number): string {
 /** What a payee's address looks like to the contract, for the address formats it accepts. */
 export function payeeBytes(chain: Payee["chain"], address: string): number[] {
   const trimmed = address.trim();
+  if (chain === "Solana") return [...solanaKey(address)];
   if (chain === "Evm") {
     if (!/^0x[0-9a-fA-F]{40}$/.test(trimmed)) throw new Error(`"${address}" isn't an EVM address`);
     return [...hex.decode(trimmed.slice(2).toLowerCase())];
@@ -51,7 +53,7 @@ export interface CapForm {
 
 export interface PayeeForm {
   label: string;
-  chain: "Bitcoin" | "Evm";
+  chain: "Bitcoin" | "Evm" | "Solana";
   address: string;
 }
 
@@ -64,6 +66,8 @@ export interface VaultForm {
   btc: CapForm;
   eth: CapForm;
   usdc: CapForm;
+  sol: CapForm;
+  solUsdc: CapForm;
   payees: PayeeForm[];
 }
 
@@ -77,6 +81,8 @@ export const STARTING_FORM: VaultForm = {
   btc: { perTx: "0.005", per24h: "0.02", queueAt: "0.0025" },
   eth: { perTx: "0.01", per24h: "0.05", queueAt: "0.005" },
   usdc: { perTx: "50", per24h: "200", queueAt: "25" },
+  sol: { perTx: "0.1", per24h: "0.5", queueAt: "0.05" },
+  solUsdc: { perTx: "50", per24h: "200", queueAt: "25" },
   payees: [{ label: "", chain: "Bitcoin", address: "" }],
 };
 
@@ -96,9 +102,15 @@ function cap(asset: AssetCap["asset"], form: CapForm, decimals: number, name: st
 export function buildPolicy(form: VaultForm): Policy {
   const seconds = form.vetoSeconds.trim();
   if (!/^\d+$/.test(seconds)) throw new Error("The veto window must be a whole number of seconds");
-  const payees = form.payees.map(({ label, chain, address }): Payee => {
+  const solUsdc = base58.decode(SOL_USDC_DEVNET);
+  const payees = form.payees.flatMap(({ label, chain, address }): Payee[] => {
     if (!label.trim()) throw new Error("Every payee needs a name");
-    return { chain, to: payeeBytes(chain, address), label: label.trim() };
+    const to = payeeBytes(chain, address);
+    const payee = { chain, to, label: label.trim() };
+    if (chain !== "Solana") return [payee];
+    // Solana tokens go to a token account, not the wallet, so the wallet's USDC account is listed too.
+    const tokens = associatedTokenAccount(Uint8Array.from(to), solUsdc);
+    return [payee, { chain, to: [...tokens], label: `${label.trim()} (USDC)` }];
   });
   if (payees.length === 0) throw new Error("Add at least one payee, or the vault can pay no one");
   return {
@@ -106,6 +118,8 @@ export function buildPolicy(form: VaultForm): Policy {
       cap("Btc", form.btc, 8, "BTC"),
       cap({ EvmNative: { chain_id: CHAIN_ID } }, form.eth, 18, "ETH"),
       cap({ Erc20: { chain_id: CHAIN_ID, token: [...hex.decode(USDC)] } }, form.usdc, 6, "USDC"),
+      cap("Sol", form.sol, 9, "SOL"),
+      cap({ Spl: { mint: [...solUsdc] } }, form.solUsdc, 6, "Solana USDC"),
     ],
     payees,
     btc_max_fee_rate: 50,
@@ -113,6 +127,8 @@ export function buildPolicy(form: VaultForm): Policy {
     evm_chain_ids: [CHAIN_ID],
     evm_max_gas_cost: "1000000000000000",
     veto_delay_ns: Number(BigInt(seconds) * 1_000_000_000n),
+    // 5,000 lamports of base fee, leaving room for a priority fee in busy times.
+    sol_max_fee: "100000",
   };
 }
 

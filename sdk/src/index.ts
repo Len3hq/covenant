@@ -1,7 +1,7 @@
 // The simple way in.
 export { Covenant } from "./covenant.js";
 export type { Balances, CovenantOptions, Payee, PayRequest, Payment } from "./covenant.js";
-export type { Asset } from "./payments.js";
+export { ASSETS, type Asset } from "./payments.js";
 export { TESTNET } from "./testnet.js";
 
 // The parts it's built from, for agents that need more control.
@@ -17,3 +17,6 @@ export * from "./bitcoin/pay.js";
 export * from "./bitcoin/tx.js";
 export * from "./bitcoin/witness.js";
 export * from "./evm/pay.js";
+export * from "./solana/message.js";
+export * from "./solana/pay.js";
+export { SolanaRpc, type NonceState } from "./solana/rpc.js";

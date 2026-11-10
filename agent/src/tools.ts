@@ -3,6 +3,7 @@ import { hex } from "@scure/base";
 import { getAddress, hexToBytes, type Address, type Hex } from "viem";
 import { z } from "zod";
 import {
+  ASSETS,
   payeeAddress,
   prepareCall,
   preparePayment,
@@ -12,6 +13,7 @@ import {
   type EvmChain,
   type Payer,
   type PayDeps,
+  type SolanaDeps,
   type SpendReport,
 } from "@covenant/sdk";
 import type { ToolSpec } from "./llm/index.js";
@@ -28,6 +30,8 @@ export interface ToolDeps {
   bitcoin: PayDeps;
   chain: EvmChain;
   usdc: Address;
+  /** Absent where Solana isn't set up; a Solana payment then fails before reaching the vault. */
+  solana?: SolanaDeps;
   /** Scopes a spend's identity, so one run's retry is the same spend and a new run's isn't. */
   runId: string;
   /** Coins promised to unfinished spends, which a new payment must not use. */
@@ -62,6 +66,7 @@ export function createTools(deps: ToolDeps): Tool[] {
     bitcoin: deps.bitcoin,
     chain,
     usdc,
+    ...(deps.solana ? { solana: deps.solana } : {}),
     ...(deps.heldCoins ? { heldCoins: deps.heldCoins } : {}),
   };
 
@@ -91,10 +96,10 @@ export function createTools(deps: ToolDeps): Tool[] {
     }),
     tool(
       "pay",
-      "Pays from the vault, to a payee's label or to any address. `amount` is a whole number of base units: sats for BTC, wei for ETH, and for USDC 1000000 is 1 USDC. Reports signed, queued or rejected.",
+      "Pays from the vault, to a payee's label or to any address. `amount` is a whole number of base units: sats for BTC, wei for ETH, lamports for SOL, and for USDC (on Base) or USDC-SOL (on Solana) 1000000 is 1 USDC. Reports signed, queued or rejected.",
       z.object({
         to: z.string(),
-        asset: z.enum(["BTC", "ETH", "USDC"]),
+        asset: z.enum(ASSETS),
         amount: baseUnits,
         memo: z.string(),
       }),

@@ -1,11 +1,11 @@
 import { hexToBytes } from "viem";
 import { sha256 } from "@noble/hashes/sha2.js";
-import { hex } from "@scure/base";
+import { base58, hex } from "@scure/base";
 import { jsonLog, type Log } from "./log.js";
 import { Payer, type SpendReport } from "./payer.js";
 import { payeeAddress, preparePayment, resolvePayee, type Asset } from "./payments.js";
 import { SpendStore } from "./store.js";
-import { connectTestnet, type ConnectOptions } from "./testnet.js";
+import { connectTestnet, TESTNET, type ConnectOptions } from "./testnet.js";
 import type { QueuedSpend } from "./vault.js";
 
 export interface CovenantOptions extends ConnectOptions {
@@ -22,7 +22,7 @@ export interface PayRequest {
   asset: Asset;
   /** A payee's label from the vault's policy, or an address. */
   to: string;
-  /** Whole base units: sats for BTC, wei for ETH, and 1_000_000n is 1 USDC. */
+  /** Whole base units: sats for BTC, wei for ETH, lamports for SOL, and 1_000_000n is 1 USDC. */
   amount: bigint;
   /**
    * What this payment is for, such as an invoice number. The same reference never pays twice: a
@@ -50,6 +50,9 @@ export interface Balances {
   BTC: { balance: bigint; spent24h: bigint };
   ETH: { balance: bigint; spent24h: bigint };
   USDC: { balance: bigint; spent24h: bigint };
+  /** Absent for a vault whose code predates Solana support. */
+  SOL?: { balance: bigint; spent24h: bigint };
+  "USDC-SOL"?: { balance: bigint; spent24h: bigint };
 }
 
 const keyOf = (vault: string, reference: string) =>
@@ -93,7 +96,17 @@ export class Covenant {
     if (!reference.trim()) throw new Error("reference must name what the payment is for");
     const destination = await resolvePayee(this.world.vault, request.to, asset);
     return this.payer.spend(keyOf(this.options.vault, reference), `${amount} ${asset} to ${destination}: ${reference}`, () =>
-      preparePayment({ ...this.world, bitcoin: this.world, heldCoins: () => this.store.heldCoins() }, asset, destination, amount),
+      preparePayment(
+        {
+          ...this.world,
+          bitcoin: this.world,
+          solana: { ...this.world.solana, heldNonces: () => this.store.heldNonces() },
+          heldCoins: () => this.store.heldCoins(),
+        },
+        asset,
+        destination,
+        amount,
+      ),
     );
   }
 
@@ -117,8 +130,13 @@ export class Covenant {
   }
 
   /** The vault's own addresses, to fund it. */
-  async addresses(): Promise<{ bitcoin: string; evm: string }> {
-    return { bitcoin: await this.world.btcAddress(), evm: await this.world.evmAddress() };
+  async addresses(): Promise<{ bitcoin: string; evm: string; solana?: string }> {
+    const solana = await this.world.solAddress().catch(() => undefined);
+    return {
+      bitcoin: await this.world.btcAddress(),
+      evm: await this.world.evmAddress(),
+      ...(solana ? { solana } : {}),
+    };
   }
 
   async balances(): Promise<Balances> {
@@ -131,10 +149,23 @@ export class Covenant {
       vault.spent24h({ EvmNative: { chain_id: chain.chainId } }),
       vault.spent24h({ Erc20: { chain_id: chain.chainId, token: [...hexToBytes(usdc)] } }),
     ]);
-    return {
+    const balances: Balances = {
       BTC: { balance: btc, spent24h: BigInt(btcSpent) },
       ETH: { balance: eth, spent24h: BigInt(ethSpent) },
       USDC: { balance: token, spent24h: BigInt(usdcSpent) },
+    };
+    if (!(await this.world.solAddress().catch(() => undefined))) return balances;
+    const mint = [...base58.decode(this.options.solUsdcMint ?? TESTNET.solUsdcMint)];
+    const [sol, solToken, solSpent, solTokenSpent] = await Promise.all([
+      reads.solBalance(),
+      reads.solTokenBalance(),
+      vault.spent24h("Sol"),
+      vault.spent24h({ Spl: { mint } }),
+    ]);
+    return {
+      ...balances,
+      SOL: { balance: sol, spent24h: BigInt(solSpent) },
+      "USDC-SOL": { balance: solToken, spent24h: BigInt(solTokenSpent) },
     };
   }
 }

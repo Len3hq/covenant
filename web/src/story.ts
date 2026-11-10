@@ -1,4 +1,5 @@
 import {
+  chainOfAsset,
   describeAsset,
   explainRefusal,
   isShownInLog,
@@ -13,14 +14,16 @@ import {
 /** Decimal places of an asset's human unit, or null when the dashboard doesn't know it. */
 export function decimalsOf(asset: Asset): number | null {
   if (asset === "Btc") return 8;
+  if (asset === "Sol") return 9;
   if (typeof asset === "object" && "EvmNative" in asset) return 18;
-  if (describeAsset(asset).name === "USDC") return 6;
+  if (describeAsset(asset).name.startsWith("USDC")) return 6;
   return null;
 }
 
 /** The short symbol shown beside a human amount. */
 export function symbolOf(asset: Asset): string {
   const { name } = describeAsset(asset);
+  if (name === "USDC on Solana") return "USDC";
   return name.startsWith("ETH") ? "ETH" : name;
 }
 
@@ -101,6 +104,12 @@ export function rulesOf(policy: Policy): Rule[] {
     `EVM: only chain ${policy.evm_chain_ids.join(", ")}, plain transfers only, gas at most ${formatUnits(policy.evm_max_gas_cost, 18)} ETH`,
     ["WrongChainId", "CalldataNotAllowed", "TokenNotAllowed", "ValueWithTokenCall", "GasCostTooHigh"],
   );
+  if (policy.caps.some((cap) => chainOfAsset(cap.asset) === "Solana")) {
+    add(
+      `Solana: only SOL or capped token transfers from the vault, fee at most ${formatUnits(policy.sol_max_fee ?? "0", 9)} SOL`,
+      ["FeeTooHigh", "CalldataNotAllowed", "TokenNotAllowed", "InputNotOwned"],
+    );
+  }
   add("Refuse everything else", ["AssetNotCapped", "MalformedTx"]);
   return rules;
 }
@@ -212,7 +221,7 @@ export function tally(activity: Activity[] | null, policy: Policy): Tally {
 const hexOf = (bytes: number[]) => bytes.map((b) => b.toString(16).padStart(2, "0")).join("");
 
 /** A payment's chain, from its asset. */
-export const chainOfPayment = (payment: Payment) => (payment.asset === "Btc" ? "Bitcoin" : "Evm");
+export const chainOfPayment = (payment: Payment) => chainOfAsset(payment.asset);
 
 /** True when the payment goes to an address on the current payee list. */
 export function isListed(payment: Payment, policy: Policy): boolean {
@@ -244,6 +253,7 @@ export function timeAgo(at: number, now: number): string {
 }
 
 export function explorerFor(chain: "Bitcoin" | "Evm" | "Solana", address: string): string {
+  if (chain === "Solana") return `https://explorer.solana.com/address/${address}?cluster=devnet`;
   return chain === "Bitcoin"
     ? `https://mempool.space/testnet4/address/${address}`
     : `https://sepolia.basescan.org/address/${address}`;

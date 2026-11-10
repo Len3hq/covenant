@@ -12,7 +12,7 @@ import {
   type Hex,
   type TransactionSerializableEIP1559,
 } from "viem";
-import type { SpendOutcome, VaultClient } from "../vault.js";
+import { ecdsa, type SpendOutcome, type VaultClient } from "../vault.js";
 
 const TRANSFER_GAS = 21_000n;
 /** A token transfer can cost more by the time it lands, and running out of gas wastes the fee. */
@@ -111,7 +111,7 @@ async function signAndBroadcast(
   const unsigned = await prepareEvm(chain, from, call);
   const { outcome, nearTx } = await vault.proposeEvm(hexToBytes(unsigned));
   if (!("Signed" in outcome)) return { status: "not_signed", outcome, nearTx };
-  const { signedHex } = await signEvm(unsigned, outcome.Signed.signatures, from);
+  const { signedHex } = await signEvm(unsigned, ecdsa(outcome.Signed.signatures), from);
   const hash = await chain.broadcast(signedHex);
   return { status: "broadcast", id: outcome.Signed.id, nearTx, hash };
 }

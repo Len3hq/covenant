@@ -5,7 +5,7 @@ import { jsonLog } from "@covenant/sdk";
 import { Payer, type Assemble, type Broadcasters, type links, type SpendReport } from "@covenant/sdk";
 import { SpendStore } from "@covenant/sdk";
 import { createTools, type ChainReads } from "./tools.js";
-import type { AgentVault } from "@covenant/sdk";
+import type { AgentVault, SolanaDeps } from "@covenant/sdk";
 
 const SCENARIOS = new URL("../scenarios/", import.meta.url);
 export const scenarioText = (name: string) => readFileSync(new URL(name, SCENARIOS), "utf8").trim();
@@ -25,6 +25,7 @@ export interface World {
   reads: ChainReads;
   broadcast: Broadcasters;
   usdc: `0x${string}`;
+  solana?: SolanaDeps;
   spendsFile: string;
   assemble?: Assemble;
   links?: typeof links;
@@ -54,6 +55,7 @@ export function createRuntime(world: World, runId: string) {
     bitcoin: { vault: world.vault, mempool: world.mempool },
     reads: world.reads,
     heldCoins: () => store.heldCoins(),
+    ...(world.solana ? { solana: { ...world.solana, heldNonces: () => store.heldNonces() } } : {}),
     onSpend: (asset, to, report) => spends.push({ asset, to, report }),
   });
   return { tools, spends };

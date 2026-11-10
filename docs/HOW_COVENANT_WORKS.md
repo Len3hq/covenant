@@ -43,17 +43,19 @@ everyone can see what it did. Covenant's contract is written in Rust and runs on
 
 ### 3.2 Chain Signatures (the clever part)
 
-Covenant's money doesn't sit on NEAR. It sits on **Bitcoin** and on **Base** (an Ethereum-style, or
-"EVM", chain). Normally, a Bitcoin address has a private key that some person or server keeps.
+Covenant's money doesn't sit on NEAR. It sits on **Bitcoin**, on **Base** (an Ethereum-style, or
+"EVM", chain) and on **Solana**. Normally, a Bitcoin address has a private key that some person or server keeps.
 
 NEAR has a feature called **Chain Signatures**. A network of independent nodes (the **MPC
 network**, "multi-party computation") together holds a key that no single node knows. When a NEAR
 contract asks it to sign something, the network signs it *on behalf of that contract*. Each
-contract gets its own Bitcoin and Ethereum addresses derived from its NEAR account name.
+contract gets its own Bitcoin, Ethereum and Solana addresses derived from its NEAR account name.
+Bitcoin and Ethereum use one kind of signature (secp256k1); Solana uses another (Ed25519), and the
+MPC network does both.
 
 The consequence is what makes Covenant possible:
 
-> **There is no private key for the vault's Bitcoin or Base address anywhere.** The only way to get
+> **There is no private key for the vault's Bitcoin, Base or Solana address anywhere.** The only way to get
 > a signature for those addresses is to ask the Covenant contract, and the contract only asks the
 > MPC network after its own checks pass.
 
@@ -183,7 +185,7 @@ testnet-only.
 | --- | --- | --- |
 | **Vault contract** | The NEAR contract that parses, checks, queues and signs. All security lives here | [contracts/covenant-vault](../contracts/covenant-vault) |
 | **Policy crate** | The rules as pure functions, easy to test | [contracts/policy](../contracts/policy) |
-| **Adapters** | Bitcoin and EVM parsers and hash calculators | [contracts/adapters](../contracts/adapters) |
+| **Adapters** | Bitcoin, EVM and Solana parsers. On Solana the signature covers the whole checked message, so there's no separate hash | [contracts/adapters](../contracts/adapters) |
 | **Factory** | Lets anyone create their own vault from the dashboard. You own it, its code can't be changed, and we hold no keys or funds | [contracts/covenant-factory](../contracts/covenant-factory) |
 | **Agent service** | An example AI agent that reads invoices and pays through the vault, including the attack demo | [agent](../agent) |
 | **TypeScript SDK** | `wallet.pay({ asset, to, amount, reference })` for developers. Builds the transaction, proposes it, broadcasts what gets signed, and never pays the same `reference` twice | [sdk](../sdk) |

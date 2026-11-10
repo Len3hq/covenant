@@ -14,6 +14,7 @@
     "@scure/base": "^2.4.0"
   },
   "devDependencies": {
+    "@solana/web3.js": "^1.99.0",
     "@types/node": "^22.20.5",
     "bitcoinjs-lib": "^7.0.5",
     "eslint": "^10.14.0",
