@@ -85,6 +85,11 @@ both ([EVIDENCE.md](EVIDENCE.md)).
 - **Solana token payees are token accounts.** The contract can't derive an associated token account
   without curve arithmetic, so the owner lists the payee's token account itself. The SDK and
   dashboard derive it from the payee's wallet.
+- **Swap delivery is trusted to Tidepool.** The vault proves what it pays and where refunds go,
+  but Tidepool holds each deposit until it pays out or refunds. Tidepool is a community-run testnet
+  service, not part of NEAR, with one server and one maker, and its deposit addresses are custodial.
+  Losses are bounded by the vault's caps and by Tidepool's own limits per swap. The maker key is
+  pinned in the policy, so the owner must update it if Tidepool rotates it.
 - **Unaudited.** For testnets only.
 
 ## Invariant to test map
@@ -108,4 +113,7 @@ Each row moves to "Passing" when all of its named tests pass in CI.
 | Unlisted payees can't receive more than `unlisted_per_24h` per asset, even split across outputs or spends, and zero refuses them the asset | `unlisted_cap_counts_split_outputs`, `unlisted_daily_cap_is_enforced_across_spends`, `unlisted_cap_holds_across_spends`, `zero_unlisted_cap_refuses_the_asset`, `hold_mode_with_no_unlisted_cap_refuses_the_asset` | Passing |
 | The unlisted rules add to the main caps, never replace them, and are checked again at `execute` against today's policy | `unlisted_cap_does_not_lift_the_main_caps`, `switching_back_to_refuse_blocks_a_held_spend_at_execute`, `set_policy_refuses_an_unlisted_window_shorter_than_the_listed_one` | Passing |
 | Unlisted payees stay refused unless the owner opts in, including after migration | `refuse_mode_still_refuses`, `refuse_mode_is_the_default`, `a_policy_without_the_new_fields_refuses_unlisted`, `migrate_v3_keeps_state_and_refuses_unlisted_payees` | Passing |
+| Swaps: a spend with a quote pays exactly `amountIn` to the deposit address the maker key signed, nothing else, and each quote pays once | `live_quote_verifies_and_names_its_deposit_and_recipient`, `one_flipped_byte_fails`, `duplicate_key_json_fails`, `attack_pays_its_own_address_with_an_honest_quote`, `attack_deposits_more_than_the_quote`, `attack_changes_the_recipient_after_signing`, `attack_replays_a_used_quote` | Passing |
+| Swaps: refunds can only return to the vault, and a quote can't carry fees, memos or forwarding to anyone else | `refund_not_to_vault_fails`, `attack_sends_the_refund_to_itself`, `memo_and_unknown_request_fields_fail`, `attack_adds_an_app_fee_to_itself`, `routing_other_than_chain_to_chain_fails`, `dry_quote_fails`, `flex_and_any_input_fail` | Passing |
+| Swaps: only listed assets, within the policy's slippage and with time to deposit; the final recipient follows the payee rules; held swaps are rechecked at execute | `unlisted_assets_and_loose_slippage_fail`, `deadline_too_close_or_too_far_fails`, `attack_swaps_to_an_unlisted_destination_asset`, `swap_to_an_unlisted_recipient_follows_the_unlisted_rules`, `held_swap_rechecks_the_swap_rules_at_execute`, `swaps_are_refused_without_a_swap_section` | Passing |
 | A hijacked agent's attacks never reach the signer | the 13 tests in `tests/attacks/bitcoin.rs`, 14 in `tests/attacks/evm.rs` and 15 in `tests/attacks/solana.rs` | Passing |

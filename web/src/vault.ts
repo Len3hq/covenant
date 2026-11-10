@@ -112,6 +112,15 @@ export interface Policy {
   /** Absent on vaults from before open payees, which refuse unlisted payees. */
   unlisted?: "Refuse" | "Hold";
   unlisted_veto_delay_ns?: number;
+  /** Absent or null: swaps are refused. */
+  swap?: {
+    maker_key: number[];
+    origins: { asset_id: string; asset: Asset }[];
+    destinations: string[];
+    payees: { destination_asset: string; recipient: string; label: string }[];
+    max_slippage_bps: number;
+    min_deposit_window_ns: number;
+  } | null;
 }
 
 /** Amounts are integer strings in the asset's base unit. */
@@ -139,6 +148,39 @@ export interface Pending {
   executable_at: string;
 }
 
+/** What a swap's signed quote committed to, as the vault logs it. */
+export interface SwapInfo {
+  correlation_id: string;
+  deposit_address: string;
+  destination_asset: string;
+  recipient: string;
+  min_amount_out: string;
+  deadline_ns: string;
+}
+
+/** A Tidepool asset id in words, such as "USDC on Base" for its Base USDC. */
+export function swapAssetName(assetId: string): string {
+  const match = /^nep141:([a-z]+)(?:-(0x[0-9a-f]+|[0-9a-f]+))?\.tp-omft\.testnet$/.exec(assetId);
+  const chains: Record<string, string> = {
+    btc: "Bitcoin",
+    base: "Base",
+    arb: "Arbitrum",
+    eth: "Ethereum",
+    bsc: "BSC",
+    sol: "Solana",
+    stellar: "Stellar",
+    sui: "Sui",
+    xrp: "XRP Ledger",
+  };
+  const chain = match?.[1] ? chains[match[1]] : undefined;
+  if (!chain) return assetId;
+  return match?.[2] ? `a token on ${chain} (${assetId})` : `the native coin on ${chain}`;
+}
+
+/** One line for the log, such as "Swapped to at least 97020000 base units of …, for 4zMM…". */
+export const describeSwap = (swap: SwapInfo) =>
+  `Swapped through Tidepool: at least ${swap.min_amount_out} base units of ${swapAssetName(swap.destination_asset)}, for ${swap.recipient}`;
+
 export interface Activity {
   event: string;
   id?: string;
@@ -150,6 +192,8 @@ export interface Activity {
   txHash: string;
   /** Milliseconds since the epoch. */
   at: number;
+  /** Present when the spend paid a swap's deposit address. */
+  swap?: SwapInfo;
   /**
    * What the agent asked to pay, decoded by the dashboard from its request, for display only. Set on
    * a refusal whose event carries no payments, because the contract refused while parsing.

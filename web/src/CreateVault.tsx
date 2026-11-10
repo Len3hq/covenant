@@ -277,6 +277,15 @@ export function CreateVault({
             />{" "}
             Only the payees I list
           </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={form.allowSwaps}
+              onChange={(event) => setForm({ ...form, allowSwaps: event.target.checked })}
+            />{" "}
+            Also pay on other chains and in other tokens, through Tidepool. Tidepool holds each swap for
+            the minute it takes, so the vault's limits are what you could lose.
+          </label>
         </fieldset>
         <Payees
           payees={form.payees}

@@ -6,6 +6,7 @@ import { signEvm } from "./evm/pay.js";
 import type { Log } from "./log.js";
 import type { Prepared, SpendRecord, SpendStore } from "./store.js";
 import { signSolana, type SolanaPrepared } from "./solana/pay.js";
+import { statusLink } from "./tidepool.js";
 import { ContractPanic, ecdsa, type AgentVault, type Proposed, type VaultSignature } from "./vault.js";
 
 const ALREADY_KNOWN = /already known|already in (block|mempool|chain)|txn-already|known transaction/i;
@@ -13,6 +14,8 @@ const ALREADY_KNOWN = /already known|already in (block|mempool|chain)|txn-alread
 export interface Links {
   near?: string;
   chain?: string;
+  /** For a swap, where Tidepool reports its progress. */
+  swap?: string;
 }
 
 /** What the model and the logs are told about a spend. */
@@ -22,6 +25,8 @@ export interface SpendReport {
   executableAt?: string;
   error?: string;
   chainTx?: string;
+  /** For a swap: where it delivers, the least it delivers, and Tidepool's last status. */
+  swap?: { to: string; asset: string; minAmountOut: string; deadline: string; status?: string };
   links: Links;
 }
 
@@ -35,6 +40,7 @@ export function links(record: Pick<SpendRecord, "prepared" | "nearTx" | "chainTx
   return {
     ...(nearTx ? { near: `https://testnet.nearblocks.io/txns/${nearTx}` } : {}),
     ...(chainTx ? { chain } : {}),
+    ...(prepared.swap ? { swap: statusLink(prepared.swap.depositAddress) } : {}),
   };
 }
 
@@ -44,6 +50,17 @@ export const report = (record: SpendRecord, linker = links): SpendReport => ({
   ...(record.executableAt ? { executableAt: record.executableAt } : {}),
   ...(record.error ? { error: record.error } : {}),
   ...(record.chainTx ? { chainTx: record.chainTx } : {}),
+  ...(record.prepared.swap
+    ? {
+        swap: {
+          to: record.prepared.swap.recipient,
+          asset: record.prepared.swap.destinationAsset,
+          minAmountOut: record.prepared.swap.minAmountOut,
+          deadline: record.prepared.swap.deadline,
+          ...(record.swapStatus ? { status: record.swapStatus } : {}),
+        },
+      }
+    : {}),
   links: linker(record),
 });
 
@@ -146,10 +163,11 @@ export class Payer {
               prevTxs: prepared.prevTxs.map((prev) => hex.decode(prev)),
             },
             beforeSend,
+            prepared.quote,
           )
         : prepared.chain === "Solana"
-          ? this.vault.proposeSolana(hex.decode(prepared.unsignedHex), beforeSend)
-          : this.vault.proposeEvm(hex.decode(prepared.unsignedHex.slice(2)), beforeSend),
+          ? this.vault.proposeSolana(hex.decode(prepared.unsignedHex), beforeSend, prepared.quote)
+          : this.vault.proposeEvm(hex.decode(prepared.unsignedHex.slice(2)), beforeSend, prepared.quote),
     );
   }
 

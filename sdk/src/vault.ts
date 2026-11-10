@@ -11,6 +11,7 @@ import {
 } from "near-api-js";
 import { z } from "zod";
 import { withRetry } from "./retry.js";
+import type { SignedQuote } from "./tidepool.js";
 
 const MAX_GAS = 300_000_000_000_000n;
 /** docs/SPEC.md: a signature that hasn't arrived by now is looked up, not proposed again. */
@@ -60,6 +61,24 @@ export interface BitcoinProposal {
   prevTxs: Uint8Array[];
 }
 
+/** The swap rules of a vault's policy, which a swap's quote must meet. */
+export interface SwapRules {
+  maker_key: number[];
+  origins: { asset_id: string; asset: unknown }[];
+  destinations: string[];
+  payees: { destination_asset: string; recipient: string; label: string }[];
+  max_slippage_bps: number;
+  min_deposit_window_ns: number;
+}
+
+/** What the SDK needs to time a quote: the veto windows, and the swap rules if any. */
+export interface Timing {
+  veto_delay_ns: number;
+  unlisted?: "Refuse" | "Hold";
+  unlisted_veto_delay_ns?: number;
+  swap?: SwapRules | null;
+}
+
 export interface Proposed {
   outcome: SpendOutcome;
   nearTx: string;
@@ -74,9 +93,10 @@ export interface VaultClient {
   evmAddress(): Promise<string>;
   /** The vault's Ed25519 key, whose base58 is its Solana address. */
   solPubkey(): Promise<Uint8Array>;
-  proposeBitcoin(proposal: BitcoinProposal, beforeSend?: BeforeSend): Promise<Proposed>;
-  proposeEvm(tx: Uint8Array, beforeSend?: BeforeSend): Promise<Proposed>;
-  proposeSolana(message: Uint8Array, beforeSend?: BeforeSend): Promise<Proposed>;
+  /** `quote` pays a swap: the spend must pay exactly its deposit, and nothing else. */
+  proposeBitcoin(proposal: BitcoinProposal, beforeSend?: BeforeSend, quote?: SignedQuote): Promise<Proposed>;
+  proposeEvm(tx: Uint8Array, beforeSend?: BeforeSend, quote?: SignedQuote): Promise<Proposed>;
+  proposeSolana(message: Uint8Array, beforeSend?: BeforeSend, quote?: SignedQuote): Promise<Proposed>;
 }
 
 export interface PolicyPayee {
@@ -93,6 +113,7 @@ export interface QueuedSpend {
 /** What the agent needs beyond paying: reading state and following up on queued spends. */
 export interface AgentVault extends VaultClient {
   payees(): Promise<PolicyPayee[]>;
+  timing(): Promise<Timing>;
   spent24h(asset: unknown): Promise<string>;
   queue(): Promise<QueuedSpend[]>;
   execute(id: string, beforeSend?: BeforeSend): Promise<Proposed>;
@@ -185,23 +206,29 @@ export function connectVault(config: {
       if (!sol_address) throw new Error(`${config.vault} runs code from before Solana support`);
       return base58.decode(sol_address);
     },
-    proposeBitcoin: ({ tx, prevTxs }, beforeSend) =>
+    proposeBitcoin: ({ tx, prevTxs }, beforeSend, quote) =>
       send(
         "propose_spend",
         {
           chain: "Bitcoin",
           tx: base64(tx),
           meta: { Bitcoin: { prev_txs: prevTxs.map(base64) } },
+          ...(quote ? { quote } : {}),
         },
         beforeSend,
       ),
-    proposeEvm: (tx, beforeSend) =>
-      send("propose_spend", { chain: "Evm", tx: base64(tx), meta: "Evm" }, beforeSend),
-    proposeSolana: (message, beforeSend) =>
-      send("propose_spend", { chain: "Solana", tx: base64(message), meta: "Solana" }, beforeSend),
+    proposeEvm: (tx, beforeSend, quote) =>
+      send("propose_spend", { chain: "Evm", tx: base64(tx), meta: "Evm", ...(quote ? { quote } : {}) }, beforeSend),
+    proposeSolana: (message, beforeSend, quote) =>
+      send(
+        "propose_spend",
+        { chain: "Solana", tx: base64(message), meta: "Solana", ...(quote ? { quote } : {}) },
+        beforeSend,
+      ),
     async payees() {
       return (await view<{ payees: PolicyPayee[] }>("get_policy")).payees;
     },
+    timing: () => view<Timing>("get_policy"),
     spent24h: (asset) => view<string>("get_spent_24h", { asset }),
     queue: () => view<QueuedSpend[]>("get_queue"),
     execute: (id, beforeSend) => send("execute", { id }, beforeSend),

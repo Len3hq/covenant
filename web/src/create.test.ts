@@ -96,6 +96,19 @@ describe("buildPolicy", () => {
     expect(policy.unlisted_veto_delay_ns).toBe(600_000_000_000);
   });
 
+  it("adds Tidepool's swap rules only when asked", () => {
+    expect(buildPolicy(form).swap).toBeNull();
+    const swap = buildPolicy({ ...form, allowSwaps: true }).swap;
+    expect(base58.encode(Uint8Array.from(swap?.maker_key ?? []))).toBe("U1Mu4u1nHnHmgABpCkfDGXt2FZj8k29UGqhkMAu4iWY");
+    expect(swap?.origins.map((origin) => origin.asset_id)).toEqual([
+      "nep141:btc.tp-omft.testnet",
+      "nep141:base.tp-omft.testnet",
+      "nep141:sol.tp-omft.testnet",
+    ]);
+    expect(swap?.destinations).toContain("nep141:sol.tp-omft.testnet");
+    expect(swap?.min_deposit_window_ns).toBe(3_600_000_000_000);
+  });
+
   it("refuses unlisted payees when only the list may be paid", () => {
     const policy = buildPolicy({ ...form, openPayees: false, unlistedSeconds: "1" });
     expect(policy.unlisted).toBe("Refuse");

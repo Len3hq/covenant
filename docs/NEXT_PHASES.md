@@ -189,6 +189,20 @@ it. Every test is green, and SECURITY.md has a row for each new claim.
 
 ## Phase 2: pay anyone on any chain, in any token, through Tidepool
 
+**Status: built on 10 Nov, not yet deployed.** It differs from the design below in five ways:
+
+- **`TxMeta` is unchanged.** The quote is a new optional `quote` argument to `propose_spend`, so
+  the agent's function-call key (`propose_spend`, `execute`) needs no change, and callers without
+  a quote work as before.
+- **Fields are checked against an allowlist.** Unknown quote-request fields are refused, rather
+  than ignored, so a later field such as app fees can't skim the swap.
+- **The swap's state shares phase 1's migration.** It rides in the same `migrate_v3`, because
+  phase 1 isn't deployed yet.
+- **Origins are BTC, Base ETH and native SOL.** A Solana token deposit can't be checked against
+  the deposit wallet, because the contract can't derive associated token accounts.
+- **The dashboard form has an opt-in "Also pay on other chains" box.** It fills in Tidepool's maker
+  key, the three origins and every bridged destination, with a one-hour deposit window.
+
 ### What Tidepool is (checked on 10 Nov)
 
 [Tidepool](https://www.usetidepool.tech/docs) is a free testnet copy of NEAR Intents' 1Click API,
@@ -348,7 +362,7 @@ little next to the 30 Tgas for each `sign`. Add one row to the gas benchmark.
 
 ### SDK ([sdk/src](../sdk/src))
 
-New file `sdk/src/tidepool.ts`:
+New file [sdk/src/tidepool.ts](../sdk/src/tidepool.ts):
 
 - `tokens()`: reads `GET /v0/tokens`, cached for 10 minutes.
 - `quote({ from, toAsset, recipient, amount, swapType })`:

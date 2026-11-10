@@ -1,5 +1,5 @@
 // The simple way in.
-export { Covenant } from "./covenant.js";
+export { Covenant, quoteDeadline, tidepoolChain } from "./covenant.js";
 export type { Balances, CovenantOptions, Payee, PayRequest, Payment } from "./covenant.js";
 export { ASSETS, type Asset } from "./payments.js";
 export { TESTNET } from "./testnet.js";
@@ -11,6 +11,7 @@ export { Payer, links, report, type Assemble, type Broadcasters, type Links, typ
 export { SpendStore, type Prepared, type SpendRecord, type SpendStatus } from "./store.js";
 export * from "./vault.js";
 export { withRetry } from "./retry.js";
+export * from "./tidepool.js";
 export { jsonLog, type Log, type LogFields } from "./log.js";
 export { Mempool } from "./bitcoin/mempool.js";
 export * from "./bitcoin/pay.js";

@@ -31,6 +31,7 @@ import {
   formatNear,
   isShownInLog,
   loadVault,
+  describeSwap,
   payeeAddress,
   secondsUntil,
   vetoDelaySeconds,
@@ -463,6 +464,7 @@ function Feed({
                 {payments.map((payment) => (
                   <PaymentLine key={payment.to.join()} payment={payment} policy={policy} />
                 ))}
+                {entry.swap && <p className="muted small">{describeSwap(entry.swap)}</p>}
               </div>
               <div className="row-meta">
                 {entry.chain && <span className="chip">{entry.chain === "Evm" ? "Base" : entry.chain}</span>}

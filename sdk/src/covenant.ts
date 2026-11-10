@@ -2,11 +2,48 @@ import { hexToBytes } from "viem";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { base58, hex } from "@scure/base";
 import { jsonLog, type Log } from "./log.js";
-import { Payer, type SpendReport } from "./payer.js";
+import { Payer, report, type SpendReport } from "./payer.js";
 import { payeeAddress, preparePayment, resolvePayee, type Asset } from "./payments.js";
 import { SpendStore } from "./store.js";
 import { connectTestnet, TESTNET, type ConnectOptions } from "./testnet.js";
-import type { QueuedSpend } from "./vault.js";
+import { Tidepool, TIDEPOOL, type SwapOrigin, type Token } from "./tidepool.js";
+import type { QueuedSpend, Timing } from "./vault.js";
+
+const HOUR_MS = 3_600_000;
+/** Tidepool's chain names, with the common names people use for them. */
+const CHAIN_NAMES: Record<string, string> = {
+  bitcoin: "btc",
+  btc: "btc",
+  base: "base",
+  arbitrum: "arb",
+  arb: "arb",
+  ethereum: "eth",
+  eth: "eth",
+  bsc: "bsc",
+  solana: "sol",
+  sol: "sol",
+  stellar: "stellar",
+  sui: "sui",
+  xrp: "xrp",
+  near: "near",
+};
+
+export function tidepoolChain(name: string): string {
+  const chain = CHAIN_NAMES[name.trim().toLowerCase()];
+  if (!chain) throw new Error(`unknown chain "${name}"; use one of ${[...new Set(Object.values(CHAIN_NAMES))].join(", ")}`);
+  return chain;
+}
+
+/**
+ * How long a swap's quote stays open: long enough for the longest veto window it might wait out,
+ * plus the vault's deposit window and an hour to spare, within Tidepool's one-day limit.
+ */
+export function quoteDeadline(timing: Timing, nowMs: number): Date {
+  const window = timing.swap?.min_deposit_window_ns ?? 0;
+  const delay = Math.max(timing.veto_delay_ns, timing.unlisted_veto_delay_ns ?? 0);
+  const needed = (delay + window) / 1_000_000 + HOUR_MS;
+  return new Date(nowMs + Math.min(Math.max(needed, 2 * HOUR_MS), 23 * HOUR_MS));
+}
 
 export interface CovenantOptions extends ConnectOptions {
   /**
@@ -16,6 +53,9 @@ export interface CovenantOptions extends ConnectOptions {
   spendsFile?: string;
   /** Receives each step as it happens. Defaults to JSON lines on stderr; pass `() => {}` to silence. */
   log?: Log;
+  tidepoolUrl?: string;
+  /** The key Tidepool's quotes are signed with. The vault's policy pins its own copy. */
+  tidepoolMakerKey?: string;
 }
 
 export interface PayRequest {
@@ -29,6 +69,13 @@ export interface PayRequest {
    * second call returns the first one's result, or finishes it if it was interrupted.
    */
   reference: string;
+  /**
+   * Pays on another chain or in another token through Tidepool: `asset` leaves the vault, and the
+   * recipient gets `toAsset` on `toChain`, such as `USDC` on `solana`. `to` is then an address on
+   * `toChain`, or a swap payee's label. Only BTC, ETH and SOL can be swapped from.
+   */
+  toChain?: string;
+  toAsset?: string;
 }
 
 /**
@@ -70,12 +117,14 @@ const keyOf = (vault: string, reference: string) =>
 export class Covenant {
   private readonly store: SpendStore;
   private readonly payer: Payer;
+  private readonly tidepool: Tidepool;
 
   private constructor(
     private readonly options: CovenantOptions,
     private readonly world: ReturnType<typeof connectTestnet>,
   ) {
     this.store = new SpendStore(options.spendsFile ?? "covenant-spends.json");
+    this.tidepool = new Tidepool(options.tidepoolUrl, options.tidepoolMakerKey);
     this.payer = new Payer({
       vault: world.vault,
       store: this.store,
@@ -94,6 +143,7 @@ export class Covenant {
     const { asset, amount, reference } = request;
     if (typeof amount !== "bigint" || amount <= 0n) throw new Error("amount must be a positive bigint");
     if (!reference.trim()) throw new Error("reference must name what the payment is for");
+    if (request.toChain || request.toAsset) return this.paySwap(request);
     const destination = await resolvePayee(this.world.vault, request.to, asset);
     return this.payer.spend(keyOf(this.options.vault, reference), `${amount} ${asset} to ${destination}: ${reference}`, () =>
       preparePayment(
@@ -111,8 +161,119 @@ export class Covenant {
   }
 
   /** Signs and broadcasts a queued payment whose veto window has passed. */
-  execute(id: string): Promise<Payment> {
-    return this.payer.execute(id);
+  async execute(id: string): Promise<Payment> {
+    const result = await this.payer.execute(id);
+    const record = this.store.byId(id);
+    return record ? this.afterSwapBroadcast(record.key, result) : result;
+  }
+
+  private swapDeps() {
+    return {
+      ...this.world,
+      bitcoin: this.world,
+      solana: { ...this.world.solana, heldNonces: () => this.store.heldNonces() },
+      heldCoins: () => this.store.heldCoins(),
+    };
+  }
+
+  /** The vault's own address on the chain an asset leaves from, which is where refunds go. */
+  private async ownAddress(asset: SwapOrigin): Promise<string> {
+    if (asset === "BTC") return this.world.btcAddress();
+    if (asset === "SOL") return this.world.solAddress();
+    return this.world.evmAddress();
+  }
+
+  /** The Tidepool asset a swap delivers, and its recipient, with a swap payee's label resolved. */
+  private async swapTarget(request: PayRequest): Promise<{ token: Token; recipient: string; timing: Timing }> {
+    const timing = await this.world.vault.timing();
+    if (!timing.swap) throw new Error("this vault's policy has no swap section, so it refuses swaps");
+    const chain = tidepoolChain(request.toChain ?? "base");
+    const token = await this.tidepool.token(chain, request.toAsset ?? request.asset);
+    const label = request.to.trim().toLowerCase();
+    const payee = timing.swap.payees.find(
+      (p) => p.destination_asset === token.assetId && p.label.toLowerCase() === label,
+    );
+    return { token, recipient: payee?.recipient ?? request.to.trim(), timing };
+  }
+
+  private async paySwap(request: PayRequest): Promise<Payment> {
+    const { asset, amount, reference } = request;
+    if (!(asset in TIDEPOOL.origins)) throw new Error(`${asset} can't be swapped from; use BTC, ETH or SOL`);
+    const origin = asset as SwapOrigin;
+    const { token, recipient, timing } = await this.swapTarget(request);
+    const key = keyOf(this.options.vault, reference);
+    const description = `${amount} ${asset} as ${token.symbol} on ${token.blockchain} to ${recipient}: ${reference}`;
+    const result = await this.payer.spend(key, description, async () => {
+      const { signed, terms } = await this.tidepool.quote({
+        dry: false,
+        origin: TIDEPOOL.origins[origin],
+        destination: token.assetId,
+        amount,
+        refundTo: await this.ownAddress(origin),
+        recipient,
+        deadline: quoteDeadline(timing, Date.now()),
+        ...(timing.swap ? { slippageBps: Math.min(100, timing.swap.max_slippage_bps) } : {}),
+      });
+      const prepared = await preparePayment(this.swapDeps(), asset, terms.depositAddress, BigInt(terms.amountIn));
+      return { ...prepared, quote: signed, swap: terms };
+    });
+    return this.afterSwapBroadcast(key, result);
+  }
+
+  /** Tells Tidepool about a swap's deposit once it's broadcast. Tidepool finds it anyway, so this is best effort. */
+  private async afterSwapBroadcast(key: string, result: Payment): Promise<Payment> {
+    const record = this.store.get(key);
+    if (!record?.prepared.swap || result.status !== "broadcast" || !record.chainTx || record.swapStatus) {
+      return result;
+    }
+    await this.tidepool.submitDeposit(record.chainTx, record.prepared.swap.depositAddress).catch(() => undefined);
+    return this.refreshSwap(key).catch(() => result);
+  }
+
+  /**
+   * A swap's progress from Tidepool: `PENDING_DEPOSIT`, `PROCESSING`, `SUCCESS` (delivered),
+   * `REFUNDED` (returned to the vault) or `FAILED`.
+   */
+  async swapStatus(paymentReference: string): Promise<Payment> {
+    const key = keyOf(this.options.vault, paymentReference);
+    const record = this.store.get(key);
+    if (!record) throw new Error(`no payment with reference "${paymentReference}"`);
+    if (!record.prepared.swap) throw new Error(`"${paymentReference}" isn't a swap`);
+    return this.refreshSwap(key);
+  }
+
+  private async refreshSwap(key: string): Promise<Payment> {
+    const record = this.store.get(key);
+    if (!record?.prepared.swap) throw new Error("no swap on record");
+    const swapStatus = await this.tidepool.status(record.prepared.swap.depositAddress);
+    const updated = { ...record, swapStatus };
+    this.store.put(updated);
+    return report(updated);
+  }
+
+  /** A swap's expected output, without spending anything or reserving a deposit address. */
+  async quoteSwap(request: Omit<PayRequest, "reference">): Promise<{ amountIn: string; amountOut: string; minAmountOut: string; asset: string }> {
+    const { asset, amount } = request;
+    if (!(asset in TIDEPOOL.origins)) throw new Error(`${asset} can't be swapped from; use BTC, ETH or SOL`);
+    const origin = asset as SwapOrigin;
+    const { token, recipient, timing } = await this.swapTarget({ ...request, reference: "quote" });
+    const { terms, amountOut } = await this.tidepool.quote({
+      dry: true,
+      origin: TIDEPOOL.origins[origin],
+      destination: token.assetId,
+      amount,
+      refundTo: await this.ownAddress(origin),
+      recipient,
+      deadline: quoteDeadline(timing, Date.now()),
+    });
+    return { amountIn: terms.amountIn, amountOut, minAmountOut: terms.minAmountOut, asset: token.assetId };
+  }
+
+  /** The tokens a swap may deliver under the vault's policy. */
+  async destinations(): Promise<Token[]> {
+    const timing = await this.world.vault.timing();
+    const allowed = new Set(timing.swap?.destinations ?? []);
+    return (await this.tidepool.tokens()).filter((token) => allowed.has(token.assetId));
   }
 
   /** Who the vault may pay. Everything else is refused. */

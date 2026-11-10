@@ -318,3 +318,23 @@ describe("loadProvenance", () => {
     expect(await standard({ ...config, accountId: "fakevaults.testnet" }, answers("HASH", 0))).toBe(false);
   });
 });
+
+describe("swaps in the log", () => {
+  it("names Tidepool assets in words and describes the swap", async () => {
+    const { describeSwap, swapAssetName } = await import("./vault");
+    expect(swapAssetName("nep141:sol.tp-omft.testnet")).toBe("the native coin on Solana");
+    expect(swapAssetName("nep141:base-0x38d81431b9f76d9699af7517040d5221d9dea252.tp-omft.testnet")).toContain(
+      "a token on Base",
+    );
+    expect(swapAssetName("nep141:wnear.tidepool-sandbox.testnet")).toBe("nep141:wnear.tidepool-sandbox.testnet");
+    const line = describeSwap({
+      correlation_id: "c",
+      deposit_address: "tb1q…",
+      destination_asset: "nep141:sol.tp-omft.testnet",
+      recipient: "4zMM",
+      min_amount_out: "97020000",
+      deadline_ns: "0",
+    });
+    expect(line).toBe("Swapped through Tidepool: at least 97020000 base units of the native coin on Solana, for 4zMM");
+  });
+});

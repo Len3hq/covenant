@@ -213,7 +213,7 @@ describe("Payer on Solana", () => {
       nearTx: "near-s",
     }));
     const result = await h.payer().spend("s", "pay", async () => solana);
-    expect(h.vault.proposeSolana).toHaveBeenCalledWith(message, expect.any(Function));
+    expect(h.vault.proposeSolana).toHaveBeenCalledWith(message, expect.any(Function), undefined);
     expect(h.broadcast.solana).toHaveBeenCalledWith(hex.encode(Uint8Array.from([1, ...signature, ...message])));
     expect(result.status).toBe("broadcast");
     expect(result.links.chain).toMatch(/^https:\/\/explorer\.solana\.com\/tx\/.+\?cluster=devnet$/);

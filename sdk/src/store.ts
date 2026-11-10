@@ -1,13 +1,22 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { Transaction } from "bitcoinjs-lib";
+import type { SignedQuote, SwapTerms } from "./tidepool.js";
 import type { SpendOutcome } from "./vault.js";
 
+/** A swap's quote and terms, kept with a spend that pays its deposit address. */
+export interface SwapPart {
+  quote?: SignedQuote;
+  swap?: SwapTerms;
+}
+
 /** Enough to finish a spend after a restart, without proposing it again. */
-export type Prepared =
-  | { chain: "Bitcoin"; unsignedHex: string; prevTxs: string[]; inputValues: string[] }
-  | { chain: "Evm"; unsignedHex: string }
-  /** `unsignedHex` is the legacy message, which is what Ed25519 signs. */
-  | { chain: "Solana"; unsignedHex: string; nonceAccount: string };
+export type Prepared = SwapPart &
+  (
+    | { chain: "Bitcoin"; unsignedHex: string; prevTxs: string[]; inputValues: string[] }
+    | { chain: "Evm"; unsignedHex: string }
+    /** `unsignedHex` is the legacy message, which is what Ed25519 signs. */
+    | { chain: "Solana"; unsignedHex: string; nonceAccount: string }
+  );
 
 export type SpendStatus =
   | "prepared" // Built, and not yet sent to NEAR.
@@ -30,6 +39,8 @@ export interface SpendRecord {
   error?: string;
   signedHex?: string;
   chainTx?: string;
+  /** For a swap, Tidepool's last status for it, such as `PROCESSING` or `SUCCESS`. */
+  swapStatus?: string;
 }
 
 /**
@@ -48,6 +59,10 @@ export class SpendStore {
 
   get(key: string): SpendRecord | undefined {
     return this.records.get(key);
+  }
+
+  all(): SpendRecord[] {
+    return [...this.records.values()];
   }
 
   byId(id: string): SpendRecord | undefined {

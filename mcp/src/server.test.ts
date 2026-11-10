@@ -19,7 +19,17 @@ describe("the Covenant MCP server", () => {
     const client = await connect({});
     const { tools } = await client.listTools();
     expect(tools.map((tool) => tool.name).sort()).toEqual(
-      ["execute_queued", "get_addresses", "get_balances", "list_payees", "list_queue", "pay"].sort(),
+      [
+        "execute_queued",
+        "get_addresses",
+        "get_balances",
+        "get_payment_status",
+        "list_destinations",
+        "list_payees",
+        "list_queue",
+        "pay",
+        "quote_payment",
+      ].sort(),
     );
   });
 
@@ -71,5 +81,40 @@ describe("the Covenant MCP server", () => {
     expect(body(await client.callTool({ name: "get_balances", arguments: {} }))).toMatchObject({
       BTC: { balance: "657782" },
     });
+  });
+
+  it("pays across chains by passing the target chain and token to the wallet", async () => {
+    const pay = vi.fn(async () => ({ status: "broadcast" as const, links: {} }));
+    const client = await connect({ pay });
+    await client.callTool({
+      name: "pay",
+      arguments: {
+        asset: "BTC",
+        to: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+        amount: "20000",
+        reference: "INV-9",
+        to_chain: "solana",
+        to_asset: "USDC",
+      },
+    });
+    expect(pay).toHaveBeenCalledWith({
+      asset: "BTC",
+      to: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+      amount: 20_000n,
+      reference: "INV-9",
+      toChain: "solana",
+      toAsset: "USDC",
+    });
+  });
+
+  it("previews a swap and reports a swap's status by reference", async () => {
+    const quoteSwap = vi.fn(async () => ({ amountIn: "20000", amountOut: "14661630", minAmountOut: "14515013", asset: "x" }));
+    const swapStatus = vi.fn(async () => ({ status: "broadcast" as const, swap: { to: "a", asset: "x", minAmountOut: "1", deadline: "d", status: "SUCCESS" }, links: {} }));
+    const client = await connect({ quoteSwap, swapStatus });
+    const quote = await client.callTool({ name: "quote_payment", arguments: { asset: "BTC", to: "a", amount: "20000", to_chain: "base", to_asset: "USDC" } });
+    expect(quoteSwap).toHaveBeenCalledWith({ asset: "BTC", to: "a", amount: 20_000n, toChain: "base", toAsset: "USDC" });
+    expect(body(quote)).toMatchObject({ amountOut: "14661630" });
+    const status = await client.callTool({ name: "get_payment_status", arguments: { reference: "INV-9" } });
+    expect(body(status)).toMatchObject({ swap: { status: "SUCCESS" } });
   });
 });

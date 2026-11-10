@@ -67,6 +67,8 @@ export interface VaultForm {
   vetoSeconds: string;
   /** Pay anyone, holding payments to unlisted payees, or pay only the list. */
   openPayees: boolean;
+  /** Pay on other chains and in other tokens through Tidepool, which holds each swap briefly. */
+  allowSwaps: boolean;
   unlistedSeconds: string;
   btc: CapForm;
   eth: CapForm;
@@ -84,6 +86,7 @@ export const STARTING_FORM: VaultForm = {
   deposit: "1.5",
   vetoSeconds: "120",
   openPayees: true,
+  allowSwaps: false,
   unlistedSeconds: "600",
   btc: { perTx: "0.005", per24h: "0.02", queueAt: "0.0025", unlisted24h: "0.004" },
   eth: { perTx: "0.01", per24h: "0.05", queueAt: "0.005", unlisted24h: "0.01" },
@@ -122,6 +125,55 @@ function wholeSeconds(text: string, what: string): bigint {
   return BigInt(seconds);
 }
 
+/**
+ * Tidepool on testnet: the key its quotes are signed with (on `maker.tidepool-sandbox.testnet`,
+ * read on 10 Nov 2026), what the vault can swap from, and every bridged asset it delivers.
+ */
+const TIDEPOOL_MAKER_KEY = [
+  6, 235, 22, 216, 170, 210, 199, 146, 202, 104, 197, 173, 237, 45, 75, 49, 234, 181, 78, 142, 10, 29, 246, 15,
+  121, 58, 48, 247, 139, 208, 246, 77,
+];
+export const TIDEPOOL_DESTINATIONS = [
+  "nep141:base-0x38d81431b9f76d9699af7517040d5221d9dea252.tp-omft.testnet",
+  "nep141:base-0xc15cf5600225302675604310094f134e88705e62.tp-omft.testnet",
+  "nep141:base.tp-omft.testnet",
+  "nep141:arb-0x38d81431b9f76d9699af7517040d5221d9dea252.tp-omft.testnet",
+  "nep141:arb-0xc15cf5600225302675604310094f134e88705e62.tp-omft.testnet",
+  "nep141:arb.tp-omft.testnet",
+  "nep141:eth-0x2e6ad9e6d59bb4585ea0e6762c3b637dde29dad2.tp-omft.testnet",
+  "nep141:eth-0x650f12ba31777de8ded47287a8cc86be737646fe.tp-omft.testnet",
+  "nep141:eth.tp-omft.testnet",
+  "nep141:bsc-0x38d81431b9f76d9699af7517040d5221d9dea252.tp-omft.testnet",
+  "nep141:bsc-0xc15cf5600225302675604310094f134e88705e62.tp-omft.testnet",
+  "nep141:sol.tp-omft.testnet",
+  "nep141:sol-d48c1adc423a64867ac91ed2e1c0df76da323235.tp-omft.testnet",
+  "nep141:sol-4c5179da74eb695eb57e01b787c4937157cf2833.tp-omft.testnet",
+  "nep141:stellar.tp-omft.testnet",
+  "nep141:stellar-0da9087074a12ebeb5dcdc8bcf33cf163ab498fc.tp-omft.testnet",
+  "nep141:stellar-c36e358585c12ac3f684b98be0c6682ca9c4665f.tp-omft.testnet",
+  "nep141:sui.tp-omft.testnet",
+  "nep141:sui-f6ecfe107e72d22b7a646dd2cc4f1b2876349c0c.tp-omft.testnet",
+  "nep141:sui-add896332c906e599cee03f2154d067937d12a26.tp-omft.testnet",
+  "nep141:xrp.tp-omft.testnet",
+  "nep141:btc.tp-omft.testnet",
+];
+
+function swapRules(): NonNullable<Policy["swap"]> {
+  return {
+    maker_key: TIDEPOOL_MAKER_KEY,
+    origins: [
+      { asset_id: "nep141:btc.tp-omft.testnet", asset: "Btc" },
+      { asset_id: "nep141:base.tp-omft.testnet", asset: { EvmNative: { chain_id: CHAIN_ID } } },
+      { asset_id: "nep141:sol.tp-omft.testnet", asset: "Sol" },
+    ],
+    destinations: TIDEPOOL_DESTINATIONS,
+    payees: [],
+    max_slippage_bps: 100,
+    // A Bitcoin deposit needs a confirmation, so a quote must have an hour left when it's signed.
+    min_deposit_window_ns: 3_600_000_000_000,
+  };
+}
+
 export function buildPolicy(form: VaultForm): Policy {
   const seconds = wholeSeconds(form.vetoSeconds, "The veto window");
   const unlistedSeconds = form.openPayees ? wholeSeconds(form.unlistedSeconds, "The new-payee window") : seconds;
@@ -156,6 +208,7 @@ export function buildPolicy(form: VaultForm): Policy {
     veto_delay_ns: Number(seconds * 1_000_000_000n),
     unlisted: open ? "Hold" : "Refuse",
     unlisted_veto_delay_ns: Number(unlistedSeconds * 1_000_000_000n),
+    swap: form.allowSwaps ? swapRules() : null,
     // 5,000 lamports of base fee, leaving room for a priority fee in busy times.
     sol_max_fee: "100000",
   };
