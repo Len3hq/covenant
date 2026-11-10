@@ -9,7 +9,8 @@ decides what gets signed.
 > with confirmed payments on Bitcoin testnet4 and Base Sepolia ([EVIDENCE.md](EVIDENCE.md)). Live payments now
 > include USDC, sent with the agent's restricted key. Large spends wait in a veto queue, which the
 > owner or guardian DAO can clear, and an LLM agent can now drive payments through the contract. Solana
-> (SOL and SPL USDC, signed with Ed25519) is built and tested in the sandbox, and not yet live. Progress
+> (SOL and SPL USDC, signed with Ed25519) is live on the testnet vault, which has refused a Solana attack
+> and had a real Ed25519 signature from the MPC network; no devnet payment has landed yet. Progress
 > is tracked in [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md).
 
 ## How a spend works

@@ -7,6 +7,7 @@ Filled in from real testnet runs.
 | Vault contract | [`covenant.len3hq.testnet`](https://testnet.nearblocks.io/address/covenant.len3hq.testnet) |
 | Bitcoin testnet4 vault address | [`tb1qddd2cgvedtlfgvgvx6f93rt9te77zsu9ccmcw9`](https://mempool.space/testnet4/address/tb1qddd2cgvedtlfgvgvx6f93rt9te77zsu9ccmcw9) |
 | Base Sepolia vault address | [`0xd913a8c28efdb2f30563e063b5fac5abd6ec9361`](https://sepolia.basescan.org/address/0xd913a8c28efdb2f30563e063b5fac5abd6ec9361) |
+| Solana devnet vault address | [`GnSDBdzbso6EgokmsndtcYbDdH7Vg3kczwf1Ro4mZA6T`](https://explorer.solana.com/address/GnSDBdzbso6EgokmsndtcYbDdH7Vg3kczwf1Ro4mZA6T?cluster=devnet) |
 | Named test count | Pending |
 
 | Outcome | Chain | NEAR receipt | Chain explorer |
@@ -40,3 +41,8 @@ Filled in from real testnet runs.
 | Guardian role moved to the Sputnik DAO (`guardian_updated`) | NEAR | [7F1JqF2E…](https://testnet.nearblocks.io/txns/7F1JqF2EFi699TXubUbEbaqem8zzWScjJB3mjiYm8eZQ) | None |
 | Queued spend vetoed by a DAO vote (`spend_vetoed`) | NEAR | [7Z1PDspM…](https://testnet.nearblocks.io/txns/7Z1PDspM3JScG9dTqxYH91qH1cmt3heYHNC8zgAKHUhE) | None: never signed |
 | Vault frozen by a DAO vote (`frozen`) | NEAR | [Coa7GEbm…](https://testnet.nearblocks.io/txns/Coa7GEbmRkT2wpEfayBh3DMFh3cJDDYNk12ELTXmcPe4) | None |
+| Ed25519 spike: the signer signs a raw 80-byte message in domain 1, and it verifies against the derived key | NEAR | [BeX39ENF…](https://testnet.nearblocks.io/txns/BeX39ENFf3Ud1E95eoBqZAj1fo3U5F7TCpLD7D1wDms2) | None: a test message |
+| Vault moved to the Solana code with `migrate`, keeping its roles, ledger and addresses | NEAR | [4y5rowTd…](https://testnet.nearblocks.io/txns/4y5rowTd8JSP9rLbdZe4i5YLt1qQ8aUq7Ptp6sAgTBYm) | None |
+| Policy with SOL and Solana USDC limits applied by the owner (`policy_updated`) | NEAR | [4WrLLqzV…](https://testnet.nearblocks.io/txns/4WrLLqzVQT8XBK7yFJZC2TWMx63bfiSLqtkXmVZ7JJoB) | None |
+| Rejected SOL payment to an unlisted address (`OutputNotWhitelisted`) | NEAR | [A6iSWhG2…](https://testnet.nearblocks.io/txns/A6iSWhG2s9qsMFZ4exPdLBXoqL8MFJ3Jtjj7dco6af3x) | None: never signed |
+| The real MPC network signs a listed SOL payment in the Ed25519 domain, and the signature verifies against the vault's Solana address | NEAR | [BFwgkbT4…](https://testnet.nearblocks.io/txns/BFwgkbT4RtMRXRmnVe4TVCjqc99g7Zq1eEUSyXbDEJMG) | Not broadcast: its nonce account doesn't exist, so it can never land |
