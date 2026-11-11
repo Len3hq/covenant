@@ -30,8 +30,11 @@ const vault: VaultState = {
 };
 
 describe("App", () => {
-  it("says it is reading the vault while it loads", () => {
-    expect(renderToString(<App />)).toContain("Reading");
+  it("opens on the landing page, with the way to create a vault and the demo", () => {
+    const html = renderToString(<App />);
+    expect(html).toContain("The vault can");
+    expect(html).toContain('href="?create"');
+    expect(html).toContain("See the live demo vault");
   });
 });
 
@@ -44,7 +47,7 @@ describe("Dashboard", () => {
     expect(html).toContain(vault.btcAddress);
     expect(html).toContain(vault.evmAddress);
     expect(html).toContain("Refuse any single BTC payment over 0.005 BTC");
-    expect(html).toContain("sats");
+    expect(html).toContain("0.02 BTC");
     expect(html).toContain("120 s");
     expect(html).toContain("every payment is refused");
   });
@@ -140,7 +143,7 @@ describe("Dashboard", () => {
       expect(asAgent).not.toContain("Remove</button>");
       const asOwner = render(keyed, "owner", "owner.testnet").replaceAll("<!-- -->", "");
       expect(asOwner).not.toContain("Create agent key</button>");
-      expect(asOwner).toContain("connect the wallet of agent.testnet");
+      expect(asOwner).toContain("agent.testnet has no key a wallet holds");
     });
 
     it("lets an agent with a full-access key remove its vault keys", () => {
@@ -166,7 +169,7 @@ describe("Dashboard", () => {
 
     it("offers only a wallet connection to a visitor", () => {
       const html = render(queued, "none", null);
-      expect(html).toContain("Connect a NEAR wallet");
+      expect(html).toContain("Connect wallet");
       expect(html).not.toContain("Veto</button>");
       expect(html).not.toContain("Freeze all chains");
       expect(html).not.toContain("Change the rules");
@@ -216,10 +219,10 @@ describe("Dashboard", () => {
 
   it("shows balances and spend, and says when a chain can't be read", () => {
     const html = renderToString(<Dashboard accountId="v" status={{ kind: "ready", vault }} />);
-    expect(html).toContain("Budgets");
+    expect(html).toContain("Balances");
     expect(html).toContain("0.0073891 BTC");
-    expect(html).toContain("20,141 sats");
-    expect(html).toContain("Balance unavailable");
+    expect(html).toContain("0.00020141 BTC");
+    expect(html).toContain("Unavailable");
   });
 
   it("shows a read failure instead of pretending to be connected", () => {
@@ -267,5 +270,12 @@ describe("the shared dashboard", () => {
 describe("the docs", () => {
   it("links to the docs from every page", () => {
     expect(renderToString(<Dashboard accountId="v" status={{ kind: "ready", vault }} />)).toContain('href="?docs"');
+  });
+
+  it("splits the vault into tabs, with every section still on the page", () => {
+    const html = renderToString(<Dashboard accountId="v.vaults-v3.len3hq.testnet" status={{ kind: "ready", vault }} />);
+    for (const tab of ["Overview", "Activity", "Rules", "Agent", "Fund"]) expect(html).toContain(`>${tab}<`);
+    expect(html).toContain("How every payment is checked");
+    expect(html).toContain("Get test funds");
   });
 });

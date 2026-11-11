@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { AddressChip, Explainer, Identicon, InfoTip, middle, Skeleton, Tabs, Toast, useHashTab } from "./ui";
 import { ConnectAgent } from "./ConnectAgent";
 import { CreateVault } from "./CreateVault";
 import { ConnectClaude } from "./ConnectClaude";
 import { MyVaults } from "./MyVaults";
+import { Landing } from "./Landing";
 import { CONNECTOR_URL, hostedPublicKey } from "./hosted";
 import { HostedConnect } from "./HostedConnect";
 import { describeChanges, formFromPolicy, policyFromForm, ASSETS as POLICY_ASSETS, type AssetKey, type EditForm } from "./policyEdit";
@@ -19,7 +21,6 @@ import {
 } from "./agent";
 import { FAUCET_LINKS, TIDEPOOL_FAUCET, faucetTargets } from "./faucet";
 import {
-  baseAmount,
   explorerFor,
   headline,
   humanAmount,
@@ -44,6 +45,7 @@ import {
 import {
   defaultConfig,
   describeAsset,
+  displayName,
   findProposal,
   formatNear,
   isShownInLog,
@@ -88,6 +90,9 @@ const connectRequest = new URLSearchParams(search).get("connect");
 const connectorParam = new URLSearchParams(search).get("connector") ?? "";
 const reading = new URLSearchParams(search).has("docs");
 const listing = new URLSearchParams(search).has("mine");
+/** The front page: no vault named, and no other page asked for. */
+const landing =
+  !new URLSearchParams(search).has("vault") && !creating && !reading && !listing && !new URLSearchParams(search).has("connect");
 
 export type VaultStatus =
   | { kind: "loading" }
@@ -163,70 +168,101 @@ function roleLabel(role: Role): string {
 function VaultPicker() {
   const [value, setValue] = useState("");
   return (
-    <form className="picker" action="" method="get">
+    <form className="picker" action="" method="get" role="search">
+      <span className="picker-icon" aria-hidden="true">
+        ⌕
+      </span>
       <input
         name="vault"
         aria-label="Open a vault by its account name"
-        placeholder="Open a vault: name.testnet"
+        placeholder="Open any vault: name.vaults-v3.len3hq.testnet"
         value={value}
         onChange={(event) => setValue(event.target.value)}
         required
       />
-      <button className="ghost">Open</button>
     </form>
   );
 }
 
+/** The connected account, with what it can do here and a menu. */
+function AccountMenu({ controls }: { controls: Controls }) {
+  const [open, setOpen] = useState(false);
+  if (!controls.account) {
+    return (
+      <button className="primary connect-button" onClick={controls.connect}>
+        Connect wallet
+      </button>
+    );
+  }
+  return (
+    <div className="account-menu">
+      <button type="button" className="account-button" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <Identicon seed={controls.account} size={22} />
+        <span className="mono">{middle(controls.account, 14, 8)}</span>
+        <span aria-hidden="true">▾</span>
+      </button>
+      {open && (
+        <div className="account-dropdown" role="menu">
+          <p className="muted small">{roleLabel(controls.role)}</p>
+          <a role="menuitem" href="?mine">
+            My vaults
+          </a>
+          <a role="menuitem" href="?create">
+            Create a vault
+          </a>
+          <button
+            role="menuitem"
+            type="button"
+            onClick={() => {
+              void navigator.clipboard?.writeText(controls.account ?? "");
+              setOpen(false);
+            }}
+          >
+            Copy account name
+          </button>
+          <button role="menuitem" type="button" onClick={controls.disconnect}>
+            Sign out
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TopBar({
-  accountId,
   vault,
   controls,
+  page,
 }: {
   accountId?: string;
   vault: VaultState | null;
   controls?: Controls;
+  /** Which nav link to mark as the current page. */
+  page?: "home" | "mine" | "create" | "docs" | "vault";
 }) {
+  const link = (href: string, label: string, id: typeof page) => (
+    <a className={page === id ? "nav-link active" : "nav-link"} href={href} aria-current={page === id ? "page" : undefined}>
+      {label}
+    </a>
+  );
   return (
     <header className="topbar">
       <a className="brand" href="./">
         <Mark />
         <span>Covenant</span>
       </a>
-      {accountId && <span className="chip mono">{accountId}</span>}
-      <span className="chip">NEAR testnet</span>
-      {vault && (
-        <span className={`pill ${vault.frozen ? "pill-frozen" : "pill-live"}`}>
-          <span className="dot" />
-          {vault.frozen ? "Frozen" : "Enforcing"}
-        </span>
-      )}
+      <nav className="nav-links">
+        {link("?mine", "My vaults", "mine")}
+        {link("?create", "Create", "create")}
+        {link("?docs", "Docs", "docs")}
+      </nav>
       <span className="spacer" />
       <VaultPicker />
-      <a className="docs-link" href="?docs">
-        Docs
-      </a>
-      {controls?.account && (
-        <a className="docs-link" href="?mine">
-          My vaults
-        </a>
-      )}
-      <a className="create-link" href="?create">
-        Create a vault
-      </a>
-      {controls &&
-        (controls.account ? (
-          <span className="who">
-            <span className="mono">{controls.account}</span>
-            <span className="muted">{roleLabel(controls.role)}</span>
-            <button className="ghost" onClick={controls.disconnect}>
-              Sign out
-            </button>
-          </span>
-        ) : (
-          <button className="primary" onClick={controls.connect}>
-            Connect a NEAR wallet
-          </button>
-        ))}
+      <span className="chip network-chip">
+        <span className="dot" /> Testnet
+      </span>
+      {vault && vault.frozen && <span className="pill pill-frozen">Frozen</span>}
+      {controls && <AccountMenu controls={controls} />}
     </header>
   );
 }
@@ -254,31 +290,6 @@ function Warnings({ vault }: { vault: VaultState }) {
         ))}
       </ul>
     </div>
-  );
-}
-
-function Hero({ vault }: { vault: VaultState }) {
-  const counts = tally(vault.activity, vault.policy);
-  return (
-    <section className="hero-copy">
-      <p className="eyebrow">AI security · Agent economy · Chain Signatures</p>
-      <h1>
-        The agent can be fooled.
-        <br />
-        <span className="accent">The vault can't.</span>
-      </h1>
-      <p className="lede">
-        An AI agent pays bills on Bitcoin and Base. It holds no keys. Every payment it asks for is
-        checked by a NEAR contract, and only then does NEAR's MPC network sign it. There's no AI in
-        the security path.
-      </p>
-      <div className="stats">
-        <Stat value={counts.blocked} label="Payments refused" tone="blocked" />
-        <Stat value={counts.signed} label="Payments signed" tone="signed" />
-        <Stat value={counts.signedOffList} label="Signed to an unlisted address" tone="neutral" />
-      </div>
-      <p className="muted small">From the vault's last {counts.events} on-chain events.</p>
-    </section>
   );
 }
 
@@ -530,18 +541,21 @@ function QueueCard({
   policy,
   now,
   controls,
+  attention,
 }: {
   queue: Pending[];
   policy: Policy;
   now: number;
   controls?: Controls;
+  /** On the overview: only when something waits, and asking for a decision. */
+  attention?: boolean;
 }) {
   const canVeto = controls ? canStop(controls.role) : false;
   const delay = vetoDelaySeconds(policy);
   return (
-    <section className="card">
+    <section className={attention ? "card card-attention" : "card"}>
       <div className="card-head">
-        <h2>Veto queue</h2>
+        <h2>{attention ? `${queue.length} payment${queue.length === 1 ? "" : "s"} waiting for your decision` : "Veto queue"}</h2>
         <span className="muted small">{delay} s window</span>
       </div>
       {queue.length === 0 ? (
@@ -585,81 +599,142 @@ function BudgetCard({ balances, policy }: { balances: Balance[]; policy: Policy 
   return (
     <section className="card">
       <div className="card-head">
-        <h2>Budgets</h2>
-        <span className="muted small">Rolling 24 h</span>
+        <h2>Balances</h2>
+        <span className="muted small">
+          What the vault holds, and what the agent spent in the last 24 hours{" "}
+          <InfoTip>The 24-hour limit is a rolling window: a payment counts against it for 24 hours after it's made.</InfoTip>
+        </span>
       </div>
-      <ul className="budgets">
+      <div className="balance-grid">
         {balances.map((balance) => {
           const cap = policy.caps.find((c) => describeAsset(c.asset).name === balance.name);
           const spent = BigInt(balance.spent24h);
           const limit = BigInt(balance.per24h);
           const share = limit > 0n ? Number((spent * 100n) / limit) : 0;
+          const amount = (value: string) => (cap ? humanAmount(cap.asset, value) : `${value} ${balance.unit}`);
           return (
-            <li key={balance.name}>
-              <div className="budget-top">
-                <span className="budget-name">{balance.name}</span>
-                <span className="budget-held">
-                  {balance.balance === null
-                    ? "Balance unavailable"
-                    : cap
-                      ? humanAmount(cap.asset, balance.balance)
-                      : `${balance.balance} ${balance.unit}`}
-                </span>
-              </div>
+            <article key={balance.name} className="balance-card">
+              <p className="balance-name">{displayName(balance.name)}</p>
+              <p className="balance-value">{balance.balance === null ? "Unavailable" : amount(balance.balance)}</p>
               <div className="meter">
                 <span style={{ width: `${Math.min(100, Math.max(share, spent > 0n ? 2 : 0))}%` }} />
               </div>
-              <p className="budget-sub mono">
-                {cap ? baseAmount(cap.asset, balance.spent24h) : balance.spent24h} of{" "}
-                {cap ? baseAmount(cap.asset, balance.per24h) : balance.per24h} spent
+              <p className="muted small">
+                {amount(balance.spent24h)} of {amount(balance.per24h)} spent today
               </p>
-            </li>
+            </article>
           );
         })}
-      </ul>
+      </div>
     </section>
   );
 }
 
 function RulesCard({ policy, rules, controls }: { policy: Policy; rules: Rule[]; controls?: Controls }) {
+  const open = policy.unlisted === "Hold";
+  const seconds = (ns: number | undefined) => windowHint(String(Math.round((ns ?? 0) / 1e9)));
   return (
-    <section className="card">
-      <div className="card-head">
-        <h2>Rules the contract enforces</h2>
-      </div>
-      <ol className="rules">
-        {rules.map((rule) => (
-          <li key={rule.id} className={rule.text === "Refuse everything else" ? "rule-default" : undefined}>
-            <span className="tag">{rule.id}</span>
-            <span>{rule.text}</span>
-          </li>
-        ))}
-      </ol>
-      <details className="payees">
-        <summary>Payee list ({policy.payees.length})</summary>
-        <p className="muted small">Each vault's owner chooses these names. Check the addresses.</p>
+    <>
+      <section className="card">
+        <div className="card-head">
+          <h2>Who it can pay</h2>
+          <span className="muted small">{policy.payees.length} payee{policy.payees.length === 1 ? "" : "s"}</span>
+        </div>
         {policy.payees.length === 0 ? (
-          <p className="muted">None, so every payment is refused.</p>
+          <p className="muted">{open ? "No payees are listed yet." : "No payees are listed, so every payment is refused."}</p>
         ) : (
-          <ul>
+          <ul className="payee-cards">
             {policy.payees.map((payee) => {
               const address = payeeAddress(payee.chain, payee.to);
               return (
-                <li key={address}>
-                  <span>
-                    {payee.label} <span className="muted">({payee.chain === "Evm" ? "Base" : payee.chain})</span>
-                  </span>
-                  <a className="mono small" href={explorerFor(payee.chain, address)}>
-                    {address}
-                  </a>
+                <li key={`${payee.chain}-${address}`}>
+                  <Identicon seed={address} size={26} />
+                  <span className="payee-name">{payee.label}</span>
+                  <AddressChip label={payee.chain === "Evm" ? "Base" : payee.chain} address={address} href={explorerFor(payee.chain, address)} />
                 </li>
               );
             })}
           </ul>
         )}
-      </details>
-      {controls?.role === "owner" && <PolicyEditor key={JSON.stringify(policy)} policy={policy} controls={controls} />}
-    </section>
+        <p className={open ? "rule-line" : "rule-line rule-strict"}>
+          <strong>Anyone else:</strong>{" "}
+          {open
+            ? `paid only after a ${seconds(policy.unlisted_veto_delay_ns)} wait, so you can veto it, and within the new-address limits below.`
+            : "refused. Only the payees above can be paid."}
+        </p>
+      </section>
+
+      <section className="card">
+        <div className="card-head">
+          <h2>Limits</h2>
+          <span className="muted small">
+            Anything over a limit is refused <InfoTip>Payments at or above "held from" wait {seconds(policy.veto_delay_ns)} before they're signed, so the owner or guardian can veto them.</InfoTip>
+          </span>
+        </div>
+        <table className="limits-table">
+          <thead>
+            <tr>
+              <th>Asset</th>
+              <th>Per payment</th>
+              <th>Per 24 hours</th>
+              <th>Held for veto from</th>
+              {open && <th>New addresses, per 24 hours</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {policy.caps.map((cap) => (
+              <tr key={JSON.stringify(cap.asset)}>
+                <td>{displayName(describeAsset(cap.asset).name)}</td>
+                <td>{humanAmount(cap.asset, cap.per_tx)}</td>
+                <td>{humanAmount(cap.asset, cap.per_24h)}</td>
+                <td>{humanAmount(cap.asset, cap.queue_at)}</td>
+                {open && <td>{humanAmount(cap.asset, cap.unlisted_per_24h ?? "0")}</td>}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+
+      <section className="card">
+        <div className="card-head">
+          <h2>Timing and other settings</h2>
+        </div>
+        <dl className="review-list">
+          <dt>Veto window</dt>
+          <dd>{seconds(policy.veto_delay_ns)} for large payments</dd>
+          {open && (
+            <>
+              <dt>New addresses</dt>
+              <dd>{seconds(policy.unlisted_veto_delay_ns)} wait for every payment off the list</dd>
+            </>
+          )}
+          <dt>Swaps</dt>
+          <dd>{policy.swap ? "On: pays on other chains and in other tokens through Tidepool's signed quotes" : "Off"}</dd>
+          <dt>Fee ceilings</dt>
+          <dd className="muted small">
+            Bitcoin {policy.btc_max_fee_rate} sat/vB and {policy.btc_max_inputs} coins per payment; Base gas at most{" "}
+            {humanAmount({ EvmNative: { chain_id: policy.evm_chain_ids[0] ?? 84532 } }, policy.evm_max_gas_cost)}
+            {policy.sol_max_fee ? `; Solana fee at most ${humanAmount("Sol", policy.sol_max_fee)}` : ""}
+          </dd>
+        </dl>
+        <details className="disclosure">
+          <summary>Every rule, numbered as the activity log cites them</summary>
+          <ol className="rules">
+            {rules.map((rule) => (
+              <li key={rule.id} className={rule.text === "Refuse everything else" ? "rule-default" : undefined}>
+                <span className="tag">{rule.id}</span>
+                <span>{rule.text}</span>
+              </li>
+            ))}
+          </ol>
+        </details>
+      </section>
+      {controls?.role === "owner" && (
+        <section className="card">
+          <PolicyEditor key={JSON.stringify(policy)} policy={policy} controls={controls} />
+        </section>
+      )}
+    </>
   );
 }
 
@@ -896,8 +971,9 @@ function AgentKeysCard({ vault, controls }: { vault: VaultState; controls?: Cont
           </button>
         ) : (
           <p className="muted small">
-            To add a key, connect the wallet of {vault.roles.agent}. An agent this dashboard created has no key a
-            wallet holds, so its owner uses Replace agent instead.
+            {full
+              ? `To add or remove a key, connect ${vault.roles.agent}'s own wallet.`
+              : `${vault.roles.agent} has no key a wallet holds, so nobody can add keys to it. To change its key, the owner uses Replace agent.`}
           </p>
         ))}
     </section>
@@ -1001,11 +1077,6 @@ function PowersCard({
           {!controls.account && (
             <p className="muted small">Read-only. Connect the owner's or a guardian's wallet to veto or freeze.</p>
           )}
-          {controls.message && (
-            <p role="status" className="status-line">
-              {controls.message}
-            </p>
-          )}
         </div>
       )}
     </section>
@@ -1102,9 +1173,14 @@ export function Dashboard({
   const vault = status.kind === "ready" ? status.vault : null;
   return (
     <>
-      <TopBar accountId={accountId} vault={vault} controls={controls} />
+      <TopBar accountId={accountId} vault={vault} controls={controls} page="vault" />
       <main>
-        {status.kind === "loading" && <p className="loading">Reading {accountId}…</p>}
+        {status.kind === "loading" && (
+          <section className="card">
+            <p className="muted small">Reading {accountId}…</p>
+            <Skeleton lines={4} />
+          </section>
+        )}
         {status.kind === "error" && (
           <p className="banner banner-frozen" role="alert">
             Couldn't read {accountId}. Is it a Covenant vault? {status.message}
@@ -1117,6 +1193,9 @@ export function Dashboard({
     </>
   );
 }
+
+const VAULT_TABS = ["overview", "activity", "rules", "agent", "fund"] as const;
+type VaultTab = (typeof VAULT_TABS)[number];
 
 function Ready({
   accountId,
@@ -1133,28 +1212,161 @@ function Ready({
 }) {
   const rules = rulesOf(vault.policy);
   const latest = featured(vault.activity);
+  const [tab, setTab] = useHashTab<VaultTab>(VAULT_TABS, "overview");
+  const role = controls?.role ?? "none";
+  const counts = tally(vault.activity, vault.policy);
+  const panel = (id: VaultTab, children: ReactNode) => (
+    <div role="tabpanel" className="tab-panel" hidden={tab !== id}>
+      {children}
+    </div>
+  );
   return (
     <>
+      <VaultHeader accountId={accountId} vault={vault} role={role} provenance={provenance} controls={controls} onFund={() => setTab("fund")} />
       <FrozenBanner vault={vault} activity={vault.activity} />
-      <div className="hero">
-        <Hero vault={vault} />
-        <VerdictCard entry={latest} policy={vault.policy} rules={rules} now={now} />
-      </div>
-      <Flow entry={latest} />
       <Warnings vault={vault} />
-      <div className="grid">
-        <Feed activity={vault.activity} policy={vault.policy} rules={rules} now={now} />
-        <aside className="side">
-          <QueueCard queue={vault.queue} policy={vault.policy} now={now} controls={controls} />
+      <Tabs<VaultTab>
+        value={tab}
+        onChange={setTab}
+        tabs={[
+          { id: "overview", label: "Overview" },
+          { id: "activity", label: "Activity", badge: vault.queue.length || null },
+          { id: "rules", label: "Rules" },
+          { id: "agent", label: "Agent" },
+          { id: "fund", label: "Fund" },
+        ]}
+      />
+      {panel(
+        "overview",
+        <>
+          {vault.queue.length > 0 && (
+            <QueueCard queue={vault.queue} policy={vault.policy} now={now} controls={controls} attention />
+          )}
+          <div className="stats stats-row">
+            <Stat value={counts.signed} label="Payments signed" tone="signed" />
+            <Stat value={counts.blocked} label="Payments refused" tone="blocked" />
+            <Stat value={vault.queue.length} label="Waiting for veto" tone="neutral" />
+          </div>
           <BudgetCard balances={vault.balances} policy={vault.policy} />
+          <VerdictCard entry={latest} policy={vault.policy} rules={rules} now={now} />
+          <section className="card">
+            <div className="card-head">
+              <h2>How every payment is checked</h2>
+            </div>
+            <Flow entry={latest} />
+            <p className="muted small">
+              The agent can only ask. This vault's contract checks the request against the rules, and only then asks
+              NEAR's MPC network to sign. A refusal never reaches the signer.
+            </p>
+          </section>
+        </>,
+      )}
+      {panel(
+        "activity",
+        <>
+          <Explainer title="Activity">
+            Every payment the agent asked for, and what the vault decided. Large payments and payments to new
+            addresses wait in the queue first, where the owner or guardian can veto them.
+          </Explainer>
+          <QueueCard queue={vault.queue} policy={vault.policy} now={now} controls={controls} />
+          <Feed activity={vault.activity} policy={vault.policy} rules={rules} now={now} />
+        </>,
+      )}
+      {panel(
+        "rules",
+        <>
+          <Explainer title="Rules">
+            What the vault allows. The contract enforces these on every payment, whatever the agent says.
+            {role === "owner" ? " As the owner, you can change them below." : " Only the owner can change them."}
+          </Explainer>
           <RulesCard policy={vault.policy} rules={rules} controls={controls} />
-          <PowersCard vault={vault} provenance={provenance} controls={controls} />
+        </>,
+      )}
+      {panel(
+        "agent",
+        <>
+          <Explainer title="Agent">
+            The agent is the account that asks this vault for payments. Its key can do nothing else. If the key
+            leaks, replace the agent; if anything looks wrong, freeze the vault.
+          </Explainer>
           <AgentKeysCard vault={vault} {...(controls ? { controls } : {})} />
+          <PowersCard vault={vault} provenance={provenance} controls={controls} />
+        </>,
+      )}
+      {panel(
+        "fund",
+        <>
+          <Explainer title="Fund">
+            This vault has its own address on each chain, all controlled by its NEAR contract. Send test coins to
+            them; the agent can then pay from them within the rules.
+          </Explainer>
           <TestFunds vault={vault} />
-        </aside>
-      </div>
-      <Addresses accountId={accountId} vault={vault} />
+          <Addresses accountId={accountId} vault={vault} />
+        </>,
+      )}
     </>
+  );
+}
+
+/** The vault's name, state, addresses and the actions its viewer can take. */
+function VaultHeader({
+  accountId,
+  vault,
+  role,
+  provenance,
+  controls,
+  onFund,
+}: {
+  accountId: string;
+  vault: VaultState;
+  role: Role;
+  provenance?: Provenance | null;
+  controls?: Controls;
+  onFund(): void;
+}) {
+  const [name, ...rest] = accountId.split(".");
+  return (
+    <section className="vault-header card">
+      <div className="vault-title">
+        <Identicon seed={accountId} size={44} />
+        <div>
+          <h1>
+            {name}
+            <span className="muted vault-suffix">.{rest.join(".")}</span>
+          </h1>
+          <div className="vault-badges">
+            <span className={`pill ${vault.frozen ? "pill-frozen" : "pill-live"}`}>
+              <span className="dot" />
+              {vault.frozen ? "Frozen" : "Enforcing"}
+            </span>
+            {provenance?.standard && <span className="badge badge-good">✓ Standard vault</span>}
+            {provenance && !provenance.standard && <span className="badge badge-warn">Not made by the factory</span>}
+            {role !== "none" && <span className="badge">You're the {role === "council" ? "guardian council" : role}</span>}
+          </div>
+        </div>
+        <span className="spacer" />
+        <div className="vault-actions">
+          <button type="button" className="ghost" onClick={onFund}>
+            Add funds
+          </button>
+          {controls && canStop(role) && !vault.frozen && (
+            <button className="danger" onClick={() => controls.act("freeze", {})}>
+              ❄ Freeze
+            </button>
+          )}
+          {controls && role === "owner" && vault.frozen && (
+            <button className="primary" onClick={() => controls.act("unfreeze", {})}>
+              Unfreeze
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="address-row">
+        <AddressChip label="Bitcoin" address={vault.btcAddress} href={explorerFor("Bitcoin", vault.btcAddress)} />
+        <AddressChip label="Base" address={vault.evmAddress} href={explorerFor("Evm", vault.evmAddress)} />
+        {vault.solAddress && <AddressChip label="Solana" address={vault.solAddress} href={explorerFor("Solana", vault.solAddress)} />}
+      </div>
+    </section>
   );
 }
 
@@ -1195,7 +1407,7 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (creating || reading) return;
+    if (creating || reading || listing || landing || connectRequest) return;
     let current = true;
     let loading = false;
     const refresh = () => {
@@ -1332,26 +1544,17 @@ export function App() {
     act,
   };
 
-  if (reading) {
-    return (
-      <>
-        <TopBar vault={null} controls={controls} />
-        <main>
-          <Docs />
-        </main>
-      </>
-    );
-  }
-  if (listing) {
-    return (
-      <>
-        <TopBar vault={null} controls={controls} />
-        <main>
-          <MyVaults config={config} fetcher={rpcFetch} account={account} connect={controls.connect} />
-        </main>
-      </>
-    );
-  }
+  const toast = <Toast message={message} onClose={() => setMessage(null)} />;
+  const shell = (page: "home" | "mine" | "create" | "docs", body: ReactNode) => (
+    <>
+      <TopBar vault={null} controls={controls} page={page} />
+      <main>{body}</main>
+      {toast}
+    </>
+  );
+  if (reading) return shell("docs", <Docs />);
+  if (listing) return shell("mine", <MyVaults config={config} fetcher={rpcFetch} account={account} connect={controls.connect} />);
+  if (landing) return shell("home", <Landing account={account} connect={controls.connect} demoVault={defaultConfig.accountId} />);
   if (connectRequest) {
     return (
       <>
@@ -1369,15 +1572,11 @@ export function App() {
       </>
     );
   }
-  if (creating) {
-    return (
-      <>
-        <TopBar vault={null} controls={controls} />
-        <main>
-          <CreateVault config={config} fetcher={rpcFetch} account={account} connect={controls.connect} />
-        </main>
-      </>
-    );
-  }
-  return <Dashboard accountId={accountId} status={status} controls={controls} provenance={provenance} />;
+  if (creating) return shell("create", <CreateVault config={config} fetcher={rpcFetch} account={account} connect={controls.connect} />);
+  return (
+    <>
+      <Dashboard accountId={accountId} status={status} controls={controls} provenance={provenance} />
+      {toast}
+    </>
+  );
 }

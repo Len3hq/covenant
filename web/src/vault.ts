@@ -268,15 +268,26 @@ export function warnings(vault: VaultState): string[] {
       `The agent's key has ${formatNear(vault.agentAllowance)} NEAR of allowance left. Below about 0.3 it can't send a spend, so replace the key.`,
     );
   }
+  const low: string[] = [];
   for (const cap of vault.policy.caps) {
-    const { name, unit } = describeAsset(cap.asset);
+    const { name } = describeAsset(cap.asset);
     const row = vault.balances.find((balance) => balance.name === name);
     // A tenth of the largest payment the policy allows: low enough that live runs will soon fail.
-    if (row?.balance != null && BigInt(row.balance) * LOW_BALANCE_SHARE < BigInt(cap.per_tx)) {
-      found.push(`${name} is low: ${row.balance} ${unit}, under a tenth of the ${cap.per_tx} ${unit} payment cap.`);
-    }
+    if (row?.balance != null && BigInt(row.balance) * LOW_BALANCE_SHARE < BigInt(cap.per_tx)) low.push(displayName(name));
+  }
+  if (low.length > 0) {
+    found.push(
+      `Low balance in ${low.join(", ")}: under a tenth of the largest payment you allow, so the agent may soon be unable to pay. Add funds from the Fund tab.`,
+    );
   }
   return found;
+}
+
+/** An asset's name as people say it: "ETH on Base" rather than "ETH (chain 84532)". */
+export function displayName(name: string): string {
+  if (name === "ETH (chain 84532)") return "ETH on Base";
+  if (name === "USDC") return "USDC on Base";
+  return name;
 }
 
 /** NEAR to two decimal places, from yoctoNEAR. */

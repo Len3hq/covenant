@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { CONNECTOR_URL, hostedPublicKey } from "./hosted";
+import { Explainer, Identicon, Skeleton } from "./ui";
 import { FACTORY_ID, vaultsOf, type VaultConfig } from "./vault";
 
 /** Factories that made vaults before the current one, which still answer `vaults_of`. */
@@ -8,6 +10,9 @@ interface Owned {
   vault: string;
   agent: string | null;
   frozen: boolean | null;
+  waiting: number | null;
+  payees: number | null;
+  hosted: boolean;
 }
 
 /** Every vault the connected wallet owns, from each factory's own record. */
@@ -19,6 +24,21 @@ export async function ownedVaults(
 ): Promise<string[]> {
   const lists = await Promise.all(factories.map((factory) => vaultsOf(config, owner, factory, fetcher).catch(() => [])));
   return [...new Set(lists.flat())];
+}
+
+async function hasKey(config: VaultConfig, account: string, publicKey: string, fetcher: typeof fetch): Promise<boolean> {
+  const response = await fetcher(config.rpcUrl, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: "k",
+      method: "query",
+      params: { request_type: "view_access_key", finality: "final", account_id: account, public_key: publicKey },
+    }),
+  });
+  const { result } = (await response.json()) as { result?: unknown };
+  return Boolean(result);
 }
 
 async function view<T>(config: VaultConfig, account: string, method: string, fetcher: typeof fetch): Promise<T> {
@@ -57,14 +77,27 @@ export function MyVaults({
     setVaults(null);
     void (async () => {
       try {
-        const names = await ownedVaults(config, account, fetcher);
+        const [names, hostedKey] = await Promise.all([
+          ownedVaults(config, account, fetcher),
+          CONNECTOR_URL ? hostedPublicKey(CONNECTOR_URL, fetcher).catch(() => null) : Promise.resolve(null),
+        ]);
         const found = await Promise.all(
           names.map(async (vault): Promise<Owned> => {
-            const [roles, frozen] = await Promise.all([
+            const [roles, frozen, queue, policy] = await Promise.all([
               view<{ agent: string }>(config, vault, "get_roles", fetcher).catch(() => null),
               view<boolean>(config, vault, "is_frozen", fetcher).catch(() => null),
+              view<unknown[]>(config, vault, "get_queue", fetcher).catch(() => null),
+              view<{ payees: unknown[] }>(config, vault, "get_policy", fetcher).catch(() => null),
             ]);
-            return { vault, agent: roles?.agent ?? null, frozen };
+            const hosted = Boolean(roles && hostedKey && (await hasKey(config, roles.agent, hostedKey, fetcher).catch(() => false)));
+            return {
+              vault,
+              agent: roles?.agent ?? null,
+              frozen,
+              waiting: queue?.length ?? null,
+              payees: policy?.payees.length ?? null,
+              hosted,
+            };
           }),
         );
         if (current) setVaults(found);
@@ -78,47 +111,103 @@ export function MyVaults({
   }, [account, config, fetcher]);
 
   return (
-    <section className="card create">
-      <h2>My vaults</h2>
+    <div className="page">
+      <div className="page-head">
+        <div>
+          <h1>My vaults</h1>
+          <p className="muted">{account ? `Every vault ${account} created.` : "Connect the wallet that created your vaults."}</p>
+        </div>
+        <a className="button primary" href="?create">
+          + New vault
+        </a>
+      </div>
       {!account ? (
-        <>
-          <p className="muted small">Connect the wallet that created your vaults to list them.</p>
+        <section className="card empty-state">
+          <h2>Connect your wallet</h2>
+          <p className="muted">Your vaults are listed by the factory that made them, under the account that created them.</p>
           <button type="button" className="primary" onClick={connect}>
-            Connect a NEAR wallet
+            Connect wallet
           </button>
-        </>
+        </section>
       ) : problem ? (
         <p className="banner banner-frozen" role="alert">
           {problem}
         </p>
       ) : vaults === null ? (
-        <p className="muted small">Looking up {account}'s vaults…</p>
+        <div className="vault-grid">
+          {[0, 1, 2].map((i) => (
+            <section key={i} className="card vault-card">
+              <Skeleton lines={4} />
+            </section>
+          ))}
+        </div>
       ) : vaults.length === 0 ? (
-        <p className="muted small">
-          {account} owns no vaults the factory made. <a href="?create">Create one</a>, or open a vault you know by name with the
-          box at the top.
-        </p>
+        <section className="card empty-state">
+          <h2>No vaults yet</h2>
+          <p className="muted">
+            A vault holds your agent's money and enforces your rules on every payment. It takes about two minutes.
+          </p>
+          <a className="button primary" href="?create">
+            Create your first vault
+          </a>
+        </section>
       ) : (
         <>
-          <p className="muted small">
-            Every vault {account} created through the factory. A vault made another way, or owned by another account, isn't
-            listed; open it by name with the box at the top.
-          </p>
-          <ul className="my-vaults">
-            {vaults.map(({ vault, agent, frozen }) => (
-              <li key={vault}>
-                <a className="mono" href={`?vault=${encodeURIComponent(vault)}`}>
-                  {vault}
-                </a>
-                <span className="muted small">
-                  {agent ? ` agent ${agent}` : ""}
-                  {frozen ? " · frozen" : ""}
-                </span>
-              </li>
+          <div className="vault-grid">
+            {vaults.map((owned) => (
+              <VaultCard key={owned.vault} owned={owned} />
             ))}
-          </ul>
+            <a className="card vault-card vault-card-new" href="?create">
+              <span className="plus">+</span>
+              <span>New vault</span>
+            </a>
+          </div>
+          <Explainer>
+            Only vaults {account} created through the factory are listed. To open any other vault, such as one where
+            you're the guardian, type its name in the search box at the top.
+          </Explainer>
         </>
       )}
-    </section>
+    </div>
+  );
+}
+
+function VaultCard({ owned }: { owned: Owned }) {
+  const { vault, agent, frozen, waiting, payees, hosted } = owned;
+  const [name, ...rest] = vault.split(".");
+  return (
+    <a className="card vault-card" href={`?vault=${encodeURIComponent(vault)}`}>
+      <div className="vault-card-top">
+        <Identicon seed={vault} size={36} />
+        <div className="vault-card-name">
+          <strong>{name}</strong>
+          <span className="muted small mono">.{rest.join(".")}</span>
+        </div>
+        <span className={`pill ${frozen ? "pill-frozen" : "pill-live"}`}>
+          <span className="dot" />
+          {frozen ? "Frozen" : "Active"}
+        </span>
+      </div>
+      <dl className="vault-card-facts">
+        <div>
+          <dt>Agent</dt>
+          <dd className="mono small">{agent ?? "unknown"}</dd>
+        </div>
+        <div>
+          <dt>Payees</dt>
+          <dd>{payees ?? "–"}</dd>
+        </div>
+        <div>
+          <dt>Waiting</dt>
+          <dd className={waiting ? "attention-text" : undefined}>{waiting ?? "–"}</dd>
+        </div>
+      </dl>
+      <div className="vault-card-foot">
+        {hosted && <span className="badge">Hosted agent</span>}
+        {waiting ? <span className="badge badge-warn">{waiting} to review</span> : null}
+        <span className="spacer" />
+        <span className="muted small">Open →</span>
+      </div>
+    </a>
   );
 }
