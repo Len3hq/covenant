@@ -1,0 +1,15 @@
+{
+  "source": "near-api-js KeyPairSigner.signNep413Message, seed 0x11 x 32 (holds nothing)",
+  "terms": {
+    "owner": "frankieme.testnet",
+    "vault": "frank.vaults-v3.len3hq.testnet",
+    "agent": "hosted.frankieme.testnet",
+    "expires": 1900000000
+  },
+  "grant": {
+    "message": "covenant-hosted:v1 owner=frankieme.testnet vault=frank.vaults-v3.len3hq.testnet agent=hosted.frankieme.testnet expires=1900000000",
+    "nonce": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM=",
+    "public_key": "ed25519:F25s3DdjXdCxYBhh2z8FBusVEMT4b9bGNFVKJi3wFoF4",
+    "signature": "iLWB/enzYe56CIvXwN+M/t1S8MTVU4o/Mqjh60TWgJRaN3BJRpJnCJ/7yFzbq67hN9qwtvPLZiIaqBdpSGAbCw=="
+  }
+}

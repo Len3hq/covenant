@@ -143,7 +143,7 @@ mod tests {
             owner: "frankieme.testnet".into(),
             vault: "frank.vaults-v3.len3hq.testnet".into(),
             agent: "hosted.frankieme.testnet".into(),
-            expires: 1_800_000_000,
+            expires: 1_900_000_000,
         }
     }
 
@@ -151,6 +151,18 @@ mod tests {
     fn a_signed_grant_gives_its_terms() {
         let key = SigningKey::from_bytes(&[1; 32]);
         assert_eq!(verify(&signed(&message(&terms()), &key)).unwrap(), terms());
+    }
+
+    /// Signed through near-api-js, as a NEAR wallet signs (hosted/connector checks it too).
+    #[test]
+    fn verifies_a_wallet_signed_grant() {
+        #[derive(Deserialize)]
+        struct Vector {
+            grant: Grant,
+        }
+        let vector: Vector =
+            serde_json::from_str(include_str!("../../../tests/vectors/grant.json")).unwrap();
+        assert_eq!(verify(&vector.grant).unwrap(), terms());
     }
 
     #[test]

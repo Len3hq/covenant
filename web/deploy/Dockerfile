@@ -8,6 +8,7 @@ COPY agent/package.json agent/
 COPY scripts/package.json scripts/
 COPY sdk/package.json sdk/
 COPY mcp/package.json mcp/
+COPY hosted/connector/package.json hosted/connector/
 RUN pnpm install --frozen-lockfile --filter @covenant/web...
 COPY web web
 # Only VITE_* values reach the bundle, and they are public. Never pass a secret here.

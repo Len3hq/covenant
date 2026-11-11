@@ -31,6 +31,12 @@
   "bin": {
     "covenant-mcp": "dist/index.js"
   },
+  "exports": {
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "default": "./dist/server.js"
+    }
+  },
   "files": [
     "dist",
     "!dist/**/*.test.*",
