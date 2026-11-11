@@ -350,7 +350,8 @@ vault's page within a minute.
 3. Fill in a vault name, list one Bitcoin payee, and leave swaps ticked.
 4. Press create.
 
-Expect two wallet prompts, one creating `agent.<you>.testnet` and one creating the vault, then the
+Expect a wallet prompt creating `agent.<you>.testnet`, then the button changing to "Sign 2 of 2".
+Press it for the second prompt, which creates the vault, then expect the
 "is live" card with the settings panel from phase 6. Save the key.
 
 **T28. The agent has exactly one key, scoped to the vault.**
@@ -383,7 +384,8 @@ Expect a `swap` section, and `"unlisted": "Hold"`.
 **T31. Replace the agent.** On the new vault's page, connected as its owner, enter `agent2` and
 press **Replace agent**. Expect:
 
-- two prompts;
+- a prompt creating `agent2.<you>.testnet`, then a "Sign 2 of 2" button for the prompt that switches
+  the vault to it (pressing Replace agent again after a failed switch goes straight to that button);
 - a new settings panel showing the new key;
 - "Who can do what" showing `agent2.<you>.testnet`.
 

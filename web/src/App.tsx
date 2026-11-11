@@ -91,8 +91,15 @@ export interface Controls {
   connect(): void;
   disconnect(): void;
   act(method: string, args: object): void;
-  /** For the owner: a new agent account and key, then `set_agent` to it. */
+  /** For the owner: a new agent account and key. `switchAgent` then points the vault at it. */
   replaceAgent?(name: string): void;
+  /**
+   * The second signature, on its own click. Browsers block a wallet's pop-up that opens long after
+   * the click, so it can't follow the first transaction by itself.
+   */
+  switchAgent?(): void;
+  /** An agent account that's ready, waiting for `switchAgent`. */
+  pendingAgent?: string | null;
   /** The key of an agent made on this page, shown once. */
   newAgent?: { vault: string; agent: string; secret: string } | null;
   /** For the agent account itself: a new key scoped to this vault, shown once. */
@@ -742,6 +749,15 @@ function AgentKeysCard({ vault, controls }: { vault: VaultState; controls?: Cont
 
 function ReplaceAgent({ controls }: { controls: Controls }) {
   const [name, setName] = useState("agent2");
+  if (controls.pendingAgent) {
+    return (
+      <div className="replace-agent">
+        <button type="button" className="primary" onClick={() => controls.switchAgent?.()}>
+          Sign 2 of 2: switch the vault to {controls.pendingAgent}
+        </button>
+      </div>
+    );
+  }
   return (
     <div className="replace-agent">
       <input aria-label="New agent name" value={name} onChange={(event) => setName(event.target.value)} />
@@ -990,6 +1006,7 @@ export function App() {
   const [account, setAccount] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [newAgent, setNewAgent] = useState<{ vault: string; agent: string; secret: string } | null>(null);
+  const [pendingAgent, setPendingAgent] = useState<string | null>(null);
   const [provenance, setProvenance] = useState<Provenance | null>(null);
   const { accountId, rpcUrl } = config;
 
@@ -1080,14 +1097,19 @@ export function App() {
       void (async () => {
         try {
           const agent = agentAccountId(name, account);
-          if (await accountExists(rpcUrl, agent)) throw new Error(`${agent} already exists; pick another name`);
+          // Only this wallet can create accounts under its own name, so an existing one is from an
+          // earlier try whose second signature didn't happen.
+          if (await accountExists(rpcUrl, agent)) {
+            setPendingAgent(agent);
+            setMessage(`${agent} already exists. Use the key you saved when it was made, and sign below to switch to it.`);
+            return;
+          }
           const key = newAgentKey();
           setMessage(`Sign 1 of 2: create ${agent}…`);
           await send(rpcUrl, createAgentTransaction(agent, accountId, key.publicKey));
           setNewAgent({ vault: accountId, agent, secret: key.secretKey });
-          setMessage(`Sign 2 of 2: point the vault at ${agent}…`);
-          await send(rpcUrl, vaultCall(accountId, "set_agent", { agent }));
-          setMessage(`The vault's agent is now ${agent}. The page updates within a few seconds.`);
+          setPendingAgent(agent);
+          setMessage(`Created ${agent}. Save its key below, then press "Sign 2 of 2".`);
         } catch (error) {
           setMessage(`Replacing the agent failed: ${error instanceof Error ? error.message : String(error)}`);
         }
@@ -1095,6 +1117,19 @@ export function App() {
     },
     [account, accountId, rpcUrl],
   );
+  const switchAgent = useCallback(() => {
+    if (!pendingAgent) return;
+    const agent = pendingAgent;
+    setMessage(`Sign 2 of 2: point the vault at ${agent}…`);
+    send(rpcUrl, vaultCall(accountId, "set_agent", { agent }))
+      .then(() => {
+        setPendingAgent(null);
+        setMessage(`The vault's agent is now ${agent}. The page updates within a few seconds.`);
+      })
+      .catch((error: unknown) =>
+        setMessage(`Switching the agent failed: ${error instanceof Error ? error.message : String(error)}. Press the button to try again.`),
+      );
+  }, [accountId, pendingAgent, rpcUrl]);
   const addAgentKey = useCallback(() => {
     if (!account) return;
     void (async () => {
@@ -1124,6 +1159,8 @@ export function App() {
     role,
     message,
     replaceAgent,
+    switchAgent,
+    pendingAgent,
     newAgent,
     addAgentKey,
     removeAgentKey,

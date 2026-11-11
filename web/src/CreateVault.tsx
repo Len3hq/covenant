@@ -208,6 +208,8 @@ export function CreateVault({
           key = newAgentKey();
           await send(config.rpcUrl, createAgentTransaction(args.agent, vault, key.publicKey));
           setMadeAgent({ agent: args.agent, vault, key });
+          // The vault takes a second click: browsers block a wallet pop-up that opens long after one.
+          return;
         }
       }
       await send(config.rpcUrl, createVaultCall(FACTORY_ID, args, deposit));
@@ -383,7 +385,11 @@ export function CreateVault({
         )}
         {account ? (
           <button className="primary" disabled={busy}>
-            {busy ? "Creating…" : `Create vault as ${account}`}
+            {busy
+              ? "Creating…"
+              : madeAgent
+                ? `Sign 2 of 2: create the vault for ${madeAgent.agent}`
+                : `Create vault as ${account}`}
           </button>
         ) : (
           <button type="button" className="primary" onClick={connect}>
