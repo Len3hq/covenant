@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { ConnectAgent } from "./ConnectAgent";
 import { CreateVault } from "./CreateVault";
 import { ConnectClaude } from "./ConnectClaude";
-import { CONNECTOR_URL, connectorMcpUrl, hostedPublicKey } from "./hosted";
+import { CONNECTOR_URL, hostedPublicKey } from "./hosted";
+import { HostedConnect } from "./HostedConnect";
 import { Docs } from "./Docs";
 import {
   accountExists,
@@ -741,11 +742,8 @@ function AgentKeysCard({ vault, controls }: { vault: VaultState; controls?: Cont
             {forVault.map((key) => (
               <li key={key.publicKey}>
                 <span className="mono small">{key.publicKey.slice(0, 20)}…</span>{" "}
-                {key.publicKey === hostedKey && CONNECTOR_URL && (
-                  <span className="small">
-                    held in the hosted connector's OutLayer enclave; add <code>{connectorMcpUrl(CONNECTOR_URL)}</code> to
-                    Claude as a connector{" "}
-                  </span>
+                {key.publicKey === hostedKey && (
+                  <span className="small">held in the hosted connector's OutLayer enclave </span>
                 )}
                 <span className="muted small">
                   {key.allowance ? `${formatNear(key.allowance)} NEAR of gas left` : "no gas limit"}
@@ -759,6 +757,12 @@ function AgentKeysCard({ vault, controls }: { vault: VaultState; controls?: Cont
             ))}
           </ul>
         </>
+      )}
+      {CONNECTOR_URL && hostedKey && forVault.some((key) => key.publicKey === hostedKey) && (
+        <details>
+          <summary>Add this vault to an AI app</summary>
+          <HostedConnect connector={CONNECTOR_URL} />
+        </details>
       )}
       {controls &&
         (signedInAsAgent ? (

@@ -1529,3 +1529,19 @@ pre {
   font-weight: 600;
   border-color: var(--line-soft);
 }
+
+/* A snippet with its copy button beside it. */
+.copy-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+.copy-row pre {
+  flex: 1;
+  margin: 0;
+  overflow-x: auto;
+}
+.copy-button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}

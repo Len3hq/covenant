@@ -95,9 +95,9 @@ export function ConnectClaude({
   const hostedChoices = choices?.filter((choice) => choice.hosted) ?? [];
   return (
     <section className="card create">
-      <h2>Connect Claude to your vault</h2>
+      <h2>Connect your AI app to your vault</h2>
       <p className="muted small">
-        Claude will be able to ask one vault for payments, through an agent key held in an OutLayer enclave that nobody can
+        The app that sent you here will be able to ask one vault for payments, through an agent key held in an OutLayer enclave that nobody can
         read. The vault still applies all your rules, and you can stop it any time by replacing the agent or freezing the
         vault.
       </p>
@@ -109,8 +109,8 @@ export function ConnectClaude({
         <p className="muted small">Finding your vaults…</p>
       ) : hostedChoices.length === 0 ? (
         <p className="muted small">
-          None of {account}'s vaults has a hosted agent. Create one on <a href="?create">Create a vault</a> with "Hosted, for
-          Claude on the web or phone" ticked, then connect again from Claude.
+          None of {account}'s vaults has a hosted agent. Create one on <a href="?create">Create a vault</a> with "Hosted" ticked,
+          then connect again from your AI app.
         </p>
       ) : (
         <>

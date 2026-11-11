@@ -4,7 +4,8 @@ import { FACTORY_ID, vaultsOf, type VaultConfig } from "./vault";
 import { accountExists, createAgentTransaction, newAgentKey, type AgentKey } from "./agent";
 import { ConnectAgent } from "./ConnectAgent";
 import { createVaultCall, send } from "./wallet";
-import { CONNECTOR_URL, connectorMcpUrl, hostedPublicKey } from "./hosted";
+import { CONNECTOR_URL, hostedPublicKey } from "./hosted";
+import { HostedConnect } from "./HostedConnect";
 
 const POLL_MS = 3_000;
 const POLL_TRIES = 20;
@@ -135,12 +136,8 @@ function HostedNextSteps({ vault, connector }: { vault: string; connector: strin
       <p>Its agent's key was made in an OutLayer enclave and never left it, so there's nothing to save.</p>
       <ol>
         <li>
-          In Claude, open <strong>Settings → Connectors → Add custom connector</strong> and paste:
-          <pre className="mono">{connectorMcpUrl(connector)}</pre>
-        </li>
-        <li>
-          Claude sends you back here to pick this vault and sign a grant with your wallet. The grant lets the enclave ask
-          this vault for payments until it expires; the vault still applies all your rules.
+          Add this connector to your AI app, such as Claude, ChatGPT, Claude Code, Cursor or VS Code:
+          <HostedConnect connector={connector} />
         </li>
         <li>
           <a href={openHref(vault)}>Open its dashboard</a> to fund it from the "Get test funds" panel.
@@ -338,7 +335,7 @@ export function CreateVault({
         {form.agentMode === "create" && CONNECTOR_URL ? (
           <label className="check">
             <input type="checkbox" checked={hosted} onChange={(event) => setHosted(event.target.checked)} /> Hosted, for
-            Claude on the web or phone. Its key is made and kept in an OutLayer enclave that nobody can read, including us,
+            Claude, ChatGPT or any AI app that adds a connector by URL, on the web or phone. Its key is made and kept in an OutLayer enclave that nobody can read, including us,
             and you add the vault to Claude as a connector. Without this, you get the key to run the agent yourself.
           </label>
         ) : null}
