@@ -164,7 +164,9 @@ export function CreateVault({
         </p>
         {mine.length > 0 && (
           <div className="mine">
-            <p className="label">Your vaults</p>
+            <p className="label">
+              Your vaults (<a href="?mine">all of them</a>)
+            </p>
             {mine.map((vault) => (
               <a key={vault} className="mono" href={openHref(vault)}>
                 {vault}

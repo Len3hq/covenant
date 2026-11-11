@@ -1557,3 +1557,10 @@ pre {
   border-left: 3px solid var(--accent, #3ecf8e);
   padding-left: 0.75rem;
 }
+
+.my-vaults {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}

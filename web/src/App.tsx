@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ConnectAgent } from "./ConnectAgent";
 import { CreateVault } from "./CreateVault";
 import { ConnectClaude } from "./ConnectClaude";
+import { MyVaults } from "./MyVaults";
 import { CONNECTOR_URL, hostedPublicKey } from "./hosted";
 import { HostedConnect } from "./HostedConnect";
 import { describeChanges, formFromPolicy, policyFromForm, ASSETS as POLICY_ASSETS, type AssetKey, type EditForm } from "./policyEdit";
@@ -86,6 +87,7 @@ const creating = new URLSearchParams(search).has("create");
 const connectRequest = new URLSearchParams(search).get("connect");
 const connectorParam = new URLSearchParams(search).get("connector") ?? "";
 const reading = new URLSearchParams(search).has("docs");
+const listing = new URLSearchParams(search).has("mine");
 
 export type VaultStatus =
   | { kind: "loading" }
@@ -203,6 +205,11 @@ function TopBar({
       <a className="docs-link" href="?docs">
         Docs
       </a>
+      {controls?.account && (
+        <a className="docs-link" href="?mine">
+          My vaults
+        </a>
+      )}
       <a className="create-link" href="?create">
         Create a vault
       </a>
@@ -1331,6 +1338,16 @@ export function App() {
         <TopBar vault={null} controls={controls} />
         <main>
           <Docs />
+        </main>
+      </>
+    );
+  }
+  if (listing) {
+    return (
+      <>
+        <TopBar vault={null} controls={controls} />
+        <main>
+          <MyVaults config={config} fetcher={rpcFetch} account={account} connect={controls.connect} />
         </main>
       </>
     );
