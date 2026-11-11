@@ -5,6 +5,10 @@ import type { Policy } from "./vault";
 
 const ACME = { label: "Acme Hosting", chain: "Bitcoin" as const, address: "tb1ql3d46g8n2ua8ulj8nu8fq8ulpm7vxfl6tjfxgs" };
 const SOL = { label: "Ada", chain: "Solana" as const, address: "xR99hjGSXQVvAWCPFfg8ZjqeLeWn9KVcX6X3N1iFHRU" };
+const btcOf = (form: ReturnType<typeof formFromPolicy>) => {
+  if (!form.caps.btc) throw new Error("no BTC cap");
+  return form.caps.btc;
+};
 const live = (): Policy => buildPolicy({ ...STARTING_FORM, name: "v", payees: [ACME, SOL] });
 
 describe("the policy form", () => {
@@ -41,7 +45,7 @@ describe("the policy form", () => {
         ...form,
         payees: [...form.payees, { label: "Bob", chain: "Evm", address: "0x8a6d5c011a9a1480a89b20eb1482bbe89baef829" }],
         openPayees: false,
-        caps: { ...form.caps, btc: { ...form.caps.btc!, perTx: "0.01" }, sol: null },
+        caps: { ...form.caps, btc: { ...btcOf(form), perTx: "0.01" }, sol: null },
       },
       policy,
     );
@@ -61,7 +65,7 @@ describe("the policy form", () => {
     const policy = live();
     const form = formFromPolicy(policy);
     expect(() => policyFromForm({ ...form, payees: [{ ...ACME, address: "bc1qnotatestnetaddress" }] }, policy)).toThrow("testnet4");
-    expect(() => policyFromForm({ ...form, caps: { ...form.caps, btc: { ...form.caps.btc!, queueAt: "1" } } }, policy)).toThrow("veto threshold");
+    expect(() => policyFromForm({ ...form, caps: { ...form.caps, btc: { ...btcOf(form), queueAt: "1" } } }, policy)).toThrow("veto threshold");
     expect(() => policyFromForm({ ...form, unlistedSeconds: "10" }, policy)).toThrow("can't be shorter");
   });
 });
