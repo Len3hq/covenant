@@ -15,6 +15,7 @@ COPY web web
 ARG VITE_VAULT_ACCOUNT_ID
 ARG VITE_FACTORY_ACCOUNT_ID
 ARG VITE_NEAR_RPC_URL
+ARG VITE_CONNECTOR_URL
 RUN pnpm --filter @covenant/web build
 
 FROM caddy:2-alpine

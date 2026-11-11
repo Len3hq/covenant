@@ -1,6 +1,15 @@
 # Hosted connector (design)
 
-Status: proposed, 11 Nov 2026. Nothing here is built yet.
+Status: built, not yet deployed (11 Nov 2026). The parts:
+
+- [sdk/src/signer.ts](../sdk/src/signer.ts): the SDK signs through a remote signer.
+- [hosted/enclave](../hosted/enclave): the key holder, for OutLayer.
+- [hosted/connector](../hosted/connector): the connector, with OAuth.
+- The dashboard: "Hosted" on `?create`, the `?connect` sign-in page, and the enclave key marked on a
+  vault's page. All three appear only when `VITE_CONNECTOR_URL` is set.
+
+To go live: deploy the key holder (hosted/enclave/README.md), then the connector on Railway with its
+settings (hosted/connector/README.md), then set `VITE_CONNECTOR_URL` on the dashboard and publish it.
 
 An opt-in way to use a vault from Claude on the web, desktop and phone, through Settings → Connectors
 → Add custom connector, with nothing to install. The self-hosted ways (the MCP server over `npx`, a
@@ -61,7 +70,8 @@ replacing the agent or freezing the vault, as today.
 - Whoever holds Covenant's OutLayer payment key can ask the enclave to sign `propose_spend` for a vault
   with a live grant. The contract still applies that vault's rules, so the worst case is payments to
   listed payees up to the owner's caps, plus queued payments the owner can veto.
-- Hosted vaults default to stricter rules: new payees held, lower caps.
+- Hosted vaults should default to stricter rules: new payees held, lower caps. Not built yet: today a
+  hosted vault takes the same form as any other.
 - On mainnet this may count as custody in some places. Testnet only for now.
 
 ## Open points

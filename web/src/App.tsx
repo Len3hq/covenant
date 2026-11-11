@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { ConnectAgent } from "./ConnectAgent";
 import { CreateVault } from "./CreateVault";
+import { ConnectClaude } from "./ConnectClaude";
+import { CONNECTOR_URL, connectorMcpUrl, hostedPublicKey } from "./hosted";
 import { Docs } from "./Docs";
 import {
   accountExists,
@@ -76,6 +78,9 @@ const rpcFetch = withRpcFallback(defaultConfig.rpcUrl);
 const search = typeof location === "undefined" ? "" : location.search;
 const config = { ...defaultConfig, accountId: vaultFromUrl(search, defaultConfig.accountId) };
 const creating = new URLSearchParams(search).has("create");
+/** Claude's sign-in to the hosted connector: `?connect=<request>&connector=<url>`. */
+const connectRequest = new URLSearchParams(search).get("connect");
+const connectorParam = new URLSearchParams(search).get("connector") ?? "";
 const reading = new URLSearchParams(search).has("docs");
 
 export type VaultStatus =
@@ -694,9 +699,26 @@ function ProvenanceLine({ provenance }: { provenance?: Provenance | null }) {
   );
 }
 
+/** The enclave's public key, when a hosted connector is set up. */
+function useHostedKey(): string | null {
+  const [key, setKey] = useState<string | null>(null);
+  useEffect(() => {
+    if (!CONNECTOR_URL) return;
+    let current = true;
+    hostedPublicKey(CONNECTOR_URL)
+      .then((found) => current && setKey(found))
+      .catch(() => undefined);
+    return () => {
+      current = false;
+    };
+  }, []);
+  return key;
+}
+
 /** The agent's keys, and for the agent account itself, adding and removing vault keys. */
 function AgentKeysCard({ vault, controls }: { vault: VaultState; controls?: Controls }) {
   const keys = vault.agentKeys ?? null;
+  const hostedKey = useHostedKey();
   const signedInAsAgent = controls?.account === vault.roles.agent;
   const forVault = keys?.filter((key) => key.forVault) ?? [];
   const full = keys?.some((key) => key.full) ?? false;
@@ -719,6 +741,12 @@ function AgentKeysCard({ vault, controls }: { vault: VaultState; controls?: Cont
             {forVault.map((key) => (
               <li key={key.publicKey}>
                 <span className="mono small">{key.publicKey.slice(0, 20)}…</span>{" "}
+                {key.publicKey === hostedKey && CONNECTOR_URL && (
+                  <span className="small">
+                    held in the hosted connector's OutLayer enclave; add <code>{connectorMcpUrl(CONNECTOR_URL)}</code> to
+                    Claude as a connector{" "}
+                  </span>
+                )}
                 <span className="muted small">
                   {key.allowance ? `${formatNear(key.allowance)} NEAR of gas left` : "no gas limit"}
                 </span>
@@ -1181,6 +1209,23 @@ export function App() {
         <TopBar vault={null} controls={controls} />
         <main>
           <Docs />
+        </main>
+      </>
+    );
+  }
+  if (connectRequest) {
+    return (
+      <>
+        <TopBar vault={null} controls={controls} />
+        <main>
+          <ConnectClaude
+            config={config}
+            fetcher={rpcFetch}
+            account={account}
+            connect={controls.connect}
+            request={connectRequest}
+            connector={connectorParam}
+          />
         </main>
       </>
     );

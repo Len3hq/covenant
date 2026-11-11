@@ -4,6 +4,7 @@ import { FACTORY_ID, vaultsOf, type VaultConfig } from "./vault";
 import { accountExists, createAgentTransaction, newAgentKey, type AgentKey } from "./agent";
 import { ConnectAgent } from "./ConnectAgent";
 import { createVaultCall, send } from "./wallet";
+import { CONNECTOR_URL, connectorMcpUrl, hostedPublicKey } from "./hosted";
 
 const POLL_MS = 3_000;
 const POLL_TRIES = 20;
@@ -126,6 +127,29 @@ function Payees({
   );
 }
 
+/** After a hosted vault: no key to save, only the connector to add to Claude. */
+function HostedNextSteps({ vault, connector }: { vault: string; connector: string }) {
+  return (
+    <section className="card created">
+      <h2>✓ {vault} is live</h2>
+      <p>Its agent's key was made in an OutLayer enclave and never left it, so there's nothing to save.</p>
+      <ol>
+        <li>
+          In Claude, open <strong>Settings → Connectors → Add custom connector</strong> and paste:
+          <pre className="mono">{connectorMcpUrl(connector)}</pre>
+        </li>
+        <li>
+          Claude sends you back here to pick this vault and sign a grant with your wallet. The grant lets the enclave ask
+          this vault for payments until it expires; the vault still applies all your rules.
+        </li>
+        <li>
+          <a href={openHref(vault)}>Open its dashboard</a> to fund it from the "Get test funds" panel.
+        </li>
+      </ol>
+    </section>
+  );
+}
+
 function NextSteps({ vault, agent, secret }: { vault: string; agent: string; secret?: string }) {
   // One settings file per vault, so the repo's scripts never mix two vaults' keys or nonce accounts.
   const envFile = `.env.${vault.split(".")[0]}`;
@@ -179,9 +203,11 @@ export function CreateVault({
   const [form, setForm] = useState<VaultForm>(STARTING_FORM);
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [created, setCreated] = useState<{ vault: string; agent: string; secret?: string } | null>(null);
+  const [created, setCreated] = useState<{ vault: string; agent: string; secret?: string; hosted?: boolean } | null>(null);
   // An agent account made in this visit, so a retry after a failed vault doesn't create it again.
   const [madeAgent, setMadeAgent] = useState<{ agent: string; vault: string; key: AgentKey } | null>(null);
+  /** The agent's key lives in the hosted connector's enclave, so this page never holds a secret. */
+  const [hosted, setHosted] = useState(false);
   const [mine, setMine] = useState<string[]>([]);
 
   useEffect(() => {
@@ -213,7 +239,10 @@ export function CreateVault({
           if (await accountExists(config.rpcUrl, args.agent, fetcher)) {
             throw new Error(`${args.agent} already exists. Pick another agent name, or use it as an existing account.`);
           }
-          key = newAgentKey();
+          key =
+            hosted && CONNECTOR_URL
+              ? { publicKey: await hostedPublicKey(CONNECTOR_URL, fetcher), secretKey: "" }
+              : newAgentKey();
           await send(config.rpcUrl, createAgentTransaction(args.agent, vault, key.publicKey));
           setMadeAgent({ agent: args.agent, vault, key });
           // The vault takes a second click: browsers block a wallet pop-up that opens long after one.
@@ -224,7 +253,7 @@ export function CreateVault({
       // A failed creation refunds the deposit and looks like success to the wallet, so ask the factory.
       for (let tries = 0; tries < POLL_TRIES; tries++) {
         if ((await vaultsOf(config, account, FACTORY_ID, fetcher)).includes(vault)) {
-          setCreated({ vault, agent: args.agent, ...(key ? { secret: key.secretKey } : {}) });
+          setCreated({ vault, agent: args.agent, ...(key?.secretKey ? { secret: key.secretKey } : {}), hosted: Boolean(key && !key.secretKey) });
           return;
         }
         await new Promise((resolve) => setTimeout(resolve, POLL_MS));
@@ -239,6 +268,7 @@ export function CreateVault({
     }
   };
 
+  if (created?.hosted && CONNECTOR_URL) return <HostedNextSteps vault={created.vault} connector={CONNECTOR_URL} />;
   if (created) return <NextSteps vault={created.vault} agent={created.agent} {...(created.secret ? { secret: created.secret } : {})} />;
 
   return (
@@ -304,7 +334,15 @@ export function CreateVault({
             hint={`Becomes ${form.agentName.trim() || "agent"}.${account ?? "your-account.testnet"}, funded with 0.5 NEAR for gas, with a key that can only ask this vault for payments. Your wallet signs it, then the vault.`}
             onChange={(agentName) => setForm({ ...form, agentName })}
           />
-        ) : (
+        ) : null}
+        {form.agentMode === "create" && CONNECTOR_URL ? (
+          <label className="check">
+            <input type="checkbox" checked={hosted} onChange={(event) => setHosted(event.target.checked)} /> Hosted, for
+            Claude on the web or phone. Its key is made and kept in an OutLayer enclave that nobody can read, including us,
+            and you add the vault to Claude as a connector. Without this, you get the key to run the agent yourself.
+          </label>
+        ) : null}
+        {form.agentMode === "create" ? null : (
           <Field
             label="Agent account"
             value={form.agent}
