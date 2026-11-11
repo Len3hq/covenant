@@ -22,7 +22,7 @@ makes both.
       "command": "npx",
       "args": ["-y", "@len3hq/covenant-mcp"],
       "env": {
-        "VAULT_ACCOUNT_ID": "acme.vaults.len3hq.testnet",
+        "VAULT_ACCOUNT_ID": "acme.vaults-v3.len3hq.testnet",
         "AGENT_ACCOUNT_ID": "agent.you.testnet",
         "AGENT_PRIVATE_KEY": "ed25519:…"
       }

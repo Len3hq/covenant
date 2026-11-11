@@ -11,7 +11,7 @@ const { version } = createRequire(import.meta.url)("../package.json") as { versi
 const HELP = `covenant-mcp ${version}: an MCP server that pays from a Covenant vault, which decides every payment.
 
 Settings, as environment variables:
-  VAULT_ACCOUNT_ID    the vault, such as acme.vaults.len3hq.testnet
+  VAULT_ACCOUNT_ID    the vault, such as acme.vaults-v3.len3hq.testnet
   AGENT_ACCOUNT_ID    the agent's NEAR account
   AGENT_PRIVATE_KEY   the agent's key, which can only ask the vault for payments
   SPENDS_FILE         optional; where payments are recorded so none is paid twice

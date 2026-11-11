@@ -23,7 +23,7 @@ export const TESTNET = {
 } as const;
 
 export interface ConnectOptions {
-  /** The vault's NEAR account, such as `acme.vaults.len3hq.testnet`. */
+  /** The vault's NEAR account, such as `acme.vaults-v3.len3hq.testnet`. */
   vault: string;
   /** The agent's NEAR account. Its key should be a function-call key for this vault only. */
   agentAccount: string;

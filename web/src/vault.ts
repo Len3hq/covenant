@@ -34,7 +34,7 @@ const SOL_USDC_DEVNET_HEX = [SOL_USDC_DEVNET, "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEER
 );
 
 /** Creates vaults that nobody, including us, can change. */
-export const FACTORY_ID: string = import.meta.env.VITE_FACTORY_ACCOUNT_ID ?? "vaults.len3hq.testnet";
+export const FACTORY_ID: string = import.meta.env.VITE_FACTORY_ACCOUNT_ID ?? "vaults-v3.len3hq.testnet";
 
 /** The vault named in the page's URL, so one hosted dashboard can show any of them. */
 export function vaultFromUrl(search: string, fallback: string): string {
