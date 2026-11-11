@@ -20,6 +20,12 @@ jobs:
       - name: Record wasm size
         run: echo "wasm size $(stat -c %s target/near/covenant_vault/covenant_vault.wasm) bytes" >> "$GITHUB_STEP_SUMMARY"
       - run: cargo test --workspace
+      - name: Hosted key holder
+        run: |
+          cargo fmt --manifest-path hosted/enclave/Cargo.toml --check
+          cargo clippy --manifest-path hosted/enclave/Cargo.toml --all-targets -- -D warnings
+          cargo test --manifest-path hosted/enclave/Cargo.toml
+          hosted/enclave/build.sh
 
   typescript:
     runs-on: ubuntu-latest

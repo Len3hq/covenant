@@ -1,0 +1,13 @@
+{
+  "display": {
+    "name": "Covenant agent key holder"
+  },
+  "operations": ["public_key", "sign_call"],
+  "callers": {
+    "direct": "deny",
+    "contract": "deny"
+  },
+  "signing_keys": [
+    {"path": "agent", "type": "ed25519"}
+  ]
+}

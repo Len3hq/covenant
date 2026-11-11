@@ -11,6 +11,8 @@ members = [
     "tests/integration",
     "tests/mock-signer",
 ]
+# The hosted connector's key holder builds for wasm32-wasip2 on OutLayer, apart from the contracts.
+exclude = ["hosted/enclave"]
 
 [workspace.package]
 version = "0.1.0"

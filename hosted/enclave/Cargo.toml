@@ -1,0 +1,28 @@
+[package]
+name = "covenant-key-holder"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Holds hosted Covenant agents' key in an OutLayer TDX enclave and signs only vault calls an owner granted"
+
+[[bin]]
+name = "covenant-key-holder"
+path = "src/main.rs"
+
+[dependencies]
+# Bindings from wit/signing-keys.wit, a copy of OutLayer's worker/wit/deps/signing-keys.wit.
+wit-bindgen = "0.36"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+borsh = { version = "1", features = ["derive"] }
+sha2 = "0.10"
+bs58 = "0.5"
+base64 = "0.22"
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+wasi-http-client = "0.2"
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
+codegen-units = 1

@@ -3,9 +3,10 @@ CARGO_NEAR_VERSION := 0.22.0
 VAULT_MANIFEST := contracts/covenant-vault/Cargo.toml
 MOCK_SIGNER_MANIFEST := tests/mock-signer/Cargo.toml
 FACTORY_MANIFEST := contracts/covenant-factory/Cargo.toml
+ENCLAVE_MANIFEST := hosted/enclave/Cargo.toml
 
 .DEFAULT_GOAL := help
-.PHONY: help setup fmt lint wasm test build check addresses deploy deploy-factory deploy-dashboard set-policy pay-btc pay-eth demo demo-pay demo-attack demo-queue agent-key veto freeze unfreeze set-guardian dao-freeze dao-veto pay-usdc pay-sol pay-swap execute sol-nonce testnet-smoke
+.PHONY: help setup fmt lint wasm test build check addresses deploy deploy-factory deploy-dashboard enclave set-policy pay-btc pay-eth demo demo-pay demo-attack demo-queue agent-key veto freeze unfreeze set-guardian dao-freeze dao-veto pay-usdc pay-sol pay-swap execute sol-nonce testnet-smoke
 
 help: ## List the targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-15s %s\n", $$1, $$2}'
@@ -21,6 +22,8 @@ fmt: ## Format Rust code
 lint: ## Lint Rust and TypeScript
 	cargo fmt --all --check
 	cargo clippy --workspace --all-targets -- -D warnings
+	cargo fmt --manifest-path $(ENCLAVE_MANIFEST) --check
+	cargo clippy --manifest-path $(ENCLAVE_MANIFEST) --all-targets -- -D warnings
 	pnpm -r lint
 
 wasm: ## Build the vault, factory and mock signer to target/near/
@@ -30,6 +33,7 @@ wasm: ## Build the vault, factory and mock signer to target/near/
 
 test: wasm ## Run all Rust, sandbox and TypeScript tests
 	cargo test --workspace
+	cargo test --manifest-path $(ENCLAVE_MANIFEST)
 	pnpm -r test
 
 build: wasm ## Build the contract, agent and dashboard
@@ -46,6 +50,9 @@ deploy: wasm ## Deploy the vault to NEAR testnet (needs the near CLI and the vau
 
 deploy-factory: wasm ## Publish the vault code and deploy the factory (needs the near CLI and both accounts' keys)
 	node --env-file=.env scripts/src/deploy-factory.ts
+
+enclave: ## Build the hosted connector's key holder for OutLayer, and print its SHA256
+	hosted/enclave/build.sh
 
 deploy-dashboard: ## Build and publish the dashboard on Railway (needs the railway CLI, logged in and linked)
 	railway up --service dashboard --ci
