@@ -6,11 +6,11 @@ import { generateKeyPairSync } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { requireEnv } from "./near.ts";
 
-const ENV_FILE = ".env";
+const ENV_FILE = process.env.ENV_FILE || ".env";
 const SEED_START = 16;
 const PUBLIC_START = 12;
 
-if (process.env.AGENT_PRIVATE_KEY) throw new Error("AGENT_PRIVATE_KEY is already set in .env");
+if (process.env.AGENT_PRIVATE_KEY) throw new Error(`AGENT_PRIVATE_KEY is already set in ${ENV_FILE}`);
 
 const { publicKey, privateKey } = generateKeyPairSync("ed25519");
 const seed = privateKey.export({ format: "der", type: "pkcs8" }).subarray(SEED_START);

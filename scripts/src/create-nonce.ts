@@ -1,12 +1,13 @@
 // Creates a durable nonce account whose authority is the vault, so its Solana payments can land
 // even after a veto window. A local funder key pays the rent; it never controls the vault's funds.
-// Run it once per payment the agent may have in flight at a time.
+// Run it once per payment the agent may have in flight at a time. ENV_FILE names the vault's settings
+// file, which gets the new account, so a second vault's nonces don't land in the first one's list.
 import { base58 } from "@scure/base";
 import { Connection, Keypair, LAMPORTS_PER_SOL, NONCE_ACCOUNT_LENGTH, PublicKey, sendAndConfirmTransaction, SystemProgram, Transaction } from "@solana/web3.js";
 import { readFileSync, writeFileSync } from "node:fs";
 import { requireEnv, viewCall } from "./near.ts";
 
-const ENV_FILE = ".env";
+const ENV_FILE = process.env.ENV_FILE || ".env";
 const FEES = 20_000;
 
 function setEnv(name: string, value: string) {

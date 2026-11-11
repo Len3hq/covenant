@@ -127,30 +127,38 @@ function Payees({
 }
 
 function NextSteps({ vault, agent, secret }: { vault: string; agent: string; secret?: string }) {
+  // One settings file per vault, so the repo's scripts never mix two vaults' keys or nonce accounts.
+  const envFile = `.env.${vault.split(".")[0]}`;
   return (
     <section className="card created">
       <h2>✓ {vault} is live</h2>
       {secret && <ConnectAgent values={{ vault, agent, key: secret }} />}
-      <p>{secret ? "Then, before your agent can pay:" : "Three things left before your agent can pay:"}</p>
+      <p>{secret ? "Then, before your agent can pay:" : "Four things left before your agent can pay:"}</p>
       <ol>
         <li>
           <a href={openHref(vault)}>Open its dashboard</a> to see its Bitcoin, Base and Solana addresses, and
           use its "Get test funds" panel to fill them.
         </li>
+        <li>
+          In a clone of the repo, make this vault's settings file, then set <code>VAULT_ACCOUNT_ID={vault}</code>,{" "}
+          <code>AGENT_ACCOUNT_ID={agent}</code>
+          {secret ? " and the key above" : ""} in it:
+          <pre className="mono">{`cp .env.example ${envFile}`}</pre>
+        </li>
         {!secret && (
           <li>
             Give your agent a key that can only ask this vault for payments: on the vault's page, connect{" "}
             {agent}'s wallet and press <strong>Create agent key</strong>. From a terminal instead:
-            <pre className="mono">{`VAULT_ACCOUNT_ID=${vault} AGENT_ACCOUNT_ID=${agent} make agent-key`}</pre>
+            <pre className="mono">{`make agent-key ENV_FILE=${envFile}`}</pre>
           </li>
         )}
         <li>
           For Solana, create a durable nonce account the vault controls. It lets a payment held for a veto
           still land afterwards:
-          <pre className="mono">{`VAULT_ACCOUNT_ID=${vault} make sol-nonce`}</pre>
+          <pre className="mono">{`make sol-nonce ENV_FILE=${envFile}`}</pre>
         </li>
         <li>
-          Point your agent at it with the same settings in <code>.env</code>.
+          Point your agent at the settings in <code>{envFile}</code>.
         </li>
       </ol>
     </section>

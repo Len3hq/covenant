@@ -50,8 +50,8 @@ deploy-factory: wasm ## Publish the vault code and deploy the factory (needs the
 deploy-dashboard: ## Build and publish the dashboard on Railway (needs the railway CLI, logged in and linked)
 	railway up --service dashboard --ci
 
-agent-key: ## Create the agent's restricted key and save it to .env (needs the agent account's full key)
-	node --env-file=.env scripts/src/create-agent-key.ts
+agent-key: ## Create the agent's restricted key and save it to .env: make agent-key [ENV_FILE=.env.other] (needs the agent account's full key)
+	ENV_FILE=$(or $(ENV_FILE),.env) node --env-file=$(or $(ENV_FILE),.env) scripts/src/create-agent-key.ts
 
 set-policy: ## Apply a policy to the deployed vault: make set-policy [POLICY=scripts/policy.open.testnet.json] (needs the owner's key)
 	node --env-file=.env scripts/src/set-policy.ts $(POLICY)
@@ -80,8 +80,8 @@ execute: ## Sign a held payment made with pay-swap or the MCP server, after its 
 	pnpm --filter "@covenant/agent..." build
 	node --env-file=.env agent/dist/execute.js $(ID)
 
-sol-nonce: ## Create a durable nonce account the vault controls, for Solana payments (funds it from SOL_FUNDER_KEY)
-	node --env-file=.env scripts/src/create-nonce.ts
+sol-nonce: ## Create a durable nonce account the vault controls: make sol-nonce [ENV_FILE=.env.other] (funds it from SOL_FUNDER_KEY)
+	ENV_FILE=$(or $(ENV_FILE),.env) node --env-file=$(or $(ENV_FILE),.env) scripts/src/create-nonce.ts
 
 DEMO_FLAGS = $(if $(LIVE),--live) $(if $(LLM),--llm) $(if $(RECORD),--record)
 DEMO_ENV = $(if $(wildcard .env),--env-file=.env)
