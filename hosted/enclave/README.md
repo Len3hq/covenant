@@ -29,21 +29,27 @@ make enclave   # prints the SHA256 that names the version on OutLayer
 
 ## Deploy (the project owner does this)
 
-`outlayer login` asks for a full-access key of the project's owner account, so run these yourself:
+The project runs on OutLayer testnet, paid in its test USDC (`usdc.fakes.testnet`, free to mint), and
+belongs to `keyholder.len3hq.testnet`, whose key is in the local NEAR keychain. `outlayer login` asks
+for that key, so run these yourself:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/out-layer/outlayer-cli/main/install.sh | sh
-outlayer login                       # mainnet; the account that owns the project
+cargo install outlayer-cli --locked           # or the install script in OutLayer's docs
+outlayer login testnet                        # keyholder.len3hq.testnet, and its private_key from
+                                              # ~/.near-credentials/testnet/keyholder.len3hq.testnet.json
 make enclave
 outlayer upload hosted/enclave/target/wasm32-wasip2/release/covenant-key-holder.wasm
 outlayer deploy covenant-key-holder <the FastFS URL upload printed>
+outlayer keys create --project keyholder.len3hq.testnet/covenant-key-holder
+outlayer keys topup 1 --usd 5                 # the nonce keys create printed
+outlayer keys show 1                          # the payment key, for the connector
 ```
 
-Then check it answers, with the payment key from `.env`:
+Then check it answers:
 
 ```sh
-curl -s -X POST https://api.outlayer.ai/call/<owner>/covenant-key-holder \
-  -H "X-Payment-Key: $OUTLAYER_PAYMENT_KEY" -H "Content-Type: application/json" \
+curl -s -X POST https://testnet-api.outlayer.ai/call/keyholder.len3hq.testnet/covenant-key-holder \
+  -H "X-Payment-Key: <the payment key>" -H "Content-Type: application/json" \
   -d '{"input": {"operation": "public_key"}}'
 ```
 

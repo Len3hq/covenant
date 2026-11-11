@@ -26,9 +26,9 @@ restart signs nobody out. A token lasts as long as its grant.
 | `PUBLIC_URL` | This service's public URL, such as `https://connector-production-xxxx.up.railway.app` |
 | `DASHBOARD_URL` | The dashboard, such as `https://dashboard-production-65f1.up.railway.app/` |
 | `CONNECTOR_SECRET` | 32 random bytes, hex: `openssl rand -hex 32`. Changing it signs everyone out |
-| `OUTLAYER_PROJECT` | `<owner>/covenant-key-holder` |
+| `OUTLAYER_PROJECT` | `keyholder.len3hq.testnet/covenant-key-holder` |
 | `OUTLAYER_PAYMENT_KEY` | The OutLayer payment key that pays for each signature |
-| `OUTLAYER_API_URL` | Defaults to `https://api.outlayer.ai` |
+| `OUTLAYER_API_URL` | Defaults to OutLayer testnet, `https://testnet-api.outlayer.ai` |
 | `NEAR_RPC_URL` | Defaults to FastNear's testnet RPC |
 | `DATA_DIR` | Where each vault's spends file lives; a Railway volume at `/data` |
 | `LOCAL_AGENT_KEY` | Development only: sign in this process instead of the enclave |

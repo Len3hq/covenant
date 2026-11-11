@@ -3,7 +3,7 @@ import { outlayerKeyHolder } from "./keyholder.js";
 
 const answering = (status: number, body: unknown) =>
   vi.fn(async () => new Response(JSON.stringify(body), { status })) as unknown as typeof fetch;
-const options = { apiUrl: "https://api.outlayer.ai", project: "realist1036.near/covenant-key-holder", paymentKey: "k" };
+const options = { apiUrl: "https://testnet-api.outlayer.ai", project: "keyholder.len3hq.testnet/covenant-key-holder", paymentKey: "k" };
 const grant = { message: "m", nonce: "n", public_key: "ed25519:x", signature: "s" };
 const call = {
   signerId: "a", publicKey: "ed25519:x", nonce: "1", receiverId: "v", blockHash: "h", method: "execute", args: "", gas: "1",
@@ -14,7 +14,7 @@ describe("outlayerKeyHolder", () => {
     const fetcher = answering(200, { status: "completed", output: '{"public_key":"ed25519:abc"}' });
     expect(await outlayerKeyHolder({ ...options, fetcher }).publicKey()).toBe("ed25519:abc");
     const [url, init] = (fetcher as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0] ?? [];
-    expect(url).toBe("https://api.outlayer.ai/call/realist1036.near/covenant-key-holder");
+    expect(url).toBe("https://testnet-api.outlayer.ai/call/keyholder.len3hq.testnet/covenant-key-holder");
     expect(new Headers(init?.headers).get("x-payment-key")).toBe("k");
     expect(JSON.parse(String(init?.body))).toEqual({ input: { operation: "public_key" } });
   });

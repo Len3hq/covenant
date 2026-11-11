@@ -81,7 +81,6 @@ replacing the agent or freezing the vault, as today.
    carries the same public key. Each account's key can still only call its own vault, but one key
    serves them all. A key per user would need a payment key per user. The grant is what keeps one
    vault's owner from driving another's, so one shared key is the proposal.
-2. **Network.** The payment key is on mainnet (`realist1036.near`); the vaults are on NEAR testnet.
-   Signing doesn't care which network the transaction is for, so a mainnet OutLayer project can sign
-   testnet transactions. It costs a little USDC per call.
+2. **Network.** The key holder runs on OutLayer testnet as `keyholder.len3hq.testnet`, paid in its
+   free test USDC, like the vaults on NEAR testnet. Mainnet would need a mainnet project and real USDC.
 3. **Deploying.** `outlayer login` needs a full-access key for the project's owner account.

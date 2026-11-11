@@ -23,7 +23,7 @@ mkdirSync(dataDir, { recursive: true });
 const keyHolder: KeyHolder = process.env.LOCAL_AGENT_KEY
   ? localKeyHolder(process.env.LOCAL_AGENT_KEY)
   : outlayerKeyHolder({
-      apiUrl: process.env.OUTLAYER_API_URL ?? "https://api.outlayer.ai",
+      apiUrl: process.env.OUTLAYER_API_URL ?? "https://testnet-api.outlayer.ai",
       project: env("OUTLAYER_PROJECT"),
       paymentKey: env("OUTLAYER_PAYMENT_KEY"),
     });
