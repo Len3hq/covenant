@@ -22,10 +22,15 @@ export const FAUCET_LINKS: FaucetLink[] = [
   { coin: "USDC and USDT on Base Sepolia and Solana devnet", name: "Tidepool faucet", url: TIDEPOOL_FAUCET },
 ];
 
-/** The vault addresses Tidepool's faucet can send test USDC to, labelled as its form names them. */
-export function tidepoolTargets(evmAddress: string, solAddress?: string | null): { chain: string; address: string }[] {
+/** The vault's addresses to paste into a faucet, each with the coins it takes. */
+export function faucetTargets(vault: { btcAddress: string; evmAddress: string; solAddress?: string | null }): {
+  chain: string;
+  coins: string;
+  address: string;
+}[] {
   return [
-    { chain: "Base Sepolia", address: evmAddress },
-    ...(solAddress ? [{ chain: "Solana devnet", address: solAddress }] : []),
+    { chain: "Bitcoin testnet4", coins: "BTC", address: vault.btcAddress },
+    { chain: "Base Sepolia", coins: "ETH, and Tidepool's USDC", address: vault.evmAddress },
+    ...(vault.solAddress ? [{ chain: "Solana devnet", coins: "SOL, and Tidepool's USDC", address: vault.solAddress }] : []),
   ];
 }

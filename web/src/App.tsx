@@ -10,7 +10,7 @@ import {
   newAgentKey,
   removeAgentKeyTransaction,
 } from "./agent";
-import { FAUCET_LINKS, TIDEPOOL_FAUCET, tidepoolTargets } from "./faucet";
+import { FAUCET_LINKS, TIDEPOOL_FAUCET, faucetTargets } from "./faucet";
 import {
   baseAmount,
   explorerFor,
@@ -847,12 +847,16 @@ function TestFunds({ vault }: { vault: VaultState }) {
       <h2>Get test funds</h2>
       <p className="muted small">
         Everything here is testnet, so the coins are free. Tidepool sends its test USDC and USDT, the
-        tokens this vault pays and swaps, once a week per address. Copy an address, then claim on{" "}
-        <a href={TIDEPOOL_FAUCET}>Tidepool's faucet ↗</a>.
+        tokens this vault pays and swaps, once a week per address, on{" "}
+        <a href={TIDEPOOL_FAUCET}>its faucet ↗</a>. Copy the vault's address for a chain, then paste it
+        into one of the faucets below.
       </p>
-      {tidepoolTargets(vault.evmAddress, vault.solAddress).map(({ chain, address }) => (
+      {faucetTargets(vault).map(({ chain, coins, address }) => (
         <div key={chain} className="faucet-buttons">
-          <span className="muted small">{chain}:</span> <span className="mono small">{address}</span>
+          <span className="muted small">
+            {chain} ({coins}):
+          </span>{" "}
+          <span className="mono small">{address}</span>
           <button
             type="button"
             className="ghost"
@@ -872,7 +876,6 @@ function TestFunds({ vault }: { vault: VaultState }) {
           </li>
         ))}
       </ul>
-      <p className="muted small">Send them to the vault's addresses at the bottom of this page.</p>
     </section>
   );
 }

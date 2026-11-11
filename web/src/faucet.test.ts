@@ -1,15 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { FAUCET_LINKS, TIDEPOOL_FAUCET, tidepoolTargets } from "./faucet";
+import { FAUCET_LINKS, TIDEPOOL_FAUCET, faucetTargets } from "./faucet";
 
-describe("tidepoolTargets", () => {
-  it("offers the vault's Base address, and its Solana address when it has one", () => {
-    expect(tidepoolTargets("0xd913a8c28efdb2f30563e063b5fac5abd6ec9361")).toEqual([
-      { chain: "Base Sepolia", address: "0xd913a8c28efdb2f30563e063b5fac5abd6ec9361" },
+describe("faucetTargets", () => {
+  it("offers the vault's Bitcoin and Base addresses, and its Solana address when it has one", () => {
+    const vault = { btcAddress: "tb1q05", evmAddress: "0xa7" };
+    expect(faucetTargets(vault).map((target) => [target.chain, target.address])).toEqual([
+      ["Bitcoin testnet4", "tb1q05"],
+      ["Base Sepolia", "0xa7"],
     ]);
-    expect(tidepoolTargets("0xd9", "xR99")).toEqual([
-      { chain: "Base Sepolia", address: "0xd9" },
-      { chain: "Solana devnet", address: "xR99" },
-    ]);
+    expect(faucetTargets({ ...vault, solAddress: "FX2V" }).at(-1)).toMatchObject({ chain: "Solana devnet", address: "FX2V" });
   });
 });
 
