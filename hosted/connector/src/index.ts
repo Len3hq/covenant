@@ -35,7 +35,11 @@ const app = createApp({
   keyHolder,
   chain: rpcChainView(nearRpcUrl),
   publicUrl,
-  dashboardOrigin: new URL(dashboardUrl).origin,
+  // DEV_DASHBOARD_ORIGINS adds local dashboards, such as http://localhost:5199, for development.
+  dashboardOrigins: [
+    new URL(dashboardUrl).origin,
+    ...(process.env.DEV_DASHBOARD_ORIGINS ?? "").split(",").map((o) => o.trim()).filter(Boolean),
+  ],
   wallet(terms, grant, publicKey) {
     const key = `${terms.vault}|${grant.signature}`;
     let wallet = wallets.get(key);

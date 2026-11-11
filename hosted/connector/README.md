@@ -31,6 +31,7 @@ restart signs nobody out. A token lasts as long as its grant.
 | `OUTLAYER_API_URL` | Defaults to OutLayer testnet, `https://testnet-api.outlayer.ai` |
 | `NEAR_RPC_URL` | Defaults to FastNear's testnet RPC |
 | `DATA_DIR` | Where each vault's spends file lives; a Railway volume at `/data` |
+| `DEV_DASHBOARD_ORIGINS` | Extra dashboard origins that may hand over a grant, comma-separated, such as `http://localhost:5199` for a local dashboard |
 | `LOCAL_AGENT_KEY` | Development only: sign in this process instead of the enclave |
 
 ## Run it locally

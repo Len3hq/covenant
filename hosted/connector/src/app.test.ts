@@ -33,7 +33,7 @@ beforeAll(async () => {
     keyHolder: localKeyHolder(agentSecret),
     chain: fakeChain(terms, ownerKey),
     publicUrl: "http://127.0.0.1",
-    dashboardOrigin: dashboard,
+    dashboardOrigins: [dashboard],
     wallet: (granted) => {
       opened.push(granted.vault);
       return wallet;
@@ -145,6 +145,6 @@ describe("the hosted connector", () => {
     expect(((await response.json()) as { public_key: string }).public_key).toBe(
       KeyPair.fromString(agentSecret as KeyPairString).getPublicKey().toString(),
     );
-    expect(response.headers.get("access-control-allow-origin")).toBe(dashboard);
+    expect(response.headers.get("access-control-allow-origin")).toBe("*");
   });
 });

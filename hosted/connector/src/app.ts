@@ -12,8 +12,8 @@ export interface AppOptions {
   keyHolder: KeyHolder;
   chain: ChainView;
   publicUrl: string;
-  /** The dashboard's origin, the only page that may hand over a grant. */
-  dashboardOrigin: string;
+  /** The dashboards that may hand over a grant: the hosted one, and any local ones for development. */
+  dashboardOrigins: string[];
   /** One wallet per vault, so a vault's spends file has one writer. */
   wallet(terms: Terms, grant: Grant, publicKey: string): Wallet;
 }
@@ -46,10 +46,13 @@ export function createApp(options: AppOptions) {
   );
 
   const fromDashboard = (req: Request, res: Response) => {
-    res.setHeader("access-control-allow-origin", options.dashboardOrigin);
-    res.setHeader("access-control-allow-headers", "content-type");
+    const origin = req.headers.origin;
     res.setHeader("vary", "origin");
-    return req.headers.origin === undefined || req.headers.origin === options.dashboardOrigin;
+    if (origin === undefined) return true;
+    if (!options.dashboardOrigins.includes(origin)) return false;
+    res.setHeader("access-control-allow-origin", origin);
+    res.setHeader("access-control-allow-headers", "content-type");
+    return true;
   };
 
   app.get("/health", (_req, res) => {
@@ -57,8 +60,9 @@ export function createApp(options: AppOptions) {
   });
 
   /** The access key the owner's wallet gives a new hosted agent. */
-  app.get("/public-key", async (req, res) => {
-    fromDashboard(req, res);
+  /** Public, so any page may read it. */
+  app.get("/public-key", async (_req, res) => {
+    res.setHeader("access-control-allow-origin", "*");
     try {
       res.json({ public_key: await options.keyHolder.publicKey() });
     } catch (error) {
