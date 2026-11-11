@@ -87,6 +87,12 @@ sandbox on the 263 KB vault itself (the Solana rows on 10 Nov, on the 305 KB vau
 "Total burnt" therefore excludes the real MPC network's work. To reproduce:
 `make wasm && cargo test -p covenant-integration-tests --test gas_bench -- --nocapture`.
 
+## Other hackathon project
+
+A member of this team also built [Prove-It](https://github.com/christian-obi/proveit) for NEAR
+HACKATHON (Nov 2026): verifiable private trading track records, computed in an OutLayer TEE and
+recorded on NEAR. The two projects are independent and share no code.
+
 ## Repo map
 
 | Path | Contents |
