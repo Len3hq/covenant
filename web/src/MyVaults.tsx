@@ -26,7 +26,17 @@ export async function ownedVaults(
   return [...new Set(lists.flat())];
 }
 
-async function hasKey(config: VaultConfig, account: string, publicKey: string, fetcher: typeof fetch): Promise<boolean> {
+/**
+ * Whether `account` holds `publicKey` as a key for `vault`. NEAR answers a missing key with an error
+ * inside a normal result, so only a key whose permission names the vault counts.
+ */
+export async function hasVaultKey(
+  config: VaultConfig,
+  account: string,
+  publicKey: string,
+  vault: string,
+  fetcher: typeof fetch,
+): Promise<boolean> {
   const response = await fetcher(config.rpcUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -37,8 +47,11 @@ async function hasKey(config: VaultConfig, account: string, publicKey: string, f
       params: { request_type: "view_access_key", finality: "final", account_id: account, public_key: publicKey },
     }),
   });
-  const { result } = (await response.json()) as { result?: unknown };
-  return Boolean(result);
+  const { result } = (await response.json()) as {
+    result?: { permission?: { FunctionCall?: { receiver_id?: string } } | string };
+  };
+  const permission = result?.permission;
+  return typeof permission === "object" && permission.FunctionCall?.receiver_id === vault;
 }
 
 async function view<T>(config: VaultConfig, account: string, method: string, fetcher: typeof fetch): Promise<T> {
@@ -89,7 +102,7 @@ export function MyVaults({
               view<unknown[]>(config, vault, "get_queue", fetcher).catch(() => null),
               view<{ payees: unknown[] }>(config, vault, "get_policy", fetcher).catch(() => null),
             ]);
-            const hosted = Boolean(roles && hostedKey && (await hasKey(config, roles.agent, hostedKey, fetcher).catch(() => false)));
+            const hosted = Boolean(roles && hostedKey && (await hasVaultKey(config, roles.agent, hostedKey, vault, fetcher).catch(() => false)));
             return {
               vault,
               agent: roles?.agent ?? null,
@@ -203,7 +216,11 @@ function VaultCard({ owned }: { owned: Owned }) {
         </div>
       </dl>
       <div className="vault-card-foot">
-        {hosted && <span className="badge">Hosted agent</span>}
+        {hosted && (
+          <span className="badge" title="The agent's key is held in the hosted connector's OutLayer enclave, for AI apps that connect by URL">
+            Hosted agent
+          </span>
+        )}
         {waiting ? <span className="badge badge-warn">{waiting} to review</span> : null}
         <span className="spacer" />
         <span className="muted small">Open →</span>

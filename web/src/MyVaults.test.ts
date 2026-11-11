@@ -24,3 +24,16 @@ describe("ownedVaults", () => {
     expect(await ownedVaults(config, "me.testnet", fetcher, ["new", "old"])).toEqual(["a.new"]);
   });
 });
+
+describe("hasVaultKey", () => {
+  const answering = (result: unknown) => (async () => new Response(JSON.stringify({ result }))) as unknown as typeof fetch;
+  it("counts only a key scoped to the vault, not NEAR's answer for a missing key", async () => {
+    const { hasVaultKey } = await import("./MyVaults");
+    const missing = answering({ error: "access key ed25519:x does not exist while viewing", logs: [] });
+    expect(await hasVaultKey(config, "a.testnet", "ed25519:x", "v.testnet", missing)).toBe(false);
+    const scoped = answering({ permission: { FunctionCall: { receiver_id: "v.testnet", method_names: [] } } });
+    expect(await hasVaultKey(config, "a.testnet", "ed25519:x", "v.testnet", scoped)).toBe(true);
+    expect(await hasVaultKey(config, "a.testnet", "ed25519:x", "other.testnet", scoped)).toBe(false);
+    expect(await hasVaultKey(config, "a.testnet", "ed25519:x", "v.testnet", answering({ permission: "FullAccess" }))).toBe(false);
+  });
+});
