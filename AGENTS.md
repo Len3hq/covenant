@@ -19,6 +19,8 @@ Instructions for AI agents and new contributors.
 | Deploy to testnet | `make deploy` (needs `.env`, the NEAR CLI and the vault's key) |
 | Publish the vault code and deploy the factory | `make deploy-factory` (needs `FACTORY_*` in `.env`, the NEAR CLI, and about 29 NEAR the first time) |
 | Publish the dashboard to Railway | `make deploy-dashboard` (needs the railway CLI, logged in) |
+| Build the hosted key holder for OutLayer | `make enclave` (deploy steps in hosted/enclave/README.md) |
+| Publish the hosted connector to Railway | `make deploy-connector` (settings in hosted/connector/README.md) |
 | Build the SDK and MCP server | `pnpm --filter "@len3hq/covenant-mcp..." build` (outputs in `sdk/dist`, `mcp/dist`) |
 | Check the npm packages install and run | `node scripts/pack-smoke.mjs` |
 | Publish the SDK and MCP server to npm | Push a tag `vX.Y.Z` matching both versions (needs `NPM_TOKEN`; see docs/RUNBOOK.md) |

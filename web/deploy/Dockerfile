@@ -11,6 +11,8 @@ COPY mcp/package.json mcp/
 COPY hosted/connector/package.json hosted/connector/
 RUN pnpm install --frozen-lockfile --filter @covenant/web...
 COPY web web
+# The tests type-check against the shared vectors, which pin formats across the repo.
+COPY tests/vectors tests/vectors
 # Only VITE_* values reach the bundle, and they are public. Never pass a secret here.
 ARG VITE_VAULT_ACCOUNT_ID
 ARG VITE_FACTORY_ACCOUNT_ID

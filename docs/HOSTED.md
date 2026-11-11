@@ -1,6 +1,14 @@
 # Hosted connector (design)
 
-Status: built, not yet deployed (11 Nov 2026). The parts:
+Status: live on testnet (11 Nov 2026).
+
+- Key holder: OutLayer testnet project `keyholder.len3hq.testnet/covenant-key-holder`, version
+  `db76a6636deb65f1c5899f117f3c63abe4fcf9266a2853b3cdfffa955a7c1460`. Its public key, the access key of
+  every hosted agent, is `ed25519:8rPY7UqToQA4QTWpe7pWGTWT5aMxFbPcaRWuqStWY56z`.
+- Connector: https://connector-production-d939451a.up.railway.app, so Claude's connector URL is
+  https://connector-production-d939451a.up.railway.app/mcp.
+
+The parts:
 
 - [sdk/src/signer.ts](../sdk/src/signer.ts): the SDK signs through a remote signer.
 - [hosted/enclave](../hosted/enclave): the key holder, for OutLayer.
@@ -8,8 +16,8 @@ Status: built, not yet deployed (11 Nov 2026). The parts:
 - The dashboard: "Hosted" on `?create`, the `?connect` sign-in page, and the enclave key marked on a
   vault's page. All three appear only when `VITE_CONNECTOR_URL` is set.
 
-To go live: deploy the key holder (hosted/enclave/README.md), then the connector on Railway with its
-settings (hosted/connector/README.md), then set `VITE_CONNECTOR_URL` on the dashboard and publish it.
+To publish a change: `make enclave` and the steps in hosted/enclave/README.md for the key holder,
+`make deploy-connector` for the connector, `make deploy-dashboard` for the dashboard.
 
 An opt-in way to use a vault from Claude on the web, desktop and phone, through Settings → Connectors
 → Add custom connector, with nothing to install. The self-hosted ways (the MCP server over `npx`, a

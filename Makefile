@@ -6,7 +6,7 @@ FACTORY_MANIFEST := contracts/covenant-factory/Cargo.toml
 ENCLAVE_MANIFEST := hosted/enclave/Cargo.toml
 
 .DEFAULT_GOAL := help
-.PHONY: help setup fmt lint wasm test build check addresses deploy deploy-factory deploy-dashboard enclave set-policy pay-btc pay-eth demo demo-pay demo-attack demo-queue agent-key veto freeze unfreeze set-guardian dao-freeze dao-veto pay-usdc pay-sol pay-swap execute sol-nonce testnet-smoke
+.PHONY: help setup fmt lint wasm test build check addresses deploy deploy-factory deploy-dashboard deploy-connector enclave set-policy pay-btc pay-eth demo demo-pay demo-attack demo-queue agent-key veto freeze unfreeze set-guardian dao-freeze dao-veto pay-usdc pay-sol pay-swap execute sol-nonce testnet-smoke
 
 help: ## List the targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-15s %s\n", $$1, $$2}'
@@ -50,6 +50,9 @@ deploy: wasm ## Deploy the vault to NEAR testnet (needs the near CLI and the vau
 
 deploy-factory: wasm ## Publish the vault code and deploy the factory (needs the near CLI and both accounts' keys)
 	node --env-file=.env scripts/src/deploy-factory.ts
+
+deploy-connector: ## Publish the hosted connector on Railway, from the committed tree (needs the railway CLI)
+	hosted/connector/deploy.sh
 
 enclave: ## Build the hosted connector's key holder for OutLayer, and print its SHA256
 	hosted/enclave/build.sh
