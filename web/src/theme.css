@@ -1010,3 +1010,9 @@ main {
 .vault-card-foot {
   margin-top: auto;
 }
+/* A whole card is the link, so nothing in it is underlined on hover. */
+a.vault-card,
+a.vault-card:hover,
+a.vault-card:hover * {
+  text-decoration: none;
+}
