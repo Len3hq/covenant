@@ -202,9 +202,11 @@ function VaultCard({ owned }: { owned: Owned }) {
         </span>
       </div>
       <dl className="vault-card-facts">
-        <div>
+        <div className="fact-wide">
           <dt>Agent</dt>
-          <dd className="mono small">{agent ?? "unknown"}</dd>
+          <dd className="mono small" title={agent ?? undefined}>
+            {agent ?? "unknown"}
+          </dd>
         </div>
         <div>
           <dt>Payees</dt>

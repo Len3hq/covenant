@@ -996,3 +996,17 @@ main {
     padding: 16px;
   }
 }
+
+/* Vault cards: the agent on its own line, the counts side by side, the footer at the bottom. */
+.vault-card-facts {
+  grid-template-columns: 1fr 1fr;
+}
+.vault-card-facts .fact-wide {
+  grid-column: 1 / -1;
+}
+.vault-card-facts dd {
+  white-space: nowrap;
+}
+.vault-card-foot {
+  margin-top: auto;
+}
