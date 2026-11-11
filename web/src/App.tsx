@@ -10,7 +10,7 @@ import {
   newAgentKey,
   removeAgentKeyTransaction,
 } from "./agent";
-import { FAUCET_LINKS, requestTestTokens, type FaucetChain } from "./faucet";
+import { FAUCET_LINKS, TIDEPOOL_FAUCET, tidepoolTargets } from "./faucet";
 import {
   baseAmount,
   explorerFor,
@@ -839,41 +839,32 @@ function PowersCard({
   );
 }
 
-/** Where to get test coins for this vault, with one click for Tidepool's USDC and USDT. */
+/** Where to get test coins for this vault, with its addresses ready for Tidepool's faucet. */
 function TestFunds({ vault }: { vault: VaultState }) {
-  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
-  const [busy, setBusy] = useState<FaucetChain | null>(null);
-  const drip = async (chain: FaucetChain, address: string) => {
-    setBusy(chain);
-    setResult(await requestTestTokens(chain, address));
-    setBusy(null);
-  };
+  const [copied, setCopied] = useState<string | null>(null);
   return (
     <section className="card test-funds">
       <h2>Get test funds</h2>
       <p className="muted small">
         Everything here is testnet, so the coins are free. Tidepool sends its test USDC and USDT, the
-        tokens this vault pays and swaps, once a week per address.
+        tokens this vault pays and swaps, once a week per address. Copy an address, then claim on{" "}
+        <a href={TIDEPOOL_FAUCET}>Tidepool's faucet ↗</a>.
       </p>
-      <div className="faucet-buttons">
-        <button type="button" disabled={busy !== null} onClick={() => void drip("base", vault.evmAddress)}>
-          {busy === "base" ? "Asking Tidepool…" : "Send test USDC to the vault on Base"}
-        </button>
-        {vault.solAddress && (
+      {tidepoolTargets(vault.evmAddress, vault.solAddress).map(({ chain, address }) => (
+        <div key={chain} className="faucet-buttons">
+          <span className="muted small">{chain}:</span> <span className="mono small">{address}</span>
           <button
             type="button"
-            disabled={busy !== null}
-            onClick={() => void drip("sol", vault.solAddress as string)}
+            className="ghost"
+            onClick={() => {
+              void navigator.clipboard?.writeText(address);
+              setCopied(chain);
+            }}
           >
-            {busy === "sol" ? "Asking Tidepool…" : "Send test USDC to the vault on Solana"}
+            {copied === chain ? "Copied" : `Copy the ${chain} address`}
           </button>
-        )}
-      </div>
-      {result && (
-        <p className={result.ok ? "small" : "small banner banner-frozen"} role="status">
-          {result.message}
-        </p>
-      )}
+        </div>
+      ))}
       <ul className="faucet-links">
         {FAUCET_LINKS.map((link) => (
           <li key={link.url}>

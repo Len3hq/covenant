@@ -336,10 +336,10 @@ the live vault. Expect:
 - the swaps from section 4 in the decision log, with "Swapped through Tidepool" lines;
 - the rules card reading the live policy.
 
-**T26. The faucet buttons work.** Come back to this after T27, on the new vault, which hasn't
-claimed this week. Press "Send test USDC to the vault on Solana". Expect "Sent 100 test USDC and 100 test USDT",
-and the balance to appear within a minute. A second press should show Tidepool's weekly-limit
-message.
+**T26. The faucet panel works.** Come back to this after T27, on the new vault, which hasn't
+claimed this week. Tidepool's faucet only takes claims on its own site. Press "Copy the Solana
+devnet address", open "Tidepool's faucet", paste it and claim. Expect the balance to appear on the
+vault's page within a minute.
 
 ## 6. Phase 3: create and replace the agent from the dashboard
 
@@ -532,7 +532,7 @@ Copy this table into your reply, filling in each row.
 | T23 New factory | | |
 | T24 Dashboard published | | |
 | T25 Live vault page | | |
-| T26 Faucet buttons | | |
+| T26 Faucet panel | | |
 | T27 Vault with new agent | | |
 | T28 Agent's one key | | |
 | T29 New vault pays | | |

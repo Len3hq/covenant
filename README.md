@@ -28,7 +28,7 @@ https://dashboard-production-65f1.up.railway.app shows the testnet vault: every 
 
 Open the dashboard with [`?create`](https://dashboard-production-65f1.up.railway.app/?create), connect a NEAR wallet, and fill in your limits. The
 dashboard creates your agent's NEAR account and its vault-only key for you, and the vault page's
-"Get test funds" panel sends Tidepool's test USDC to the vault and links a faucet for every other
+"Get test funds" panel copies the vault's addresses for Tidepool's test USDC faucet and links a faucet for every other
 coin. The factory gives you a separate vault with its own Bitcoin, Base and Solana addresses.
 Payments to payees off your list wait for your veto, and payments on other chains or in other
 tokens go through Tidepool's testnet swaps. You own it, its code can't
