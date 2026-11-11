@@ -7,7 +7,8 @@ import { associatedTokenAccount } from "./solana/message.js";
 import type { SolanaDeps } from "./solana/pay.js";
 import { SolanaRpc } from "./solana/rpc.js";
 import { base58 } from "@scure/base";
-import { connectVault, type AgentVault } from "./vault.js";
+import type { RemoteSigner } from "./signer.js";
+import { connectVault, type AgentKeyOption, type AgentVault } from "./vault.js";
 
 /** Public testnet endpoints. Each can be replaced. */
 export const TESTNET = {
@@ -27,8 +28,10 @@ export interface ConnectOptions {
   vault: string;
   /** The agent's NEAR account. Its key should be a function-call key for this vault only. */
   agentAccount: string;
-  /** `ed25519:...`. Keep it in an environment variable, never in code. */
-  agentKey: string;
+  /** `ed25519:...`. Keep it in an environment variable, never in code. Give this or `signer`. */
+  agentKey?: string;
+  /** Holds the agent's key elsewhere, such as an enclave, and signs each vault call. Give this or `agentKey`. */
+  signer?: RemoteSigner;
   nearRpcUrl?: string;
   btcApiUrl?: string;
   evmRpcUrl?: string;
@@ -57,7 +60,7 @@ export function connectTestnet(options: ConnectOptions) {
     rpcUrl: options.nearRpcUrl ?? TESTNET.nearRpcUrl,
     vault: options.vault,
     agent: options.agentAccount,
-    agentKey: options.agentKey,
+    ...agentKeyOption(options),
   });
   const client = createPublicClient({ transport: http(options.evmRpcUrl ?? TESTNET.evmRpcUrl) });
   const mempool = new Mempool(options.btcApiUrl ?? TESTNET.btcApiUrl);
@@ -107,4 +110,11 @@ export function connectTestnet(options: ConnectOptions) {
       solRpc.tokenBalance(associatedTokenAccount(await vault.solPubkey(), solUsdcMint)),
   };
   return { vault, mempool, chain, usdc, broadcast, reads, btcAddress, evmAddress, solana, solAddress };
+}
+
+/** The agent's key option, refusing none or both. */
+function agentKeyOption({ agentKey, signer }: Pick<ConnectOptions, "agentKey" | "signer">): AgentKeyOption {
+  if (agentKey && !signer) return { agentKey };
+  if (signer && !agentKey) return { signer };
+  throw new Error("give exactly one of agentKey and signer");
 }

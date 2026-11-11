@@ -11,6 +11,7 @@ import {
 } from "near-api-js";
 import { z } from "zod";
 import { withRetry } from "./retry.js";
+import { RemoteNearSigner, type RemoteSigner } from "./signer.js";
 import type { SignedQuote } from "./tidepool.js";
 
 const MAX_GAS = 300_000_000_000_000n;
@@ -126,14 +127,13 @@ export class ContractPanic extends Error {}
 
 const base64 = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64");
 
-export function connectVault(config: {
-  rpcUrl: string;
-  vault: string;
-  agent: string;
-  agentKey: string;
-}): AgentVault {
+/** The agent's key: its secret, or a signer that holds it elsewhere. Exactly one. */
+export type AgentKeyOption = { agentKey: string; signer?: never } | { signer: RemoteSigner; agentKey?: never };
+
+export function connectVault(config: { rpcUrl: string; vault: string; agent: string } & AgentKeyOption): AgentVault {
   const provider = new JsonRpcProvider({ url: config.rpcUrl });
-  const account = new Account(config.agent, provider, config.agentKey as KeyPairString);
+  const signer = config.signer ? new RemoteNearSigner(config.signer) : (config.agentKey as KeyPairString);
+  const account = new Account(config.agent, provider, signer);
   const view = <T>(method: string, args: Record<string, unknown> = {}) =>
     withRetry(() => provider.callFunction({ contractId: config.vault, method, args })) as Promise<T>;
 

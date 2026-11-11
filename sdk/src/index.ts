@@ -10,6 +10,7 @@ export { payeeAddress, prepareCall, preparePayment, resolvePayee, type PrepareDe
 export { Payer, links, report, type Assemble, type Broadcasters, type Links, type SpendReport } from "./payer.js";
 export { SpendStore, type Prepared, type SpendRecord, type SpendStatus } from "./store.js";
 export * from "./vault.js";
+export { agentCall, localRemoteSigner, RemoteNearSigner, transactionFromCall, type AgentCall, type RemoteSigner } from "./signer.js";
 export { withRetry } from "./retry.js";
 export * from "./tidepool.js";
 export { jsonLog, type Log, type LogFields } from "./log.js";
