@@ -103,7 +103,7 @@ export const STARTING_FORM: VaultForm = {
   payees: [{ label: "", chain: "Bitcoin", address: "" }],
 };
 
-function cap(
+export function cap(
   asset: AssetCap["asset"],
   form: CapForm,
   decimals: number,
@@ -165,7 +165,7 @@ export const TIDEPOOL_DESTINATIONS = [
   "nep141:btc.tp-omft.testnet",
 ];
 
-function swapRules(): NonNullable<Policy["swap"]> {
+export function swapRules(): NonNullable<Policy["swap"]> {
   return {
     maker_key: TIDEPOOL_MAKER_KEY,
     origins: [
@@ -185,6 +185,23 @@ function swapRules(): NonNullable<Policy["swap"]> {
   };
 }
 
+/** Label for the USDC token account listed beside a Solana payee. */
+export const solUsdcLabel = (label: string) => `${label} (USDC)`;
+
+/** The payees as the contract lists them. A Solana payee's USDC account is listed beside it. */
+export function payeesFrom(rows: PayeeForm[]): Payee[] {
+  const solUsdc = base58.decode(SOL_USDC_DEVNET);
+  return rows.flatMap(({ label, chain, address }): Payee[] => {
+    if (!label.trim()) throw new Error("Every payee needs a name");
+    const to = payeeBytes(chain, address);
+    const payee = { chain, to, label: label.trim() };
+    if (chain !== "Solana") return [payee];
+    // Solana tokens go to a token account, not the wallet, so the wallet's USDC account is listed too.
+    const tokens = associatedTokenAccount(Uint8Array.from(to), solUsdc);
+    return [payee, { chain, to: [...tokens], label: solUsdcLabel(label.trim()) }];
+  });
+}
+
 export function buildPolicy(form: VaultForm): Policy {
   const seconds = wholeSeconds(form.vetoSeconds, "The veto window");
   const unlistedSeconds = form.openPayees ? wholeSeconds(form.unlistedSeconds, "The new-payee window") : seconds;
@@ -193,15 +210,7 @@ export function buildPolicy(form: VaultForm): Policy {
   }
   const open = form.openPayees;
   const solUsdc = base58.decode(SOL_USDC_DEVNET);
-  const payees = form.payees.flatMap(({ label, chain, address }): Payee[] => {
-    if (!label.trim()) throw new Error("Every payee needs a name");
-    const to = payeeBytes(chain, address);
-    const payee = { chain, to, label: label.trim() };
-    if (chain !== "Solana") return [payee];
-    // Solana tokens go to a token account, not the wallet, so the wallet's USDC account is listed too.
-    const tokens = associatedTokenAccount(Uint8Array.from(to), solUsdc);
-    return [payee, { chain, to: [...tokens], label: `${label.trim()} (USDC)` }];
-  });
+  const payees = payeesFrom(form.payees);
   if (payees.length === 0 && !open) throw new Error("Add at least one payee, or the vault can pay no one");
   return {
     caps: [

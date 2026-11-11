@@ -1545,3 +1545,15 @@ pre {
   flex-shrink: 0;
   white-space: nowrap;
 }
+
+/* The owner's rules editor. */
+.policy-editor > * + * {
+  margin-top: 0.75rem;
+}
+.policy-editor h3 {
+  margin-bottom: 0;
+}
+.policy-editor .review {
+  border-left: 3px solid var(--accent, #3ecf8e);
+  padding-left: 0.75rem;
+}

@@ -169,19 +169,19 @@ describe("Dashboard", () => {
       expect(html).toContain("Connect a NEAR wallet");
       expect(html).not.toContain("Veto</button>");
       expect(html).not.toContain("Freeze all chains");
-      expect(html).not.toContain("Edit policy");
+      expect(html).not.toContain("Change the rules");
     });
 
     it("offers veto and freeze but not unfreeze or policy to a council member", () => {
       const html = render(queued, "council");
       expect(html).toContain("Veto</button>");
       expect(html).toContain("Freeze all chains");
-      expect(html).not.toContain("Edit policy");
+      expect(html).not.toContain("Change the rules");
       expect(render({ ...queued, frozen: true }, "council")).not.toContain("Unfreeze</button>");
     });
 
     it("offers the owner policy editing and unfreeze", () => {
-      expect(render(queued, "owner")).toContain("Edit policy");
+      expect(render(queued, "owner")).toContain("Change the rules");
       expect(render({ ...queued, frozen: true }, "owner")).toContain("Unfreeze</button>");
     });
   });

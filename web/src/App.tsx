@@ -4,6 +4,9 @@ import { CreateVault } from "./CreateVault";
 import { ConnectClaude } from "./ConnectClaude";
 import { CONNECTOR_URL, hostedPublicKey } from "./hosted";
 import { HostedConnect } from "./HostedConnect";
+import { describeChanges, formFromPolicy, policyFromForm, ASSETS as POLICY_ASSETS, type AssetKey, type EditForm } from "./policyEdit";
+import { CapFields, Field, Payees } from "./PolicyFields";
+import { STARTING_FORM, type CapForm } from "./create";
 import { Docs } from "./Docs";
 import {
   accountExists,
@@ -648,36 +651,151 @@ function RulesCard({ policy, rules, controls }: { policy: Policy; rules: Rule[];
           </ul>
         )}
       </details>
-      {controls?.role === "owner" && <PolicyEditor policy={policy} controls={controls} />}
+      {controls?.role === "owner" && <PolicyEditor key={JSON.stringify(policy)} policy={policy} controls={controls} />}
     </section>
   );
 }
 
 function PolicyEditor({ policy, controls }: { policy: Policy; controls: Controls }) {
-  const [text, setText] = useState(() => JSON.stringify(policy, null, 2));
+  const [form, setForm] = useState<EditForm>(() => formFromPolicy(policy));
+  const [review, setReview] = useState<{ next: Policy; changes: string[] } | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  const [json, setJson] = useState(() => JSON.stringify(policy, null, 2));
+  const edit = (next: EditForm) => {
+    setForm(next);
+    setReview(null);
+    setProblem(null);
+  };
+  const check = () => {
+    try {
+      const next = policyFromForm(form, policy);
+      setReview({ next, changes: describeChanges(policy, next) });
+      setProblem(null);
+    } catch (error) {
+      setReview(null);
+      setProblem(error instanceof Error ? error.message : String(error));
+    }
+  };
   return (
-    <details>
-      <summary>Edit policy</summary>
-      <p className="muted small">The contract checks every rule again, and refuses anything it doesn't accept.</p>
-      <textarea aria-label="Policy JSON" rows={16} value={text} onChange={(event) => setText(event.target.value)} />
-      <button
-        className="primary"
-        onClick={() => {
-          try {
-            controls.act("set_policy", { policy: parsePolicy(text) });
-            setProblem(null);
-          } catch (error) {
-            setProblem(String(error));
-          }
-        }}
-      >
-        Save policy
+    <details className="policy-editor">
+      <summary>Change the rules</summary>
+      <Payees payees={form.payees} open={form.openPayees} onChange={(payees) => edit({ ...form, payees })} />
+      <fieldset className="payee-mode">
+        <legend>Addresses that aren't payees</legend>
+        <label>
+          <input type="radio" name="edit-open" checked={form.openPayees} onChange={() => edit({ ...form, openPayees: true })} />{" "}
+          Pay them, after a wait so you can veto
+        </label>
+        <label>
+          <input type="radio" name="edit-open" checked={!form.openPayees} onChange={() => edit({ ...form, openPayees: false })} />{" "}
+          Refuse them
+        </label>
+      </fieldset>
+      <Field
+        label="Veto window for large payments, in seconds"
+        value={form.vetoSeconds}
+        hint={windowHint(form.vetoSeconds)}
+        onChange={(vetoSeconds) => edit({ ...form, vetoSeconds })}
+      />
+      {form.openPayees && (
+        <Field
+          label="Wait before paying a new address, in seconds"
+          value={form.unlistedSeconds}
+          hint={windowHint(form.unlistedSeconds)}
+          onChange={(unlistedSeconds) => edit({ ...form, unlistedSeconds })}
+        />
+      )}
+      <h3>Limits</h3>
+      <p className="muted small">In whole coins, such as 0.005 BTC or 50 USDC.</p>
+      {POLICY_ASSETS.map(({ key, name }) => {
+        const entry = form.caps[key];
+        return entry ? (
+          <div key={key}>
+            <CapFields name={name} cap={entry} open={form.openPayees} onChange={(next) => edit({ ...form, caps: { ...form.caps, [key]: next } })} />
+            <button type="button" className="ghost" onClick={() => edit({ ...form, caps: { ...form.caps, [key]: null } })}>
+              Stop paying in {name}
+            </button>
+          </div>
+        ) : (
+          <p key={key} className="muted small">
+            {name} isn't allowed.{" "}
+            <button type="button" className="ghost" onClick={() => edit({ ...form, caps: { ...form.caps, [key]: STARTING_CAPS[key] } })}>
+              Allow {name}
+            </button>
+          </p>
+        );
+      })}
+      <label className="check">
+        <input type="checkbox" checked={form.allowSwaps} onChange={(event) => edit({ ...form, allowSwaps: event.target.checked })} /> Allow
+        payments on other chains and in other tokens, through Tidepool's signed quotes
+      </label>
+      <button type="button" className="primary" onClick={check}>
+        Review changes
       </button>
-      {problem && <p role="alert">{problem}</p>}
+      {problem && (
+        <p className="banner banner-frozen" role="alert">
+          {problem}
+        </p>
+      )}
+      {review && (
+        <div className="review">
+          {review.changes.length === 0 ? (
+            <p className="muted small">Nothing would change.</p>
+          ) : (
+            <>
+              <p>Saving will:</p>
+              <ul>
+                {review.changes.map((change) => (
+                  <li key={change}>{change}</li>
+                ))}
+              </ul>
+              <button type="button" className="primary" onClick={() => controls.act("set_policy", { policy: review.next })}>
+                Save with your wallet
+              </button>
+              <p className="muted small">The vault checks every rule again, and refuses anything it doesn't accept.</p>
+            </>
+          )}
+        </div>
+      )}
+      <details>
+        <summary>Advanced: edit the policy as JSON</summary>
+        <p className="muted small">Every setting, including the ones above. A mistake here is refused by the vault, not fixed.</p>
+        <textarea aria-label="Policy JSON" rows={16} value={json} onChange={(event) => setJson(event.target.value)} />
+        <button
+          type="button"
+          className="ghost"
+          onClick={() => {
+            try {
+              controls.act("set_policy", { policy: parsePolicy(json) });
+              setProblem(null);
+            } catch (error) {
+              setProblem(String(error));
+            }
+          }}
+        >
+          Save the JSON
+        </button>
+      </details>
     </details>
   );
 }
+
+/** "600" as "10 minutes", under the field. */
+function windowHint(text: string): string {
+  const s = Number(text.trim());
+  if (!Number.isFinite(s) || s < 0) return "";
+  if (s < 60) return `${s} seconds`;
+  const m = s / 60;
+  return m < 60 ? `${Number(m.toFixed(1))} minutes` : `${Number((m / 60).toFixed(1))} hours`;
+}
+
+const STARTING_CAPS: Record<AssetKey, CapForm> = {
+  btc: STARTING_FORM.btc,
+  eth: STARTING_FORM.eth,
+  usdc: STARTING_FORM.usdc,
+  sol: STARTING_FORM.sol,
+  solUsdc: STARTING_FORM.solUsdc,
+};
 
 function ProvenanceLine({ provenance }: { provenance?: Provenance | null }) {
   if (!provenance) return null;
