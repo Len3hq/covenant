@@ -1021,3 +1021,96 @@ a.vault-card:hover * {
   opacity: 0.7;
   cursor: default;
 }
+
+/* What happens to a held payment if nobody acts. */
+.hold-note {
+  margin: 8px 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgb(255 197 61 / 35%);
+  background: rgb(255 197 61 / 8%);
+  color: var(--text-2);
+  font-size: 13px;
+}
+.hold-note strong {
+  color: var(--amber);
+}
+.hold-ready {
+  border-color: var(--red-line);
+  background: rgb(229 72 77 / 8%);
+}
+.hold-ready strong {
+  color: var(--red-text);
+}
+
+/* The vault's addresses: one row per chain, the address whole. */
+.address-list {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+.address-list li {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-soft);
+  background: var(--raised);
+}
+.address-list-chain {
+  color: var(--text-dim);
+  font-size: 13px;
+}
+.address-list-value {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+.address-list-actions {
+  display: flex;
+  gap: 6px;
+}
+.address-list-actions .button,
+.address-list-actions button {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+@media (max-width: 760px) {
+  .address-list li {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+}
+.address-list-chain {
+  display: grid;
+  gap: 2px;
+  color: var(--text-2);
+}
+.faucet-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.faucet-grid a {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-soft);
+  background: var(--raised);
+  color: var(--text);
+  text-decoration: none;
+}
+.faucet-grid a:hover {
+  border-color: rgb(0 236 151 / 35%);
+  text-decoration: none;
+}
+.faucet-name {
+  font-weight: 600;
+}

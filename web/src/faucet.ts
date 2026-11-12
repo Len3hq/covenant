@@ -16,9 +16,10 @@ export interface FaucetLink {
 export const FAUCET_LINKS: FaucetLink[] = [
   { coin: "BTC on testnet4", name: "CypherFaucet", url: "https://cypherfaucet.com/btc-testnet" },
   { coin: "BTC on testnet4", name: "testnet4.info", url: "https://testnet4.info" },
+  { coin: "BTC on testnet4", name: "mempool.space faucet", url: "https://mempool.space/testnet4/faucet" },
   { coin: "ETH on Base Sepolia, for gas", name: "Base's faucet list", url: "https://docs.base.org/get-started/get-funds" },
   { coin: "SOL on devnet, for fees", name: "Solana faucet", url: "https://faucet.solana.com" },
-  { coin: "NEAR on testnet, for the vault's storage", name: "NEAR faucet", url: "https://near-faucet.io" },
+  { coin: "NEAR on testnet, for the vault's storage", name: "NEAR faucet", url: "https://docs.near.org/getting-started/faucet#external-faucet" },
   { coin: "USDC and USDT on Base Sepolia and Solana devnet", name: "Tidepool faucet", url: TIDEPOOL_FAUCET },
 ];
 

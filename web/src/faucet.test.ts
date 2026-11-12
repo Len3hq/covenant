@@ -22,3 +22,11 @@ describe("FAUCET_LINKS", () => {
     expect(FAUCET_LINKS.some((link) => link.url === TIDEPOOL_FAUCET)).toBe(true);
   });
 });
+
+describe("faucet links", () => {
+  it("include mempool.space's testnet4 faucet and NEAR's faucet page", () => {
+    const urls = FAUCET_LINKS.map((link) => link.url);
+    expect(urls).toContain("https://mempool.space/testnet4/faucet");
+    expect(urls).toContain("https://docs.near.org/getting-started/faucet#external-faucet");
+  });
+});

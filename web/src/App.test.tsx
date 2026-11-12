@@ -72,8 +72,20 @@ describe("Dashboard", () => {
     ).replaceAll("<!-- -->", "");
     expect(html).toContain("0.0025 BTC");
     expect(html).toContain("0102");
-    expect(html).toMatch(/(89|90) s/);
+    expect(html).toMatch(/1:(29|30) left/);
+    expect(html).toContain("This goes through unless you veto it.");
+    expect(html).toContain("no approve button");
     expect(html).toContain("can veto any of these");
+  });
+
+  it("says a held payment whose wait is over can be sent at any moment", () => {
+    const due: VaultState = {
+      ...vault,
+      queue: [{ id: "8", chain: "Bitcoin", payments: [], fee: "141", queued_at: "0", executable_at: "1" }],
+    };
+    const html = renderToString(<Dashboard accountId="v" status={{ kind: "ready", vault: due }} />).replaceAll("<!-- -->", "");
+    expect(html).toContain("Window over");
+    expect(html).toContain("The wait is over: the agent can send this now.");
   });
 
   it("marks refused spends in the log and links each to NEAR", () => {
@@ -276,6 +288,7 @@ describe("the docs", () => {
     const html = renderToString(<Dashboard accountId="v.vaults-v3.len3hq.testnet" status={{ kind: "ready", vault }} />);
     for (const tab of ["Overview", "Activity", "Rules", "Agent", "Fund"]) expect(html).toContain(`>${tab}<`);
     expect(html).toContain("How every payment is checked");
-    expect(html).toContain("Get test funds");
+    expect(html).toContain("Where to get test coins");
+    expect(html).toContain("The vault&#x27;s addresses");
   });
 });

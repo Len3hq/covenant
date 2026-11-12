@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { AddressChip, Explainer, Identicon, InfoTip, middle, Skeleton, Tabs, Toast, useHashTab } from "./ui";
+import { AddressChip, CopyButton, Explainer, Identicon, InfoTip, middle, Skeleton, Tabs, Toast, useHashTab } from "./ui";
 import { ConnectAgent } from "./ConnectAgent";
 import { CreateVault } from "./CreateVault";
 import { ConnectClaude } from "./ConnectClaude";
@@ -19,7 +19,7 @@ import {
   newAgentKey,
   removeAgentKeyTransaction,
 } from "./agent";
-import { FAUCET_LINKS, TIDEPOOL_FAUCET, faucetTargets } from "./faucet";
+import { FAUCET_LINKS } from "./faucet";
 import {
   explorerFor,
   headline,
@@ -61,6 +61,7 @@ import {
   type Activity,
   type Provenance,
   type Balance,
+  type Payee,
   type Payment,
   type Pending,
   type Policy,
@@ -567,24 +568,30 @@ function QueueCard({
   return (
     <section className={attention ? "card card-attention" : "card"}>
       <div className="card-head">
-        <h2>{attention ? `${queue.length} payment${queue.length === 1 ? "" : "s"} waiting for your decision` : "Veto queue"}</h2>
+        <h2>
+          {attention
+            ? `${queue.length} held payment${queue.length === 1 ? "" : "s"}: ${queue.length === 1 ? "it goes" : "they go"} through unless you veto`
+            : "Veto queue"}
+        </h2>
         <span className="muted small">{delay} s window</span>
       </div>
       {queue.length === 0 ? (
         <p className="empty">
-          Nothing is waiting. Large payments wait here for {delay} s, so the owner or guardian can veto
-          them before they're signed.
+          Nothing is waiting. Large payments, and payments to addresses that aren't payees, wait here first. Each one
+          goes through by itself after its wait unless the owner or guardian vetoes it.
         </p>
       ) : (
         <ul className="queue">
           {queue.map((spend) => {
             const left = secondsUntil(spend.executable_at, now);
-            const share = delay > 0 ? Math.min(100, Math.round((left * 100) / delay)) : 0;
+            // Each spend's own window: payments to new addresses wait longer than large ones.
+            const window = Number((BigInt(spend.executable_at) - BigInt(spend.queued_at)) / 1_000_000_000n) || delay;
+            const share = window > 0 ? Math.min(100, Math.round((left * 100) / window)) : 0;
             return (
               <li key={spend.id} className="queued">
                 <div className="queue-top">
                   <span className="mono">#{spend.id}</span>
-                  <span className="countdown mono">{left > 0 ? `${left} s` : "Ready to execute"}</span>
+                  <span className="countdown mono">{left > 0 ? `${clock(left)} left` : "Window over"}</span>
                 </div>
                 <div className="meter warn">
                   <span style={{ width: `${share}%` }} />
@@ -592,6 +599,19 @@ function QueueCard({
                 {spend.payments.map((payment) => (
                   <PaymentLine key={payment.to.join()} payment={payment} policy={policy} />
                 ))}
+                <p className={left > 0 ? "hold-note" : "hold-note hold-ready"} role="note">
+                  {left > 0 ? (
+                    <>
+                      <strong>This goes through unless you veto it.</strong> In {clock(left)} the agent can send it, and
+                      the vault checks it against your rules once more. To stop it, veto it before the agent does.
+                    </>
+                  ) : (
+                    <>
+                      <strong>The wait is over: the agent can send this now.</strong> Until it does, a veto still stops
+                      it.
+                    </>
+                  )}
+                </p>
                 {canVeto && (
                   <button className="danger" onClick={() => controls?.act("veto", { id: spend.id })}>
                     Veto
@@ -602,9 +622,21 @@ function QueueCard({
           })}
         </ul>
       )}
-      <p className="muted small">The owner or guardian can veto any of these until they execute.</p>
+      <p className="muted small">
+        There's no approve button: a held payment goes ahead by itself once its wait ends, when the agent sends it.
+        The owner or guardian can veto any of these until then. To pay an address at once next time, add it as a payee
+        in the Rules tab.
+      </p>
     </section>
   );
+}
+
+/** Seconds as "8:32", or "1:05:00" past an hour. */
+export function clock(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = String(seconds % 60).padStart(2, "0");
+  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
 }
 
 function BudgetCard({ balances, policy }: { balances: Balance[]; policy: Policy }) {
@@ -671,7 +703,7 @@ function RulesCard({ policy, rules, controls }: { policy: Policy; rules: Rule[];
         <p className={open ? "rule-line" : "rule-line rule-strict"}>
           <strong>Anyone else:</strong>{" "}
           {open
-            ? `paid only after a ${seconds(policy.unlisted_veto_delay_ns)} wait, so you can veto it, and within the new-address limits below.`
+            ? `held for ${seconds(policy.unlisted_veto_delay_ns)}, then paid unless you veto it, within the new-address limits below. To pay an address at once, add it as a payee.`
             : "refused. Only the payees above can be paid."}
         </p>
       </section>
@@ -1095,40 +1127,25 @@ function PowersCard({
   );
 }
 
-/** Where to get test coins for this vault, with its addresses ready for Tidepool's faucet. */
-function TestFunds({ vault }: { vault: VaultState }) {
-  const [copied, setCopied] = useState<string | null>(null);
+/** Where to get test coins for this vault. Its addresses, with copy buttons, are in the card above. */
+function TestFunds() {
   return (
     <section className="card test-funds">
-      <h2>Get test funds</h2>
+      <div className="card-head">
+        <h2>Where to get test coins</h2>
+        <span className="muted small">Free: everything here is testnet</span>
+      </div>
       <p className="muted small">
-        Everything here is testnet, so the coins are free. Tidepool sends its test USDC and USDT, the
-        tokens this vault pays and swaps, once a week per address, on{" "}
-        <a href={TIDEPOOL_FAUCET}>its faucet ↗</a>. Copy the vault's address for a chain, then paste it
-        into one of the faucets below.
+        Copy an address above and paste it into a faucet. Tidepool's faucet sends test USDC and USDT, the tokens this vault
+        pays and swaps, once a week per address.
       </p>
-      {faucetTargets(vault).map(({ chain, coins, address }) => (
-        <div key={chain} className="faucet-buttons">
-          <span className="muted small">
-            {chain} ({coins}):
-          </span>{" "}
-          <span className="mono small">{address}</span>
-          <button
-            type="button"
-            className="ghost"
-            onClick={() => {
-              void navigator.clipboard?.writeText(address);
-              setCopied(chain);
-            }}
-          >
-            {copied === chain ? "Copied" : `Copy the ${chain} address`}
-          </button>
-        </div>
-      ))}
-      <ul className="faucet-links">
+      <ul className="faucet-grid">
         {FAUCET_LINKS.map((link) => (
           <li key={link.url}>
-            <span className="muted">{link.coin}:</span> <a href={link.url}>{link.name} ↗</a>
+            <a href={link.url} target="_blank" rel="noopener noreferrer">
+              <span className="faucet-name">{link.name} ↗</span>
+              <span className="muted small">{link.coin}</span>
+            </a>
           </li>
         ))}
       </ul>
@@ -1137,36 +1154,41 @@ function TestFunds({ vault }: { vault: VaultState }) {
 }
 
 function Addresses({ accountId, vault }: { accountId: string; vault: VaultState }) {
+  const rows: { chain: Payee["chain"]; label: string; coins: string; address: string }[] = [
+    { chain: "Bitcoin", label: "Bitcoin testnet4", coins: "BTC", address: vault.btcAddress },
+    { chain: "Evm", label: "Base Sepolia", coins: "ETH for gas, USDC", address: vault.evmAddress },
+    ...(vault.solAddress
+      ? [{ chain: "Solana" as const, label: "Solana devnet", coins: "SOL for fees, USDC", address: vault.solAddress }]
+      : []),
+  ];
   return (
-    <footer className="footer">
-      <div>
-        <p className="label">Vault on Bitcoin testnet4</p>
-        <a className="mono" href={explorerFor("Bitcoin", vault.btcAddress)}>
-          {vault.btcAddress}
-        </a>
+    <section className="card">
+      <div className="card-head">
+        <h2>The vault's addresses</h2>
       </div>
-      <div>
-        <p className="label">Vault on Base Sepolia</p>
-        <a className="mono" href={explorerFor("Evm", vault.evmAddress)}>
-          {vault.evmAddress}
-        </a>
-      </div>
-      {vault.solAddress && (
-        <div>
-          <p className="label">Vault on Solana devnet</p>
-          <a className="mono" href={explorerFor("Solana", vault.solAddress)}>
-            {vault.solAddress}
-          </a>
-        </div>
-      )}
-      <div>
-        <p className="label">{vault.solAddress ? "All three addresses are" : "Both addresses are"} derived from</p>
-        <span className="mono">{accountId}</span> <span className="muted">via NEAR Chain Signatures</span>
-      </div>
-      <div>
+      <ul className="address-list">
+        {rows.map(({ chain, label, coins, address }) => (
+          <li key={chain}>
+            <span className="address-list-chain">
+              {label}
+              <span className="muted small">{coins}</span>
+            </span>
+            <span className="mono address-list-value">{address}</span>
+            <span className="address-list-actions">
+              <CopyButton text={address} label="Copy" />
+              <a className="button ghost" href={explorerFor(chain, address)} target="_blank" rel="noopener noreferrer">
+                Explorer ↗
+              </a>
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p className="muted small">
+        {rows.length === 3 ? "All three are" : "Both are"} derived from <span className="mono">{accountId}</span> through NEAR
+        Chain Signatures, so only this vault's contract can spend from them.{" "}
         <a href={REPO_URL}>Source and security tests ↗</a>
-      </div>
-    </footer>
+      </p>
+    </section>
   );
 }
 
@@ -1312,8 +1334,8 @@ function Ready({
             This vault has its own address on each chain, all controlled by its NEAR contract. Send test coins to
             them; the agent can then pay from them within the rules.
           </Explainer>
-          <TestFunds vault={vault} />
           <Addresses accountId={accountId} vault={vault} />
+          <TestFunds />
         </>,
       )}
     </>
