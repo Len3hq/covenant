@@ -26,24 +26,37 @@ https://dashboard-production-65f1.up.railway.app shows the testnet vault: every 
 
 ## Your own vault
 
-Open the dashboard with [`?create`](https://dashboard-production-65f1.up.railway.app/?create), connect a NEAR wallet, and fill in your limits. The
-dashboard creates your agent's NEAR account and its vault-only key for you, and the vault page's
-"Get test funds" panel copies the vault's addresses for Tidepool's test USDC faucet and links a faucet for every other
-coin. The factory gives you a separate vault with its own Bitcoin, Base and Solana addresses.
-Payments to payees off your list wait for your veto, and payments on other chains or in other
-tokens go through Tidepool's testnet swaps. You own it, its code can't
-be changed by anyone, and we hold no keys or funds. Any vault can be viewed at `?vault=<account>`.
-Testnet only, and unaudited.
+Connect a NEAR testnet wallet on the [dashboard](https://dashboard-production-65f1.up.railway.app) and
+press **Create**. A five-step wizard sets the name, the agent, who it may pay, the limits (presets or
+your own) and a review. The factory gives you a separate vault with its own Bitcoin, Base and Solana
+addresses; you own it, its code can't be changed by anyone, and we hold no keys or funds.
+
+- **My vaults** (`?mine`) lists every vault your wallet created, as cards.
+- Each vault's page has **Overview**, **Activity** (the veto queue and every decision), **Rules** (with
+  a form to change them, which lists each change before your wallet signs), **Agent** (keys, replace
+  agent) and **Fund** (each address with a copy button and its faucets) tabs, and a one-click **Freeze**.
+- Payees are paid at once. Anyone else is refused, or, if you allow it, paid only after a wait you can
+  veto. Payments on other chains and tokens go through Tidepool's testnet swaps.
+
+Any vault can be viewed at `?vault=<account>`. Testnet only, and unaudited.
 
 ## Connect your own agent
 
+- **Hosted, by URL** ([hosted/](hosted/), [docs/HOSTED.md](docs/HOSTED.md)): create a vault with a
+  *Hosted* agent and add the connector URL to Claude, ChatGPT, Claude Code, Cursor, VS Code or any app
+  that adds a remote MCP server with OAuth. The agent's key is made inside an Intel TDX enclave on
+  OutLayer and never leaves it; your wallet signs a grant that lets it act for that one vault, until it
+  expires.
+- **MCP server, run yourself** ([mcp/](mcp/)): gives Claude Desktop, Claude Code, Cursor, VS Code or any
+  MCP client `pay`, `list_payees`, `get_balances` and more, with the agent's restricted key in your own
+  config.
 - **TypeScript SDK** ([sdk/](sdk/)): `Covenant.connect(...)`, then `wallet.pay({ asset, to, amount, reference })`.
   It builds and proposes the transaction, broadcasts what the vault signs, and never pays the same
-  reference twice.
-- **MCP server** ([mcp/](mcp/)): gives Claude, Cursor or any MCP client `pay`, `list_payees`,
-  `get_balances` and more, with the vault still deciding every payment.
+  reference twice. A `signer` can hold the key elsewhere, such as an enclave.
 
-The [docs](https://dashboard-production-65f1.up.railway.app/?docs) cover setup, both, and every error.
+Whichever you use, the vault decides every payment. The
+[docs](https://dashboard-production-65f1.up.railway.app/?docs) cover each step, every AI app, every
+error and common problems.
 
 ## Quick start
 
@@ -103,6 +116,8 @@ recorded on NEAR. The two projects are independent and share no code.
 | [tests](tests) | Vectors, sandbox tests, attack suites |
 | [agent](agent) | TypeScript agent service |
 | [web](web) | Dashboard |
+| [hosted/enclave](hosted/enclave) | The hosted agents' key holder, for OutLayer's TDX enclaves |
+| [hosted/connector](hosted/connector) | The hosted connector: MCP over HTTP, with OAuth |
 | [scripts](scripts) | Deploy, funding and evidence scripts |
 | [docs](docs) | Build plan and spec |
 

@@ -39,6 +39,25 @@ export function desktopConfig(values: McpValues, published = MCP_PUBLISHED): str
   );
 }
 
+/** For VS Code's `.vscode/mcp.json`, which names servers under `servers` with a `type`. */
+export function vscodeConfig(values: McpValues, published = MCP_PUBLISHED): string {
+  const { command, args } = launcher(published);
+  return JSON.stringify(
+    {
+      servers: {
+        covenant: {
+          type: "stdio",
+          command,
+          args,
+          env: { VAULT_ACCOUNT_ID: values.vault, AGENT_ACCOUNT_ID: values.agent, AGENT_PRIVATE_KEY: values.key },
+        },
+      },
+    },
+    null,
+    2,
+  );
+}
+
 export function claudeCodeCommand(values: McpValues, published = MCP_PUBLISHED): string {
   const { command, args } = launcher(published);
   return [

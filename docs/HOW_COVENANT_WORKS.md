@@ -175,6 +175,8 @@ Honest limits, so you can explain them to others:
 
 - **Pay allowed payees within the caps.** Those payments follow the rules, so the contract can't
   tell them from honest ones. The worst case is bounded by your caps, and big ones are held for veto.
+- **Ask to pay other addresses**, if your vault allows new addresses. Those payments wait out the
+  new-address window first, within the new-address limits, so you can veto them.
 - **Fill the veto queue** (at most 16 entries). A veto clears them.
 - **Burn its gas allowance** of at most 1 NEAR on fees.
 
@@ -193,7 +195,9 @@ testnet-only.
 | **Agent service** | An example AI agent that reads invoices and pays through the vault, including the attack demo | [agent](../agent) |
 | **TypeScript SDK** | `wallet.pay({ asset, to, amount, reference })` for developers. Builds the transaction, proposes it, broadcasts what gets signed, and never pays the same `reference` twice | [sdk](../sdk) |
 | **MCP server** | Gives Claude, Cursor or any MCP client tools like `pay`, `list_payees`, `get_balances`. The assistant can ask; the vault decides | [mcp](../mcp) |
-| **Dashboard** | A web page showing every payment signed or refused and why, plus vault creation (`?create`) and docs (`?docs`) | [web](../web), [live](https://dashboard-production-65f1.up.railway.app) |
+| **Hosted connector** | The same tools over the web, for Claude, ChatGPT or any app that adds a server by URL. Signing in means the vault's owner signing a "grant" with their wallet | [hosted/connector](../hosted/connector) |
+| **Key holder** | Keeps hosted agents' key inside an Intel TDX enclave on OutLayer, where nobody can read it, and signs only vault calls a live grant covers | [hosted/enclave](../hosted/enclave), [HOSTED.md](HOSTED.md) |
+| **Dashboard** | A landing page, My vaults, a five-step create wizard, and each vault's page: overview, activity, rules (with a form to change them), agent and funding | [web](../web), [live](https://dashboard-production-65f1.up.railway.app) |
 | **Tests** | Unit, property, sandbox and attack tests. Every security claim maps to a named test | [tests](../tests), [SECURITY.md](../SECURITY.md) |
 | **Evidence** | Real testnet transactions: payments on Bitcoin testnet4 and Base Sepolia, refused attacks, vetoes, freezes, DAO votes | [EVIDENCE.md](../EVIDENCE.md) |
 
@@ -210,7 +214,10 @@ testnet-only.
 | EVM | Ethereum-style chains. Base is one; Base Sepolia is its testnet |
 | sats / wei | Smallest units of BTC and ETH |
 | Allow-list | The list of payees the owner approved |
-| Veto window | How long a large payment waits before it can be signed |
+| Veto window | How long a large payment, or a payment to a new address, waits before it can be signed |
+| Enclave (TEE) | A sealed area of a processor whose memory nobody can read, not even whoever runs the machine |
+| Grant | A message the vault's owner signs, letting the hosted connector act for one vault until it expires |
+| MCP | Model Context Protocol: the standard way AI apps call tools, such as "pay" |
 | DAO | A group account that acts by vote (here, a Sputnik DAO as guardian) |
 | Prompt injection | Hidden instructions in content an AI reads, meant to hijack it |
 | Testnet | A practice network with valueless coins |

@@ -11,7 +11,10 @@ testnet swaps.
 ## Set up
 
 You need a vault and an agent key. The [dashboard](https://dashboard-production-65f1.up.railway.app/?create)
-makes both.
+makes both: choose "I'll run it" as the agent, and it shows the key once, with these settings filled in.
+
+Rather not hold a key? Create the vault with a **Hosted** agent instead, and add the hosted connector to
+your app by URL. Nothing to install; see the [docs](https://dashboard-production-65f1.up.railway.app/?docs#hosted).
 
 **Claude Desktop** (`claude_desktop_config.json`) or **Cursor** (`~/.cursor/mcp.json`):
 
@@ -31,11 +34,31 @@ makes both.
 }
 ```
 
+Claude Desktop doesn't read your shell's PATH: if Node came from nvm, put the full path from
+`which npx` in `command`, then quit and reopen Claude Desktop.
+
 **Claude Code:**
 
 ```sh
 claude mcp add covenant -e VAULT_ACCOUNT_ID=… -e AGENT_ACCOUNT_ID=… -e AGENT_PRIVATE_KEY=… -- npx -y @len3hq/covenant-mcp
 ```
+
+**VS Code** (`.vscode/mcp.json`):
+
+```json
+{
+  "servers": {
+    "covenant": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@len3hq/covenant-mcp"],
+      "env": { "VAULT_ACCOUNT_ID": "…", "AGENT_ACCOUNT_ID": "…", "AGENT_PRIVATE_KEY": "ed25519:…" }
+    }
+  }
+}
+```
+
+To check it works, ask your assistant "what are my vault's addresses?".
 
 Optional settings:
 

@@ -346,7 +346,7 @@ vault's page within a minute.
 **T27. Create a vault with a new agent.**
 
 1. Connect the spare wallet on `?create`.
-2. Leave "Create one for me" ticked, with the agent name `agent`.
+2. In the wizard's Agent step, choose "I'll run it", with the agent name `agent`.
 3. Fill in a vault name, list one Bitcoin payee, and leave swaps ticked.
 4. Press create.
 
@@ -401,7 +401,7 @@ Intear. Note any that refuse the account-creation transaction.
 
 **T34. Add a key to an existing agent.**
 
-1. On `?create`, make a vault with "Use one I already have", naming a spare account whose
+1. On `?create`, make a vault with "An account I have" as the agent, naming a spare account whose
    full-access key is in your wallet.
 2. Open the vault's page and connect that agent account. The Agent keys card should say it has no
    key for this vault, and offer **Create agent key**.
