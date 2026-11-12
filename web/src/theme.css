@@ -1016,3 +1016,8 @@ a.vault-card:hover,
 a.vault-card:hover * {
   text-decoration: none;
 }
+
+.account-checking {
+  opacity: 0.7;
+  cursor: default;
+}

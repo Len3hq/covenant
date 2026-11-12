@@ -37,3 +37,16 @@ describe("hasVaultKey", () => {
     expect(await hasVaultKey(config, "a.testnet", "ed25519:x", "v.testnet", answering({ permission: "FullAccess" }))).toBe(false);
   });
 });
+
+describe("MyVaults while the wallet loads", () => {
+  it("shows placeholders, not the connect prompt, until the wallet has answered", async () => {
+    const { renderToString } = await import("react-dom/server");
+    const { createElement } = await import("react");
+    const { MyVaults } = await import("./MyVaults");
+    const page = (checking: boolean) =>
+      renderToString(createElement(MyVaults, { config, fetcher: fetch, account: null, connect: () => {}, checking }));
+    expect(page(true)).toContain('aria-busy="true"');
+    expect(page(true)).not.toContain("Connect your wallet");
+    expect(page(false)).toContain("Connect your wallet");
+  });
+});

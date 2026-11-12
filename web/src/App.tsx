@@ -102,6 +102,10 @@ export type VaultStatus =
 /** What the page can ask a connected wallet to do. Absent when rendering without one. */
 export interface Controls {
   account: string | null;
+  /** True until the wallet says who's signed in, after a page load. */
+  checking?: boolean;
+  /** The account signed in last time, shown while `checking`. It can't act until the wallet confirms it. */
+  remembered?: string | null;
   role: Role;
   message: string | null;
   connect(): void;
@@ -187,6 +191,14 @@ function VaultPicker() {
 /** The connected account, with what it can do here and a menu. */
 function AccountMenu({ controls }: { controls: Controls }) {
   const [open, setOpen] = useState(false);
+  if (!controls.account && controls.checking) {
+    return (
+      <span className="account-button account-checking" aria-busy="true" title="Checking your wallet…">
+        {controls.remembered ? <Identicon seed={controls.remembered} size={22} /> : <span className="spinner" />}
+        <span className="mono">{controls.remembered ? middle(controls.remembered, 14, 8) : "Checking wallet…"}</span>
+      </span>
+    );
+  }
   if (!controls.account) {
     return (
       <button className="primary connect-button" onClick={controls.connect}>
@@ -1370,9 +1382,37 @@ function VaultHeader({
   );
 }
 
+const LAST_ACCOUNT = "covenant.account";
+
+/** The account this browser had signed in last time, if storage allows. */
+function rememberedAccount(): string | null {
+  try {
+    return typeof localStorage === "undefined" ? null : localStorage.getItem(LAST_ACCOUNT);
+  } catch {
+    return null;
+  }
+}
+
+function remember(account: string | null) {
+  try {
+    if (account) localStorage.setItem(LAST_ACCOUNT, account);
+    else localStorage.removeItem(LAST_ACCOUNT);
+  } catch {
+    // Private windows may refuse storage; the page then just waits for the wallet.
+  }
+}
+
 export function App() {
   const [status, setStatus] = useState<VaultStatus>({ kind: "loading" });
-  const [account, setAccount] = useState<string | null>(null);
+  // Who signed in last time, so pages don't flash "Connect wallet" while the wallet loads. It only
+  // reads with it: every action waits for the wallet to confirm the account.
+  const [remembered] = useState<string | null>(rememberedAccount);
+  const [walletReady, setWalletReady] = useState(false);
+  const [account, setAccountState] = useState<string | null>(null);
+  const setAccount = useCallback((next: string | null) => {
+    setAccountState(next);
+    remember(next);
+  }, []);
   const [message, setMessage] = useState<string | null>(null);
   const [newAgent, setNewAgent] = useState<{ vault: string; agent: string; secret: string } | null>(null);
   const [pendingAgent, setPendingAgent] = useState<string | null>(null);
@@ -1382,7 +1422,9 @@ export function App() {
   useEffect(() => {
     let current = true;
     void connectedAccount(rpcUrl).then((connected) => {
-      if (current) setAccount(connected);
+      if (!current) return;
+      setAccount(connected);
+      setWalletReady(true);
     });
     void walletConnector(rpcUrl).then((connector) => {
       connector.on("wallet:signIn", ({ accounts }) => setAccount(accounts[0]?.accountId ?? null));
@@ -1391,7 +1433,9 @@ export function App() {
     return () => {
       current = false;
     };
-  }, [rpcUrl]);
+  }, [rpcUrl, setAccount]);
+  /** For reading only: the confirmed account, or last time's while the wallet loads. */
+  const viewer = walletReady ? account : remembered;
 
   // Once per page: what it checks can't change while the page is open, in any way that matters.
   useEffect(() => {
@@ -1525,6 +1569,8 @@ export function App() {
   );
   const controls: Controls = {
     account,
+    checking: !walletReady,
+    remembered,
     role,
     message,
     replaceAgent,
@@ -1553,8 +1599,13 @@ export function App() {
     </>
   );
   if (reading) return shell("docs", <Docs />);
-  if (listing) return shell("mine", <MyVaults config={config} fetcher={rpcFetch} account={account} connect={controls.connect} />);
-  if (landing) return shell("home", <Landing account={account} connect={controls.connect} demoVault={defaultConfig.accountId} />);
+  if (listing) {
+    return shell(
+      "mine",
+      <MyVaults config={config} fetcher={rpcFetch} account={viewer} checking={!walletReady} connect={controls.connect} />,
+    );
+  }
+  if (landing) return shell("home", <Landing account={viewer} connect={controls.connect} demoVault={defaultConfig.accountId} />);
   if (connectRequest) {
     return (
       <>

@@ -70,24 +70,48 @@ async function view<T>(config: VaultConfig, account: string, method: string, fet
   return JSON.parse(new TextDecoder().decode(Uint8Array.from(result.result))) as T;
 }
 
+const cacheKey = (account: string) => `covenant.mine.${account}`;
+
+/** Last visit's cards for this account, shown at once while fresh ones load. */
+function cachedVaults(account: string | null): Owned[] | null {
+  if (!account) return null;
+  try {
+    const raw = typeof localStorage === "undefined" ? null : localStorage.getItem(cacheKey(account));
+    return raw ? (JSON.parse(raw) as Owned[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+function cacheVaults(account: string, vaults: Owned[]) {
+  try {
+    localStorage.setItem(cacheKey(account), JSON.stringify(vaults));
+  } catch {
+    // Storage may be full or refused; the next visit just loads them again.
+  }
+}
+
 export function MyVaults({
   config,
   fetcher,
   account,
   connect,
+  checking = false,
 }: {
   config: VaultConfig;
   fetcher: typeof fetch;
   account: string | null;
   connect(): void;
+  /** The wallet hasn't said who's signed in yet. */
+  checking?: boolean;
 }) {
-  const [vaults, setVaults] = useState<Owned[] | null>(null);
+  const [vaults, setVaults] = useState<Owned[] | null>(() => cachedVaults(account));
   const [problem, setProblem] = useState<string | null>(null);
 
   useEffect(() => {
     if (!account) return;
     let current = true;
-    setVaults(null);
+    setVaults(cachedVaults(account));
     void (async () => {
       try {
         const [names, hostedKey] = await Promise.all([
@@ -113,7 +137,10 @@ export function MyVaults({
             };
           }),
         );
-        if (current) setVaults(found);
+        if (current) {
+          setVaults(found);
+          cacheVaults(account, found);
+        }
       } catch (error) {
         if (current) setProblem(error instanceof Error ? error.message : String(error));
       }
@@ -134,7 +161,15 @@ export function MyVaults({
           + New vault
         </a>
       </div>
-      {!account ? (
+      {!account && checking ? (
+        <div className="vault-grid">
+          {[0, 1, 2].map((i) => (
+            <section key={i} className="card vault-card">
+              <Skeleton lines={4} />
+            </section>
+          ))}
+        </div>
+      ) : !account ? (
         <section className="card empty-state">
           <h2>Connect your wallet</h2>
           <p className="muted">Your vaults are listed by the factory that made them, under the account that created them.</p>
