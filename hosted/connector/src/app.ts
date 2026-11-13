@@ -99,6 +99,28 @@ export function createApp(options: AppOptions) {
     }
   });
 
+  /**
+   * Apps may check and call the MCP endpoints from a web page, which the browser allows only with
+   * these headers, and only if the page can read WWW-Authenticate to find the sign-in. A bearer
+   * token, never a cookie, is the credential, so allowing every origin grants nothing by itself.
+   */
+  const mcpCors = (req: Request, res: Response, next: () => void) => {
+    res.setHeader("access-control-allow-origin", "*");
+    res.setHeader("access-control-allow-methods", "GET, POST, DELETE, OPTIONS");
+    res.setHeader(
+      "access-control-allow-headers",
+      "authorization, content-type, accept, mcp-protocol-version, mcp-session-id, last-event-id",
+    );
+    res.setHeader("access-control-expose-headers", "www-authenticate, mcp-session-id, mcp-protocol-version");
+    res.setHeader("access-control-max-age", "86400");
+    if (req.method === "OPTIONS") {
+      res.sendStatus(204);
+      return;
+    }
+    next();
+  };
+  app.use(["/mcp", "/v/:vault/mcp"], mcpCors);
+
   /** The MCP address of one vault: `/v/<vault>/mcp`. */
   const vaultMcpUrl = (vault: string) => new URL(`/v/${vault}/mcp`, issuerUrl);
   const bearerFor = (url: URL) =>

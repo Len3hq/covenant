@@ -182,4 +182,19 @@ describe("the hosted connector", () => {
     expect(unauthenticated.headers.get("www-authenticate")).toContain(`oauth-protected-resource/v/${terms.vault}/mcp`);
     expect((await fetch(`${base}/v/not%20a%20vault/mcp`, { method: "POST" })).status).toBe(404);
   });
+
+  it("lets a web page check the MCP endpoints and read where to sign in", async () => {
+    for (const path of ["/mcp", `/v/${terms.vault}/mcp`]) {
+      const preflight = await fetch(`${base}${path}`, {
+        method: "OPTIONS",
+        headers: { origin: "https://claude.ai", "access-control-request-method": "POST", "access-control-request-headers": "authorization, content-type" },
+      });
+      expect(preflight.status).toBe(204);
+      expect(preflight.headers.get("access-control-allow-headers")).toContain("authorization");
+      const challenge = await fetch(`${base}${path}`, { method: "POST", headers: { origin: "https://claude.ai" } });
+      expect(challenge.status).toBe(401);
+      expect(challenge.headers.get("access-control-allow-origin")).toBe("*");
+      expect(challenge.headers.get("access-control-expose-headers")).toContain("www-authenticate");
+    }
+  });
 });
