@@ -34,6 +34,16 @@ jobs:
       - run: pnpm --filter "@len3hq/covenant-mcp..." lint
       - run: pnpm --filter "@len3hq/covenant-mcp..." test
       - run: node scripts/pack-smoke.mjs
-      # The SDK first: the MCP server depends on the version just published.
-      - run: pnpm --filter @len3hq/covenant-sdk publish --no-git-checks
-      - run: pnpm --filter @len3hq/covenant-mcp publish --no-git-checks
+      # Trusted publishing needs the npm CLI at 11.5.1 or later; Node 22 ships an older one.
+      - run: npm install -g npm@11
+      # pnpm packs each package, turning its workspace dependency into the real version; the npm
+      # CLI then publishes the tarball with the workflow's identity and provenance. The SDK goes
+      # first, because the MCP server depends on the version just published.
+      - name: Publish
+        run: |
+          mkdir -p release
+          for pkg in sdk mcp; do
+            (cd "$pkg" && pnpm pack --pack-destination ../release)
+          done
+          npm publish release/len3hq-covenant-sdk-*.tgz --access public --provenance
+          npm publish release/len3hq-covenant-mcp-*.tgz --access public --provenance
