@@ -122,3 +122,11 @@ recorded on NEAR. The two projects are independent and share no code.
 | [docs](docs) | Build plan and spec |
 
 See also [AGENTS.md](AGENTS.md), [SECURITY.md](SECURITY.md), [NEAR_FEATURES.md](NEAR_FEATURES.md) and [EVIDENCE.md](EVIDENCE.md).
+
+## License
+
+- Everything outside `hosted/`, including the vault contracts, the SDK, the MCP server, the dashboard
+  and the agent: [Apache License 2.0](LICENSE).
+- The hosted connector and key holder in [hosted/](hosted/): [Business Source License 1.1](hosted/LICENSE).
+  You may read, change and run it, for yourself and on any test network; you may not offer it to
+  others as a hosted service. Each version becomes Apache 2.0 four years after it's published.

@@ -2,6 +2,7 @@
   "name": "@len3hq/covenant-sdk",
   "version": "0.1.0",
   "description": "A policy-enforced wallet for AI agents: pay on Bitcoin, Base and Solana, and across chains, through a Covenant vault on NEAR.",
+  "license": "Apache-2.0",
   "keywords": [
     "covenant",
     "near",

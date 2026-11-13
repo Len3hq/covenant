@@ -3,6 +3,7 @@ name = "covenant-key-holder"
 version = "0.1.0"
 edition = "2021"
 publish = false
+license = "BUSL-1.1"
 description = "Holds hosted Covenant agents' key in an OutLayer TDX enclave and signs only vault calls an owner granted"
 
 [[bin]]

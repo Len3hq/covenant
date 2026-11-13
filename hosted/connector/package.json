@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "The hosted Covenant connector: the MCP tools over HTTP, with OAuth, signing through an OutLayer enclave.",
+  "license": "BUSL-1.1",
   "type": "module",
   "scripts": {
     "lint": "eslint src && tsc --noEmit",

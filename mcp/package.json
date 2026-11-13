@@ -2,6 +2,7 @@
   "name": "@len3hq/covenant-mcp",
   "version": "0.1.0",
   "description": "An MCP server that gives any AI assistant a Covenant vault to pay from.",
+  "license": "Apache-2.0",
   "keywords": [
     "covenant",
     "mcp",
