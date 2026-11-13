@@ -12,7 +12,8 @@ import { connectVault, type AgentKeyOption, type AgentVault } from "./vault.js";
 
 /** Public testnet endpoints. Each can be replaced. */
 export const TESTNET = {
-  nearRpcUrl: "https://rpc.testnet.near.org",
+  /** FastNear: `rpc.testnet.near.org` is deprecated and rate-limits hard. */
+  nearRpcUrl: "https://rpc.testnet.fastnear.com",
   btcApiUrl: "https://mempool.space/testnet4/api",
   evmRpcUrl: "https://sepolia.base.org",
   evmChainId: 84532,

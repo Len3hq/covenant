@@ -12,7 +12,7 @@ jobs:
     if: vars.SMOKE_ENABLED == 'true'
     runs-on: ubuntu-latest
     env:
-      NEAR_RPC_URL: https://rpc.testnet.near.org
+      NEAR_RPC_URL: https://rpc.testnet.fastnear.com
       VAULT_ACCOUNT_ID: covenant.len3hq.testnet
       AGENT_ACCOUNT_ID: agent.len3hq.testnet
       AGENT_PRIVATE_KEY: ${{ secrets.AGENT_PRIVATE_KEY }}
