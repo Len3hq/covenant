@@ -24,7 +24,7 @@ Each step says what to do and what you should see.
 
 Needs Rust (via rustup), Node 22, pnpm 11 and gitleaks (for `make check` only). No keys, no `.env` edits.
 The first run compiles cargo-near and the contracts, which takes several minutes; after that the
-scenarios themselves take about 10 seconds.
+scenarios take about a minute, and seconds on later runs.
 
 ```sh
 git clone https://github.com/Len3hq/covenant && cd covenant
