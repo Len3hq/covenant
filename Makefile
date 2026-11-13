@@ -24,6 +24,7 @@ lint: ## Lint Rust and TypeScript
 	cargo clippy --workspace --all-targets -- -D warnings
 	cargo fmt --manifest-path $(ENCLAVE_MANIFEST) --check
 	cargo clippy --manifest-path $(ENCLAVE_MANIFEST) --all-targets -- -D warnings
+	pnpm --filter "@len3hq/covenant-mcp..." build
 	pnpm -r lint
 
 wasm: ## Build the vault, factory and mock signer to target/near/

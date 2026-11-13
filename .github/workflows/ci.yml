@@ -37,6 +37,8 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # The connector imports the MCP server's built output, so build it before type-checking.
+      - run: pnpm --filter "@len3hq/covenant-mcp..." build
       - run: pnpm -r lint
       - run: pnpm -r test
       - run: pnpm -r build
