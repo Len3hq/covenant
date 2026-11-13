@@ -42,7 +42,7 @@ export function hostedSnippetFor(tab: HostedTab, url: string): { steps: string; 
       };
     case "chatgpt":
       return {
-        steps: `In ChatGPT's settings, turn on developer mode for connectors, then create a connector named ${name} with this URL and OAuth sign-in. The menu names change between versions.`,
+        steps: `In ChatGPT's settings, turn on developer mode for connectors, then create a connector named ${name} with this URL and OAuth sign-in. In each chat, switch ${name} on from the + menu, or ChatGPT won't use its tools. Outside developer mode ChatGPT can only read the vault, through its search and fetch tools; paying needs developer mode. If you added it before an update, refresh it in settings so ChatGPT sees the new tools. The menu names change between versions.`,
         text: url,
       };
     case "claude-code":

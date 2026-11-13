@@ -15,6 +15,31 @@ const body = (result: Awaited<ReturnType<Client["callTool"]>>) =>
   JSON.parse((result.content as { text: string }[])[0]?.text ?? "null") as unknown;
 
 describe("the Covenant MCP server", () => {
+  it("marks which tools only read and which spend, so apps can run reads without asking", async () => {
+    const { tools } = await (await connect({})).listTools();
+    for (const tool of tools) {
+      const spends = tool.name === "pay" || tool.name === "execute_queued";
+      expect(tool.annotations?.readOnlyHint, tool.name).toBe(!spends);
+      expect(tool.annotations?.destructiveHint, tool.name).toBe(spends);
+    }
+  });
+
+  it("lets apps that only search and fetch read the vault", async () => {
+    const balances = vi.fn(async () => ({ BTC: { balance: 5n, spent24h: 0n } }));
+    const client = await connect({ balances } as unknown as Partial<Wallet>, "acme.vaults-v3.len3hq.testnet");
+    const found = body(await client.callTool({ name: "search", arguments: { query: "what's my balance" } })) as {
+      results: { id: string; url: string }[];
+    };
+    expect(found.results.map((result) => result.id)).toEqual(["balances"]);
+    expect(found.results[0]?.url).toContain("vault=acme.vaults-v3.len3hq.testnet");
+    const everything = body(await client.callTool({ name: "search", arguments: { query: "vault" } })) as { results: unknown[] };
+    expect(everything.results).toHaveLength(5);
+    const fetched = body(await client.callTool({ name: "fetch", arguments: { id: "balances" } })) as { text: string };
+    expect(JSON.parse(fetched.text)).toEqual({ BTC: { balance: "5", spent24h: "0" } });
+    const unknown = await client.callTool({ name: "fetch", arguments: { id: "keys" } });
+    expect(unknown.isError).toBe(true);
+  });
+
   it("tells the assistant which vault its tools act on", async () => {
     const client = await connect({}, "acme.vaults-v3.len3hq.testnet");
     expect(client.getInstructions()).toContain("acme.vaults-v3.len3hq.testnet");
@@ -26,6 +51,7 @@ describe("the Covenant MCP server", () => {
     expect(tools.map((tool) => tool.name).sort()).toEqual(
       [
         "execute_queued",
+        "fetch",
         "get_addresses",
         "get_balances",
         "get_payment_status",
@@ -34,6 +60,7 @@ describe("the Covenant MCP server", () => {
         "list_queue",
         "pay",
         "quote_payment",
+        "search",
       ].sort(),
     );
   });
