@@ -15,7 +15,7 @@ get a signature for the vault's Bitcoin and EVM addresses, and it computes every
 | Agent | `agent.len3hq.testnet`, function-call key | Call `propose_spend` and `execute` | Change policy, freeze, veto, move NEAR, call another contract, attach a deposit (`agent_key_cannot_call_set_policy`) |
 | Guardian | `covenant-guardian.sputnikv2.testnet`, a Sputnik DAO | Veto and freeze, by a council vote | Unfreeze, set policy, replace itself (`guardian_can_freeze_not_unfreeze`, `only_the_owner_can_replace_the_guardian`) |
 | Owner | `owner.len3hq.testnet` | Set policy, veto, freeze, unfreeze, replace the guardian | Spend directly: it must go through the same checks |
-| Vault account | `covenant.len3hq.testnet` | Hold the contract. This first demo vault was deployed directly and still has one full-access key, which can redeploy its code | Vaults made by the factory have no keys at all (below) |
+| Vault account | `covenant.len3hq.testnet` | Hold the contract. This first demo vault was deployed directly | Vaults made by the factory have no keys at all (below) |
 
 ### Vaults made by the factory
 
