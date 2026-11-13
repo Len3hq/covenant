@@ -569,7 +569,7 @@ can't call `set_policy`. The existing
   - refusing any vault that isn't a `.testnet` account;
   - recording payments in `~/.covenant/<vault>-spends.json`, with the folder at mode 0700.
 - **CI checks the packages for real.** `scripts/pack-smoke.mjs` packs both, installs the tarballs
-  into an empty folder, and checks the installed server's version and its nine tools over a real MCP
+  into an empty folder, and checks the installed server's version and its eleven tools over a real MCP
   handshake. CI runs it, and so does the tag-driven Release workflow before it publishes.
 - **The docs switch to npx on a build setting.** The dashboard's docs use npx once it's built with
   `VITE_MCP_PUBLISHED=true`, and stay on the build-from-repo steps until then.

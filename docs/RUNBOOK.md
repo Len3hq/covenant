@@ -56,7 +56,7 @@ Expect:
 
 - `make check` to end with no failures, and gitleaks to report no leaks;
 - `make demo` to print `PASS` three times;
-- the pack check to list 9 tools.
+- the pack check to list 11 tools.
 
 **T2. The vault is ready to upgrade.**
 

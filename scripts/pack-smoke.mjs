@@ -54,6 +54,6 @@ const tools = await new Promise((resolve, reject) => {
   });
 });
 server.kill();
-const expected = ["execute_queued", "get_addresses", "get_balances", "get_payment_status", "list_destinations", "list_payees", "list_queue", "pay", "quote_payment"];
+const expected = ["execute_queued", "fetch", "get_addresses", "get_balances", "get_payment_status", "list_destinations", "list_payees", "list_queue", "pay", "quote_payment", "search"];
 if (JSON.stringify(tools) !== JSON.stringify(expected)) throw new Error(`unexpected tools: ${tools.join(", ")}`);
 console.log(`the installed server lists ${tools.length} tools: ${tools.join(", ")}`);

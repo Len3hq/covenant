@@ -311,10 +311,11 @@ export function Docs() {
         <section id="mcp">
           <h2>MCP server, run yourself</h2>
           <p>
-            For a vault whose agent key you hold. It gives any MCP client nine tools: <code>pay</code>,{" "}
+            For a vault whose agent key you hold. It gives any MCP client eleven tools: <code>pay</code>,{" "}
             <code>quote_payment</code>, <code>list_destinations</code>, <code>get_payment_status</code>,{" "}
             <code>list_payees</code>, <code>get_balances</code>, <code>get_addresses</code>, <code>list_queue</code> and{" "}
-            <code>execute_queued</code>.{" "}
+            <code>execute_queued</code>, plus <code>search</code> and <code>fetch</code>, which ChatGPT uses to read the
+            vault.{" "}
             {MCP_PUBLISHED ? (
               <>Your app starts it with npx, so there's nothing to install.</>
             ) : (
