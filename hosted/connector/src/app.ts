@@ -16,6 +16,8 @@ export interface AppOptions {
   dashboardOrigins: string[];
   /** One wallet per vault, so a vault's spends file has one writer. */
   wallet(terms: Terms, grant: Grant, publicKey: string): Wallet;
+  /** Told about each grant that passes its checks, so held payments can be sent later. */
+  onGrant?(terms: Terms, grant: Grant): void;
 }
 
 /** The connector: OAuth for Claude, the key holder's public key for the dashboard, and the MCP tools. */
@@ -84,7 +86,7 @@ export function createApp(options: AppOptions) {
     try {
       const body = req.body as { request?: unknown; grant?: unknown };
       const grant = grantSchema.parse(body.grant);
-      await checkGrant(grant, options.chain);
+      options.onGrant?.(await checkGrant(grant, options.chain), grant);
       res.json({ redirect: options.auth.completeSignIn(String(body.request), grant) });
     } catch (error) {
       res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
@@ -101,6 +103,7 @@ export function createApp(options: AppOptions) {
     try {
       const grant = grantSchema.parse(req.auth?.extra?.grant);
       const terms = await check(grant);
+      options.onGrant?.(terms, grant);
       const wallet = options.wallet(terms, grant, await options.keyHolder.publicKey());
       const server = createServer(wallet);
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });

@@ -57,6 +57,14 @@ owner's wallet in both modes.
    anywhere outside the enclave, then signs the grant. The vault page shows "Agent key held in an
    OutLayer enclave", the connector URL, and a button to revoke the grant.
 
+## Held payments
+
+A payment the vault holds for a veto goes through when its wait ends unless the owner vetoes it.
+The connector makes that true with no one signed in: it keeps each vault's newest grant on its
+volume, and every 30 seconds sends the held payments it made whose wait is over, through the
+enclave. The vault checks each against its rules again, and the enclave checks the grant again.
+`AUTO_EXECUTE=off` turns it off.
+
 ## Grants
 
 The connector would otherwise be able to drive the agent key of every hosted vault. A grant limits

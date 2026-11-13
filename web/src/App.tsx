@@ -573,7 +573,12 @@ function QueueCard({
             ? `${queue.length} held payment${queue.length === 1 ? "" : "s"}: ${queue.length === 1 ? "it goes" : "they go"} through unless you veto`
             : "Veto queue"}
         </h2>
-        <span className="muted small">{delay} s window</span>
+        <span className="muted small">
+          Waits: {windowHint(String(delay))} for large payments
+          {policy.unlisted === "Hold"
+            ? `, ${windowHint(String(Math.round((policy.unlisted_veto_delay_ns ?? policy.veto_delay_ns) / 1e9)))} for new addresses`
+            : ""}
+        </span>
       </div>
       {queue.length === 0 ? (
         <p className="empty">
@@ -602,12 +607,12 @@ function QueueCard({
                 <p className={left > 0 ? "hold-note" : "hold-note hold-ready"} role="note">
                   {left > 0 ? (
                     <>
-                      <strong>This goes through unless you veto it.</strong> In {clock(left)} the agent can send it, and
-                      the vault checks it against your rules once more. To stop it, veto it before the agent does.
+                      <strong>This goes through unless you veto it.</strong> In {clock(left)} the agent sends it, and the
+                      vault checks it against your rules once more. To stop it, veto it before then.
                     </>
                   ) : (
                     <>
-                      <strong>The wait is over: the agent can send this now.</strong> Until it does, a veto still stops
+                      <strong>The wait is over: the agent is sending this now.</strong> Until it's sent, a veto still stops
                       it.
                     </>
                   )}
@@ -623,7 +628,8 @@ function QueueCard({
         </ul>
       )}
       <p className="muted small">
-        There's no approve button: a held payment goes ahead by itself once its wait ends, when the agent sends it.
+        There's no approve button: a held payment goes ahead by itself once its wait ends. Hosted agents and Covenant's
+        MCP server send it automatically; an agent built on the SDK sends it with <code>execute</code>.
         The owner or guardian can veto any of these until then. To pay an address at once next time, add it as a payee
         in the Rules tab.
       </p>

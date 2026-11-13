@@ -32,6 +32,7 @@ restart signs nobody out. A token lasts as long as its grant.
 | `NEAR_RPC_URL` | Defaults to FastNear's testnet RPC |
 | `DATA_DIR` | Where each vault's spends file lives; a Railway volume at `/data` |
 | `DEV_DASHBOARD_ORIGINS` | Extra dashboard origins that may hand over a grant, comma-separated, such as `http://localhost:5199` for a local dashboard |
+| `AUTO_EXECUTE` | `off` stops the connector sending held payments when their wait ends. On by default |
 | `LOCAL_AGENT_KEY` | Development only: sign in this process instead of the enclave |
 
 ## Run it locally

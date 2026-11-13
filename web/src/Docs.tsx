@@ -427,8 +427,10 @@ export function Docs() {
               <tr>
                 <td><code>queued</code></td>
                 <td>
-                  Held for a veto: large, or to an address that isn't a payee. Call <code>execute(id)</code> after{" "}
-                  <code>executableAt</code>, unless it's vetoed first.
+                  Held for a veto: large, or to an address that isn't a payee. It goes through after{" "}
+                  <code>executableAt</code> unless it's vetoed first: the MCP server and hosted agents send it automatically,
+                  and with the SDK, call <code>execute(id)</code>, or <code>executeDue()</code> for every one that's due, or
+                  start <code>startAutoExecute(wallet)</code> to do it on a timer.
                 </td>
               </tr>
               <tr>

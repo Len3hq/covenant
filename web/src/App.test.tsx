@@ -85,7 +85,7 @@ describe("Dashboard", () => {
     };
     const html = renderToString(<Dashboard accountId="v" status={{ kind: "ready", vault: due }} />).replaceAll("<!-- -->", "");
     expect(html).toContain("Window over");
-    expect(html).toContain("The wait is over: the agent can send this now.");
+    expect(html).toContain("The wait is over: the agent is sending this now.");
   });
 
   it("marks refused spends in the log and links each to NEAR", () => {
@@ -290,5 +290,13 @@ describe("the docs", () => {
     expect(html).toContain("How every payment is checked");
     expect(html).toContain("Where to get test coins");
     expect(html).toContain("The vault&#x27;s addresses");
+  });
+});
+
+describe("the veto queue's header", () => {
+  it("gives each wait, not only the one for large payments", () => {
+    const open: VaultState = { ...vault, policy: { ...vault.policy, unlisted: "Hold", unlisted_veto_delay_ns: 600_000_000_000 } };
+    const html = renderToString(<Dashboard accountId="v" status={{ kind: "ready", vault: open }} />).replaceAll("<!-- -->", "");
+    expect(html).toContain("Waits: 2 minutes for large payments, 10 minutes for new addresses");
   });
 });

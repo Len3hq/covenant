@@ -23,6 +23,7 @@ const addresses = { bitcoin: "tb1qexample", evm: "0xexample", solana: "SoLexampl
 const wallet = { addresses: async () => addresses } as unknown as Wallet;
 
 let base = "";
+const granted: string[] = [];
 let close = () => {};
 const opened: string[] = [];
 
@@ -34,10 +35,11 @@ beforeAll(async () => {
     chain: fakeChain(terms, ownerKey),
     publicUrl: "http://127.0.0.1",
     dashboardOrigins: [dashboard],
-    wallet: (granted) => {
-      opened.push(granted.vault);
+    wallet: (terms) => {
+      opened.push(terms.vault);
       return wallet;
     },
+    onGrant: (terms) => granted.push(terms.vault),
   });
   const server = app.listen(0);
   await new Promise((resolve) => server.once("listening", resolve));
@@ -114,6 +116,7 @@ describe("the hosted connector", () => {
     const called = await answer(await rpc(token, "tools/call", { name: "get_addresses", arguments: {} }));
     expect(JSON.parse(called.result?.content?.[0]?.text ?? "{}")).toEqual(addresses);
     expect(opened).toContain(terms.vault);
+    expect(granted).toContain(terms.vault);
   });
 
   it("refuses MCP without a token it made, and grants from anywhere but the dashboard", async () => {
