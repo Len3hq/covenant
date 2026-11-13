@@ -34,11 +34,12 @@ Instructions for AI agents and new contributors.
 | Keyless demo, all three scenarios | `make demo` (no `.env` needed) |
 | One scenario live, with a real model | `make demo-attack LIVE=1 LLM=1` (needs `AGENT_PRIVATE_KEY` and the `LLM_*` settings) |
 | Live end-to-end check | `make testnet-smoke` (spends tiny amounts) |
-| Pay USDC from the vault | `make pay-usdc TO=<address> AMOUNT=<base units>` (needs `AGENT_PRIVATE_KEY`) |
-| Pay BTC from the vault | `make pay-btc TO=<address> SATS=<amount>` (needs `AGENT_PRIVATE_KEY`) |
-| Pay ETH from the vault | `make pay-eth TO=<address> WEI=<amount>` (needs `AGENT_PRIVATE_KEY`) |
+| Pay USDC from the vault | `make pay-usdc TO=<address> AMOUNT=<base units> [REF=<reference>]` (needs `AGENT_PRIVATE_KEY`) |
+| Pay BTC from the vault | `make pay-btc TO=<address> SATS=<amount> [REF=<reference>]` (needs `AGENT_PRIVATE_KEY`) |
+| Pay ETH from the vault | `make pay-eth TO=<address> WEI=<amount> [REF=<reference>]` (needs `AGENT_PRIVATE_KEY`) |
 | Create a Solana nonce account for the vault | `make sol-nonce` (writes `SOL_FUNDER_KEY` and `SOL_NONCE_ACCOUNTS` to `.env`; fund the funder at faucet.solana.com) |
-| Pay SOL or Solana USDC from the vault | `make pay-sol TO=<address> AMOUNT=<lamports> [TOKEN=USDC]` (needs `AGENT_PRIVATE_KEY` and a nonce account) |
+| Pay SOL or Solana USDC from the vault | `make pay-sol TO=<address> AMOUNT=<lamports> [TOKEN=USDC] [REF=<reference>]` (needs `AGENT_PRIVATE_KEY` and a nonce account) |
+| Send a held payment after its wait | `make execute ID=<spend id>` (the pay-* targets, `pay-swap` and the MCP server record what it needs) |
 | Regenerate the test vectors | `pnpm --filter @covenant/scripts vectors` (expect no diff) |
 | Rust tests, without the sandbox | `cargo test --workspace --exclude covenant-integration-tests` |
 | Sandbox tests | `make wasm && cargo test -p covenant-integration-tests` |

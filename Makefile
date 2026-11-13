@@ -66,27 +66,27 @@ agent-key: ## Create the agent's restricted key and save it to .env: make agent-
 set-policy: ## Apply a policy to the deployed vault: make set-policy [POLICY=scripts/policy.open.testnet.json] (needs the owner's key)
 	node --env-file=.env scripts/src/set-policy.ts $(POLICY)
 
-pay-btc: ## Pay from the vault: make pay-btc TO=<address> SATS=<amount> (needs AGENT_PRIVATE_KEY)
+pay-btc: ## Pay from the vault: make pay-btc TO=<address> SATS=<amount> [REF=<reference>] (needs AGENT_PRIVATE_KEY)
 	pnpm --filter "@covenant/agent..." build
-	node --env-file=.env agent/dist/pay-btc.js $(TO) $(SATS)
+	node --env-file=.env agent/dist/pay-btc.js $(TO) $(SATS) $(REF)
 
-pay-eth: ## Pay from the vault: make pay-eth TO=<address> WEI=<amount> (needs AGENT_PRIVATE_KEY)
+pay-eth: ## Pay from the vault: make pay-eth TO=<address> WEI=<amount> [REF=<reference>] (needs AGENT_PRIVATE_KEY)
 	pnpm --filter "@covenant/agent..." build
-	node --env-file=.env agent/dist/pay-eth.js $(TO) $(WEI)
+	node --env-file=.env agent/dist/pay-eth.js $(TO) $(WEI) $(REF)
 
-pay-usdc: ## Pay USDC from the vault: make pay-usdc TO=<address> AMOUNT=<base units> (needs AGENT_PRIVATE_KEY)
+pay-usdc: ## Pay USDC from the vault: make pay-usdc TO=<address> AMOUNT=<base units> [REF=<reference>] (needs AGENT_PRIVATE_KEY)
 	pnpm --filter "@covenant/agent..." build
-	node --env-file=.env agent/dist/pay-usdc.js $(TO) $(AMOUNT)
+	node --env-file=.env agent/dist/pay-usdc.js $(TO) $(AMOUNT) $(REF)
 
-pay-sol: ## Pay on Solana devnet: make pay-sol TO=<address> AMOUNT=<lamports> [TOKEN=USDC] (needs AGENT_PRIVATE_KEY, SOL_NONCE_ACCOUNTS)
+pay-sol: ## Pay on Solana devnet: make pay-sol TO=<address> AMOUNT=<lamports> [TOKEN=USDC] [REF=<reference>] (needs AGENT_PRIVATE_KEY, SOL_NONCE_ACCOUNTS)
 	pnpm --filter "@covenant/agent..." build
-	node --env-file=.env agent/dist/pay-sol.js $(TO) $(AMOUNT) $(TOKEN)
+	node --env-file=.env agent/dist/pay-sol.js $(TO) $(AMOUNT) $(TOKEN) $(REF)
 
 pay-swap: ## Pay across chains through Tidepool: make pay-swap ASSET=BTC AMOUNT=20000 TO_CHAIN=solana TO_ASSET=USDC TO=<address> [REF=<reference>]
 	pnpm --filter "@covenant/agent..." build
 	node --env-file=.env agent/dist/pay-swap.js $(ASSET) $(AMOUNT) $(TO_CHAIN) $(TO_ASSET) $(TO) $(REF)
 
-execute: ## Sign a held payment made with pay-swap or the MCP server, after its window: make execute ID=<spend id>
+execute: ## Sign a held payment after its window, made with any pay-* target or the MCP server: make execute ID=<spend id>
 	pnpm --filter "@covenant/agent..." build
 	node --env-file=.env agent/dist/execute.js $(ID)
 

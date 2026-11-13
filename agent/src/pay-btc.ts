@@ -1,17 +1,5 @@
-// Pays a Bitcoin address from the vault: `node --env-file=.env agent/dist/pay-btc.js <address> <sats>`.
-import { Mempool } from "@len3hq/covenant-sdk";
-import { payBitcoin } from "@len3hq/covenant-sdk";
-import { connectVaultFromEnv, requireEnv } from "./env.js";
+// Pays from the vault on Bitcoin testnet4, recording the payment so a held one can be executed later:
+// `node --env-file=.env agent/dist/pay-btc.js <address or payee> <sats> [reference]`.
+import { payFromCli } from "./env.js";
 
-const [to, sats] = process.argv.slice(2);
-if (!to || !sats) throw new Error("usage: pay-btc <address> <sats>");
-
-const result = await payBitcoin(
-  {
-    vault: connectVaultFromEnv(),
-    mempool: new Mempool(requireEnv("BTC_API_URL")),
-  },
-  to,
-  BigInt(sats),
-);
-console.log(JSON.stringify(result, (_, value) => (typeof value === "bigint" ? `${value}` : value)));
+await payFromCli("BTC", "pay-btc <address or payee> <sats> [reference]", process.argv.slice(2));

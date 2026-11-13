@@ -1,28 +1,13 @@
-// Pays from the vault on Solana devnet:
-// `node --env-file=.env agent/dist/pay-sol.js <address> <lamports or USDC base units> [USDC]`.
-import { prepareSolana, signSolana, SolanaRpc } from "@len3hq/covenant-sdk";
-import { base58 } from "@scure/base";
-import { connectVaultFromEnv } from "./env.js";
+// Pays SOL, or USDC on Solana, from the vault on Solana devnet, recording the payment so a held one
+// can be executed later. Needs SOL_NONCE_ACCOUNTS:
+// `node --env-file=.env agent/dist/pay-sol.js <address or payee> <lamports or USDC base units> [USDC] [reference]`.
+import { payFromCli } from "./env.js";
 
-/** Tidepool's test USDC on Solana devnet. */
-const DEVNET_USDC = "7pafEGXSmR35rLKNaD6inpfLYuEnRX9DyBc1c7M8r4Xr";
-
-const [to, amount, token] = process.argv.slice(2);
-if (!to || !amount) throw new Error("usage: pay-sol <address> <amount> [USDC]");
-const nonceAccounts = (process.env.SOL_NONCE_ACCOUNTS ?? "").split(",").map((a) => a.trim()).filter(Boolean);
-
-const vault = connectVaultFromEnv();
-const rpc = new SolanaRpc(process.env.SOL_RPC_URL || "https://api.devnet.solana.com");
-const prepared = await prepareSolana(
-  { rpc, vaultKey: () => vault.solPubkey(), nonceAccounts, usdcMint: base58.decode(DEVNET_USDC) },
-  token === "USDC" ? "USDC-SOL" : "SOL",
-  to,
-  BigInt(amount),
+const [to, amount, ...rest] = process.argv.slice(2);
+const usdc = rest[0] === "USDC";
+const reference = usdc ? rest[1] : rest[0];
+await payFromCli(
+  usdc ? "USDC-SOL" : "SOL",
+  "pay-sol <address or payee> <lamports or USDC base units> [USDC] [reference]",
+  [to ?? "", amount ?? "", ...(reference ? [reference] : [])],
 );
-const { outcome, nearTx } = await vault.proposeSolana(Buffer.from(prepared.unsignedHex, "hex"));
-console.log(JSON.stringify({ nearTx, outcome }));
-if ("Signed" in outcome) {
-  const { signedHex } = signSolana(prepared, outcome.Signed.signatures, await vault.solPubkey());
-  const signature = await rpc.sendAndConfirm(Buffer.from(signedHex, "hex"));
-  console.log(JSON.stringify({ signature, explorer: `https://explorer.solana.com/tx/${signature}?cluster=devnet` }));
-}
