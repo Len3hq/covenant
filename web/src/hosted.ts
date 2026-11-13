@@ -75,5 +75,9 @@ export async function submitGrant(
   return body.redirect;
 }
 
-/** The connector URL Claude takes, for Settings → Connectors → Add custom connector. */
-export const connectorMcpUrl = (connector: string) => `${connector}/mcp`;
+/**
+ * The URL an AI app takes, for Settings → Connectors → Add custom connector. With a vault, it's that
+ * vault's own address: signing in goes straight to it, and several vaults can be added side by side.
+ */
+export const connectorMcpUrl = (connector: string, vault?: string) =>
+  vault ? `${connector}/v/${vault}/mcp` : `${connector}/mcp`;

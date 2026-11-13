@@ -89,6 +89,8 @@ const creating = new URLSearchParams(search).has("create");
 /** Claude's sign-in to the hosted connector: `?connect=<request>&connector=<url>`. */
 const connectRequest = new URLSearchParams(search).get("connect");
 const connectorParam = new URLSearchParams(search).get("connector") ?? "";
+/** The vault an app connected to through that vault's own address: sign in to it only. */
+const connectVault = new URLSearchParams(search).get("vault");
 const reading = new URLSearchParams(search).has("docs");
 const listing = new URLSearchParams(search).has("mine");
 /** The front page: no vault named, and no other page asked for. */
@@ -974,7 +976,7 @@ function useHostedKey(): string | null {
 }
 
 /** The agent's keys, and for the agent account itself, adding and removing vault keys. */
-function AgentKeysCard({ vault, controls }: { vault: VaultState; controls?: Controls }) {
+function AgentKeysCard({ vault, vaultId, controls }: { vault: VaultState; vaultId: string; controls?: Controls }) {
   const keys = vault.agentKeys ?? null;
   const hostedKey = useHostedKey();
   const signedInAsAgent = controls?.account === vault.roles.agent;
@@ -1018,7 +1020,7 @@ function AgentKeysCard({ vault, controls }: { vault: VaultState; controls?: Cont
       {CONNECTOR_URL && hostedKey && forVault.some((key) => key.publicKey === hostedKey) && (
         <details>
           <summary>Add this vault to an AI app</summary>
-          <HostedConnect connector={CONNECTOR_URL} />
+          <HostedConnect connector={CONNECTOR_URL} vault={vaultId} />
         </details>
       )}
       {controls &&
@@ -1336,7 +1338,7 @@ function Ready({
             The agent is the account that asks this vault for payments. Its key can do nothing else. If the key
             leaks, replace the agent; if anything looks wrong, freeze the vault.
           </Explainer>
-          <AgentKeysCard vault={vault} {...(controls ? { controls } : {})} />
+          <AgentKeysCard vault={vault} vaultId={accountId} {...(controls ? { controls } : {})} />
           <PowersCard vault={vault} provenance={provenance} controls={controls} />
         </>,
       )}
@@ -1653,6 +1655,7 @@ export function App() {
             connect={controls.connect}
             request={connectRequest}
             connector={connectorParam}
+            {...(connectVault ? { only: connectVault } : {})}
           />
         </main>
       </>

@@ -5,8 +5,9 @@ Status: live on testnet (11 Nov 2026).
 - Key holder: OutLayer testnet project `keyholder.len3hq.testnet/covenant-key-holder`, version
   `db76a6636deb65f1c5899f117f3c63abe4fcf9266a2853b3cdfffa955a7c1460`. Its public key, the access key of
   every hosted agent, is `ed25519:8rPY7UqToQA4QTWpe7pWGTWT5aMxFbPcaRWuqStWY56z`.
-- Connector: https://connector-production-d939451a.up.railway.app, so Claude's connector URL is
-  https://connector-production-d939451a.up.railway.app/mcp.
+- Connector: https://connector-production-d939451a.up.railway.app. Each hosted vault's connector URL
+  is its own, `https://connector-production-d939451a.up.railway.app/v/<vault>/mcp`; the shared `/mcp`
+  asks which vault at sign-in.
 
 The parts:
 

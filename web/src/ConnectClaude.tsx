@@ -21,6 +21,7 @@ export function ConnectClaude({
   connect,
   request,
   connector,
+  only,
 }: {
   config: VaultConfig;
   fetcher: typeof fetch;
@@ -28,6 +29,8 @@ export function ConnectClaude({
   connect(): void;
   request: string;
   connector: string;
+  /** The vault the app connected to by its own address; then it's the only one offered. */
+  only?: string;
 }) {
   const [choices, setChoices] = useState<Choice[] | null>(null);
   const [picked, setPicked] = useState<string>("");
@@ -52,8 +55,9 @@ export function ConnectClaude({
           }),
         );
         if (!current) return;
-        setChoices(found);
-        setPicked(found.find((choice) => choice.hosted)?.vault ?? "");
+        const offered = only ? found.filter((choice) => choice.vault === only) : found;
+        setChoices(offered);
+        setPicked(offered.find((choice) => choice.hosted)?.vault ?? "");
       } catch (error) {
         if (current) setProblem(error instanceof Error ? error.message : String(error));
       }
@@ -61,7 +65,7 @@ export function ConnectClaude({
     return () => {
       current = false;
     };
-  }, [account, config, fetcher, trusted]);
+  }, [account, config, fetcher, trusted, only]);
 
   const approve = async () => {
     const choice = choices?.find((c) => c.vault === picked);
@@ -107,6 +111,11 @@ export function ConnectClaude({
         </button>
       ) : choices === null ? (
         <p className="muted small">Finding your vaults…</p>
+      ) : hostedChoices.length === 0 && only ? (
+        <p className="muted small">
+          This address is for <span className="mono">{only}</span>, which isn't one of {account}'s hosted vaults. Connect
+          the wallet that owns it, or add the address of one of your own vaults.
+        </p>
       ) : hostedChoices.length === 0 ? (
         <p className="muted small">
           None of {account}'s vaults has a hosted agent. Create one on <a href="?create">Create a vault</a> with "Hosted" ticked,
@@ -115,7 +124,7 @@ export function ConnectClaude({
       ) : (
         <>
           <fieldset className="payee-mode">
-            <legend>Which vault</legend>
+            <legend>{only ? "Vault" : "Which vault"}</legend>
             {hostedChoices.map((choice) => (
               <label key={choice.vault}>
                 <input

@@ -76,8 +76,8 @@ export function CopyButton({ text, label = "Copy" }: { text: string; label?: str
 }
 
 /** The connector URL with a copy button, and a tab per AI app. */
-export function HostedConnect({ connector }: { connector: string }) {
-  const url = connectorMcpUrl(connector);
+export function HostedConnect({ connector, vault }: { connector: string; vault?: string }) {
+  const url = connectorMcpUrl(connector, vault);
   const [tab, setTab] = useState<HostedTab>("claude");
   const { steps, text } = hostedSnippetFor(tab, url);
   return (

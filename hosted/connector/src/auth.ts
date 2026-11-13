@@ -7,6 +7,7 @@ import type { OAuthRegisteredClientsStore } from "@modelcontextprotocol/sdk/serv
 import type { AuthorizationParams, OAuthServerProvider } from "@modelcontextprotocol/sdk/server/auth/provider.js";
 import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import type { OAuthClientInformationFull, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
+import { vaultOfResource } from "./vaults.js";
 import { grantSchema, parseTerms, type Grant } from "./grant.js";
 
 /*
@@ -100,7 +101,16 @@ export class ConnectorAuth implements OAuthServerProvider {
     const target = new URL(this.options.dashboardUrl);
     target.searchParams.set("connect", request);
     target.searchParams.set("connector", this.options.publicUrl);
+    // An app connecting to one vault's own address names it, so the owner isn't asked to pick.
+    const vault = vaultOfResource(params.resource);
+    if (vault) target.searchParams.set("vault", vault);
     res.redirect(target.toString());
+  }
+
+  /** The vault a pending sign-in is for, when the app connected to that vault's own address. */
+  vaultOfRequest(request: string): string | null {
+    const pending = this.pending.get(request);
+    return pending ? vaultOfResource(pending.params.resource) : null;
   }
 
   /** The dashboard hands back a grant the owner signed; the answer is where to send their browser. */
@@ -108,6 +118,10 @@ export class ConnectorAuth implements OAuthServerProvider {
     this.sweep();
     const pending = this.pending.get(request);
     if (!pending) throw new Error("that sign-in expired; start again from Claude");
+    const vault = vaultOfResource(pending.params.resource);
+    if (vault && parseTerms(grant.message).vault !== vault) {
+      throw new Error(`this sign-in is for ${vault}; sign a grant for that vault`);
+    }
     this.pending.delete(request);
     const code = randomBytes(24).toString("base64url");
     this.codes.set(code, { clientId: pending.client.client_id, params: pending.params, grant, at: Date.now() });

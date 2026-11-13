@@ -23,6 +23,8 @@ const addresses = { bitcoin: "tb1qexample", evm: "0xexample", solana: "SoLexampl
 const wallet = { addresses: async () => addresses } as unknown as Wallet;
 
 let base = "";
+let lastVaultParam: string | null = null;
+let lastGrantError: string | null = null;
 const granted: string[] = [];
 let close = () => {};
 const opened: string[] = [];
@@ -55,7 +57,7 @@ const form = (fields: Record<string, string>) => ({
 });
 
 /** Registers like Claude does, signs in through the dashboard, and returns the access token. */
-async function signIn(): Promise<string> {
+async function signIn(resource?: string, signed = terms): Promise<string> {
   const redirectUri = "https://claude.ai/api/mcp/auth_callback";
   const registered = await fetch(`${base}/register`, {
     method: "POST",
@@ -72,16 +74,20 @@ async function signIn(): Promise<string> {
     client_id, redirect_uri: redirectUri, response_type: "code", code_challenge: challenge,
     code_challenge_method: "S256", state: "s1",
   })) authorize.searchParams.set(key, value);
+  if (resource) authorize.searchParams.set("resource", resource);
   const sent = await fetch(authorize, { redirect: "manual" });
   const toDashboard = new URL(sent.headers.get("location") ?? "");
   expect(toDashboard.origin).toBe(dashboard);
   const request = toDashboard.searchParams.get("connect") ?? "";
+  lastVaultParam = toDashboard.searchParams.get("vault");
 
   const granted = await fetch(`${base}/grant`, {
     method: "POST",
     headers: { "content-type": "application/json", origin: dashboard },
-    body: JSON.stringify({ request, grant: await walletGrant(terms, ownerSecret) }),
+    body: JSON.stringify({ request, grant: await walletGrant(signed, ownerSecret) }),
   });
+  lastGrantError = granted.status === 200 ? null : ((await granted.clone().json()) as { error: string }).error;
+  if (lastGrantError) return "";
   expect(granted.status).toBe(200);
   const back = new URL(((await granted.json()) as { redirect: string }).redirect);
   expect(back.origin + back.pathname).toBe(redirectUri);
@@ -95,8 +101,8 @@ async function signIn(): Promise<string> {
   return ((await token.json()) as { access_token: string }).access_token;
 }
 
-const rpc = (token: string, method: string, params: object = {}) =>
-  fetch(`${base}/mcp`, {
+const rpc = (token: string, method: string, params: object = {}, path = "/mcp") =>
+  fetch(`${base}${path}`, {
     method: "POST",
     headers: { authorization: `Bearer ${token}`, "content-type": "application/json", accept: "application/json, text/event-stream" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
@@ -149,5 +155,31 @@ describe("the hosted connector", () => {
       KeyPair.fromString(agentSecret as KeyPairString).getPublicKey().toString(),
     );
     expect(response.headers.get("access-control-allow-origin")).toBe("*");
+  });
+
+  it("gives each vault its own address, which signs in straight to that vault", async () => {
+    const path = `/v/${terms.vault}/mcp`;
+    const token = await signIn(`http://127.0.0.1${path}`);
+    expect(lastVaultParam).toBe(terms.vault);
+    const called = await answer(await rpc(token, "tools/call", { name: "get_addresses", arguments: {} }, path));
+    expect(JSON.parse(called.result?.content?.[0]?.text ?? "{}")).toEqual(addresses);
+    const elsewhere = await rpc(token, "tools/list", {}, "/v/other.vaults-v3.len3hq.testnet/mcp");
+    expect(elsewhere.status).toBe(403);
+    expect(((await elsewhere.json()) as { error: { message: string } }).error.message).toContain("this address is for other.vaults-v3");
+  });
+
+  it("refuses a grant for another vault on a vault's own sign-in", async () => {
+    const other = { ...terms, vault: "other.vaults-v3.len3hq.testnet" };
+    await signIn(`http://127.0.0.1/v/${terms.vault}/mcp`, other);
+    expect(lastGrantError).toContain(`this sign-in is for ${terms.vault}`);
+  });
+
+  it("describes each vault's address for apps to find the sign-in, and rejects what isn't a vault name", async () => {
+    const meta = await fetch(`${base}/.well-known/oauth-protected-resource/v/${terms.vault}/mcp`);
+    expect(await meta.json()).toMatchObject({ resource: `http://127.0.0.1/v/${terms.vault}/mcp` });
+    const unauthenticated = await fetch(`${base}/v/${terms.vault}/mcp`, { method: "POST" });
+    expect(unauthenticated.status).toBe(401);
+    expect(unauthenticated.headers.get("www-authenticate")).toContain(`oauth-protected-resource/v/${terms.vault}/mcp`);
+    expect((await fetch(`${base}/v/not%20a%20vault/mcp`, { method: "POST" })).status).toBe(404);
   });
 });

@@ -29,3 +29,13 @@ describe("hosted grants", () => {
     );
   });
 });
+
+describe("connector addresses", () => {
+  it("gives each vault its own address, and keeps the shared one", async () => {
+    const { connectorMcpUrl } = await import("./hosted");
+    expect(connectorMcpUrl("https://c.example", "frank-hosted.vaults-v3.len3hq.testnet")).toBe(
+      "https://c.example/v/frank-hosted.vaults-v3.len3hq.testnet/mcp",
+    );
+    expect(connectorMcpUrl("https://c.example")).toBe("https://c.example/mcp");
+  });
+});

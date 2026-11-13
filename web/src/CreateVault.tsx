@@ -22,8 +22,9 @@ function HostedNextSteps({ vault, connector }: { vault: string; connector: strin
       <p>Its agent's key was made in an OutLayer enclave and never left it, so there's nothing to save.</p>
       <ol>
         <li>
-          Add this connector to your AI app, such as Claude, ChatGPT, Claude Code, Cursor or VS Code:
-          <HostedConnect connector={connector} />
+          Add this vault's connector to your AI app, such as Claude, ChatGPT, Claude Code, Cursor or VS Code. Each
+          hosted vault has its own address, so you can add several:
+          <HostedConnect connector={connector} vault={vault} />
         </li>
         <li>
           <a href={openHref(vault)}>Open its dashboard</a> to fund it from the "Get test funds" panel.

@@ -39,7 +39,7 @@ const INSTALL = installSteps();
 const MCP_DESKTOP = desktopConfig(PLACEHOLDERS);
 const MCP_CODE = claudeCodeCommand(PLACEHOLDERS);
 const MCP_VSCODE = vscodeConfig(PLACEHOLDERS);
-const HOSTED_URL = CONNECTOR_URL ? connectorMcpUrl(CONNECTOR_URL) : "https://<the hosted connector>/mcp";
+const HOSTED_URL = CONNECTOR_URL ? connectorMcpUrl(CONNECTOR_URL, "<vault>") : "https://<the hosted connector>/v/<vault>/mcp";
 
 const ENV_FILE = `cp .env.example .env.acme   # then set VAULT_ACCOUNT_ID and AGENT_ACCOUNT_ID in it`;
 const AGENT_KEY = `make agent-key ENV_FILE=.env.acme`;
@@ -263,7 +263,9 @@ export function Docs() {
               to that vault.
             </li>
             <li>
-              Add <code>{HOSTED_URL}</code> to your AI app (see <a href="#apps">Add to an AI app</a>).
+              Add the vault's own address, <code>{HOSTED_URL}</code> with your vault's name, to your AI app (see{" "}
+              <a href="#apps">Add to an AI app</a>). The vault's page shows it ready to copy, under Agent. Each hosted
+              vault has its own address, so one app can hold several vaults as separate connectors.
             </li>
             <li>
               The app sends you to this dashboard. Pick the vault, choose how long, and press{" "}

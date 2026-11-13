@@ -5,6 +5,13 @@ Connectors → Add custom connector. It holds no keys: each vault call is signed
 OutLayer's enclave ([hosted/enclave](../enclave)), and only for a vault whose owner signed a grant.
 The design is in [docs/HOSTED.md](../../docs/HOSTED.md).
 
+## Addresses
+
+Each hosted vault has its own address, `/v/<vault>/mcp`, which the vault's page shows. An app that
+connects to it signs in straight to that vault, refuses a token for any other, and can hold several
+vaults as separate connectors. The shared `/mcp` still works: signing in through it asks the owner
+which vault.
+
 ## How signing in works
 
 1. Claude registers itself and opens `/authorize`. The connector sends the owner to the dashboard

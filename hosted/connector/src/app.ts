@@ -4,8 +4,9 @@ import { requireBearerAuth } from "@modelcontextprotocol/sdk/server/auth/middlew
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createServer, type Wallet } from "@len3hq/covenant-mcp/server";
 import type { ConnectorAuth } from "./auth.js";
-import { checkGrant, grantSchema, type ChainView, type Grant, type Terms } from "./grant.js";
+import { checkGrant, grantSchema, parseTerms, type ChainView, type Grant, type Terms } from "./grant.js";
 import type { KeyHolder } from "./keyholder.js";
+import { isVaultName } from "./vaults.js";
 
 export interface AppOptions {
   auth: ConnectorAuth;
@@ -86,6 +87,11 @@ export function createApp(options: AppOptions) {
     try {
       const body = req.body as { request?: unknown; grant?: unknown };
       const grant = grantSchema.parse(body.grant);
+      // A sign-in through one vault's own address takes a grant for that vault only.
+      const expected = options.auth.vaultOfRequest(String(body.request));
+      if (expected && parseTerms(grant.message).vault !== expected) {
+        throw new Error(`this sign-in is for ${expected}; sign a grant for that vault`);
+      }
       options.onGrant?.(await checkGrant(grant, options.chain), grant);
       res.json({ redirect: options.auth.completeSignIn(String(body.request), grant) });
     } catch (error) {
@@ -93,16 +99,20 @@ export function createApp(options: AppOptions) {
     }
   });
 
-  const bearer = requireBearerAuth({
-    verifier: options.auth,
-    resourceMetadataUrl: getOAuthProtectedResourceMetadataUrl(mcpUrl),
-  });
+  /** The MCP address of one vault: `/v/<vault>/mcp`. */
+  const vaultMcpUrl = (vault: string) => new URL(`/v/${vault}/mcp`, issuerUrl);
+  const bearerFor = (url: URL) =>
+    requireBearerAuth({ verifier: options.auth, resourceMetadataUrl: getOAuthProtectedResourceMetadataUrl(url) });
+  const sharedBearer = bearerFor(mcpUrl);
 
   /** Stateless MCP: each request gets a server for the vault its token's grant names. */
-  app.post("/mcp", bearer, express.json({ limit: "1mb" }), async (req, res) => {
+  const serveMcp = (vault: string | null) => async (req: Request, res: Response) => {
     try {
       const grant = grantSchema.parse(req.auth?.extra?.grant);
       const terms = await check(grant);
+      if (vault !== null && terms.vault !== vault) {
+        throw new Error(`this address is for ${vault}, but you signed in for ${terms.vault}; add this vault's own address`);
+      }
       options.onGrant?.(terms, grant);
       const wallet = options.wallet(terms, grant, await options.keyHolder.publicKey());
       const server = createServer(wallet);
@@ -122,6 +132,42 @@ export function createApp(options: AppOptions) {
         });
       }
     }
+  };
+
+  app.post("/mcp", sharedBearer, express.json({ limit: "1mb" }), serveMcp(null));
+
+  /**
+   * One address per vault, so an app can hold several vaults as separate connectors, and signing in
+   * goes straight to that vault. A token for another vault is refused here.
+   */
+  app.post(
+    "/v/:vault/mcp",
+    (req, res, next) => {
+      const vault = String(req.params.vault);
+      if (!isVaultName(vault)) {
+        res.status(404).json({ error: "not a vault name" });
+        return;
+      }
+      bearerFor(vaultMcpUrl(vault))(req, res, next);
+    },
+    express.json({ limit: "1mb" }),
+    (req, res) => void serveMcp(String(req.params.vault))(req, res),
+  );
+
+  /** Where an app learns how to sign in to one vault's address (RFC 9728). */
+  app.get("/.well-known/oauth-protected-resource/v/:vault/mcp", (req, res) => {
+    const vault = String(req.params.vault);
+    if (!isVaultName(vault)) {
+      res.status(404).json({ error: "not a vault name" });
+      return;
+    }
+    res.setHeader("access-control-allow-origin", "*");
+    res.json({
+      resource: vaultMcpUrl(vault).href,
+      authorization_servers: [issuerUrl.href],
+      resource_name: `Covenant vault ${vault}`,
+      resource_documentation: "https://github.com/Len3hq/covenant/blob/main/docs/HOSTED.md",
+    });
   });
 
   const noSessions = (_req: Request, res: Response) => {
@@ -129,6 +175,9 @@ export function createApp(options: AppOptions) {
   };
   app.get("/mcp", noSessions);
   app.delete("/mcp", noSessions);
+  app.get("/v/:vault/mcp", noSessions);
+  app.delete("/v/:vault/mcp", noSessions);
 
   return app;
 }
+
