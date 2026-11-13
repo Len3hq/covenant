@@ -1,4 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { createRequire } from "node:module";
 import { ASSETS, type Covenant } from "@len3hq/covenant-sdk";
 import { z } from "zod";
 
@@ -7,6 +8,9 @@ export type Wallet = Pick<
   Covenant,
   "pay" | "execute" | "payees" | "balances" | "queue" | "addresses" | "quoteSwap" | "swapStatus" | "destinations"
 >;
+
+/** The server reports its own package version, so it can't drift from what npm installed. */
+const PACKAGE_VERSION = (createRequire(import.meta.url)("../package.json") as { version: string }).version;
 
 const SWAP_CHAIN = z
   .string()
@@ -33,7 +37,7 @@ const text = (value: unknown) => ({
  * can ask for anything, and the vault refuses what its policy doesn't allow.
  */
 export function createServer(wallet: Wallet): McpServer {
-  const server = new McpServer({ name: "covenant", version: "0.1.0" });
+  const server = new McpServer({ name: "covenant", version: PACKAGE_VERSION });
 
   server.registerTool(
     "pay",

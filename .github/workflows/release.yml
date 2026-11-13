@@ -1,7 +1,9 @@
 name: Release
 
-# Publishes @len3hq/covenant-sdk and @len3hq/covenant-mcp to npm when a tag like v0.1.0 is pushed.
-# Needs an npm token with publish rights on the len3hq scope, saved as the NPM_TOKEN secret.
+# Publishes @len3hq/covenant-sdk and @len3hq/covenant-mcp to npm when a tag like v0.1.1 is pushed.
+# Uses npm trusted publishing: npm checks this workflow's GitHub OIDC identity against each
+# package's trusted publisher (Len3hq/covenant, release.yml), so no token is stored, and each
+# version gets npm provenance tying it to this commit and run.
 on:
   push:
     tags: ["v*"]
@@ -21,7 +23,6 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: pnpm
-          registry-url: https://registry.npmjs.org
       - run: pnpm install --frozen-lockfile
       - name: The tag must match both packages' versions
         run: |
@@ -35,8 +36,4 @@ jobs:
       - run: node scripts/pack-smoke.mjs
       # The SDK first: the MCP server depends on the version just published.
       - run: pnpm --filter @len3hq/covenant-sdk publish --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - run: pnpm --filter @len3hq/covenant-mcp publish --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
