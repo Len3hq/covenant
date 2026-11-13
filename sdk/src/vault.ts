@@ -15,7 +15,7 @@ import { RemoteNearSigner, type RemoteSigner } from "./signer.js";
 import type { SignedQuote } from "./tidepool.js";
 
 const MAX_GAS = 300_000_000_000_000n;
-/** docs/SPEC.md: a signature that hasn't arrived by now is looked up, not proposed again. */
+/** A signature that hasn't arrived by now is looked up, not proposed again. */
 const SIGN_WAIT_MS = 60_000;
 const RECOVER_TIMEOUT_MS = 120_000;
 const RECOVER_POLL_MS = 3_000;

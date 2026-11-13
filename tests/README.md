@@ -7,4 +7,4 @@
 | `vectors/` | BIP143 and EIP-1559 fixtures (JSON) | Starts at M1 |
 | `attacks/` | Malicious-proposer suites, run with the integration tests | Bitcoin and EVM |
 
-The full list of named tests is in [docs/BUILD_PLAN.md](../docs/BUILD_PLAN.md#named-test-tracker).
+Every named test, and the security claim it proves, is listed in [SECURITY.md](../SECURITY.md#invariant-to-test-map).

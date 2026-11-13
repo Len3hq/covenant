@@ -894,8 +894,12 @@ select:focus {
   border: 1px solid var(--line-soft);
   background: var(--raised);
 }
+.balance-card {
+  min-width: 0;
+}
 .balance-card p {
   margin: 0;
+  overflow-wrap: anywhere;
 }
 .balance-name {
   color: var(--text-2);

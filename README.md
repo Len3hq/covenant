@@ -5,6 +5,11 @@ Bitcoin, EVM chains and Solana through Chain Signatures, and it signs a spend on
 transaction itself and checking it against one policy. The agent can ask for anything. The contract
 decides what gets signed.
 
+![The Covenant dashboard: the live demo vault's Activity tab, where the contract refused a payment to an address that isn't a payee](docs/screenshots/vault-activity.png)
+
+New to it? [docs/HOW_COVENANT_WORKS.md](docs/HOW_COVENANT_WORKS.md) explains Covenant from zero, with no
+crypto background assumed.
+
 ## The problem
 
 An AI agent that pays bills needs a key that can move money. If that key sits with the agent, anything
@@ -43,6 +48,8 @@ chains, then replays an agent's recorded tool calls. You should see:
   the owner vetoes it, and its budget is returned.
 - Last line: `All scenarios passed in … s`.
 
+![Output of make demo: two payments signed, both attacks refused with OutputNotWhitelisted and CalldataNotAllowed, one large payment queued and vetoed](docs/screenshots/make-demo.png)
+
 `make test` runs the Rust, sandbox and TypeScript tests. `make check` runs everything CI runs.
 
 ### 2. The live dashboard, no install
@@ -50,12 +57,18 @@ chains, then replays an agent's recorded tool calls. You should see:
 1. Open https://covenant.len3.xyz and press **See the live demo vault**. You should see the vault's
    Bitcoin, Base and Solana addresses, its balances, and the **Activity** tab listing every payment the
    contract signed or refused on testnet, with the reason for each refusal.
+
+   ![The live demo vault's Overview tab: payments signed and refused, and balances on Bitcoin, Base and Solana against their 24-hour limits](docs/screenshots/vault-overview.png)
 2. Connect a NEAR testnet wallet (such as Meteor or Intear; [get testnet NEAR](https://docs.near.org/getting-started/faucet#external-faucet))
    and press **Create**. A five-step wizard sets the name, the agent, who it may pay and the limits.
    Your wallet signs twice: once to create the vault, once to add the agent's key. You should then see
    your new vault's page with its own addresses; **My vaults** lists it.
+
+   ![Step 1 of the five-step Create a vault wizard: name, agent, payments, limits, review](docs/screenshots/create.png)
 3. On its **Rules** tab, change a limit. You should see each change listed before your wallet signs.
    **Freeze** stops all payments at once.
+
+   ![The Rules tab: the payees the vault may pay; anyone else is refused](docs/screenshots/vault-rules.png)
 
 ### 3. Your own agent paying from your vault
 
@@ -150,6 +163,24 @@ sandbox on the 263 KB vault itself (the Solana rows on 10 Nov, on the 305 KB vau
 "Total burnt" therefore excludes the real MPC network's work. To reproduce:
 `make wasm && cargo test -p covenant-integration-tests --test gas_bench -- --nocapture`.
 
+## Screenshots
+
+All taken from the live dashboard on 13 Nov 2026, viewing the demo vault `covenant.len3hq.testnet`
+without a wallet connected. BTC shows "Unavailable" because the mempool.space testnet4 API was not
+answering at the time; the dashboard says so rather than showing a stale number.
+
+| Page | What it shows |
+| --- | --- |
+| [Landing](docs/screenshots/landing.png) | The pitch and the three ways in: create a vault, connect a wallet, see the demo vault |
+| [Overview](docs/screenshots/vault-overview.png) | Counts of signed and refused payments, balances per chain against the 24-hour limits, the latest refusal |
+| [Activity](docs/screenshots/vault-activity.png) | The veto queue and the decision log, with each refusal's `CovenantError` and its NEAR transaction |
+| [Rules](docs/screenshots/vault-rules.png) | Payees and limits, as read from the contract |
+| [Agent](docs/screenshots/vault-agent.png) | The agent's restricted key, and who can do what: agent, Sputnik DAO guardian, owner |
+| [Fund](docs/screenshots/vault-fund.png) | The vault's Bitcoin, Base and Solana addresses, all derived through Chain Signatures, and faucets |
+| [Create](docs/screenshots/create.png) | The five-step wizard that deploys a new vault from the factory |
+| [Docs](docs/screenshots/docs.png) | The in-app docs at `?docs` |
+| [make demo](docs/screenshots/make-demo.png) | The keyless demo's output on a local sandbox |
+
 ## Other hackathon project
 
 A member of this team also built [Prove-It](https://github.com/christian-obi/proveit) for NEAR
@@ -169,7 +200,7 @@ recorded on NEAR. The two projects are independent and share no code.
 | [hosted/enclave](hosted/enclave) | The hosted agents' key holder, for OutLayer's TDX enclaves |
 | [hosted/connector](hosted/connector) | The hosted connector: MCP over HTTP, with OAuth |
 | [scripts](scripts) | Deploy, funding and evidence scripts |
-| [docs](docs) | Build plan and spec |
+| [docs](docs) | How it works, the hosted connector, the MPC signing spike, screenshots |
 
 See also [AGENTS.md](AGENTS.md), [SECURITY.md](SECURITY.md), [NEAR_FEATURES.md](NEAR_FEATURES.md) and [EVIDENCE.md](EVIDENCE.md).
 

@@ -1,5 +1,5 @@
 //! EVM adapter: EIP-1559 only, native transfer or one exact ERC-20 `transfer`.
-//! See docs/SPEC.md, "EVM adapter spec".
+//! Its rules and their named tests are listed in SECURITY.md.
 
 use covenant_policy::{AssetId, ChainKind, CovenantError, ParsedTx, Payment, Policy, SignPayload};
 use near_sdk::env;

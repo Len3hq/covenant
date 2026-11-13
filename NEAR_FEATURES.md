@@ -21,6 +21,10 @@ signed.
 | The hashes it signs are computed in the contract: BIP143 for Bitcoin, keccak256 for EVM | [bitcoin/lib.rs:166](contracts/adapters/bitcoin/src/lib.rs#L166), [evm/lib.rs:177](contracts/adapters/evm/src/lib.rs#L177) |
 | NEAR's host functions do the hashing, with no C dependency in the contract | [bitcoin/lib.rs:105-109](contracts/adapters/bitcoin/src/lib.rs#L105-L109) |
 
+The dashboard's **Fund** tab shows the three addresses, all derived from the vault's NEAR account:
+
+![The Fund tab: the vault's Bitcoin testnet4, Base Sepolia and Solana devnet addresses, derived through Chain Signatures](docs/screenshots/vault-fund.png)
+
 ## Access keys
 
 | What | Where |
@@ -28,6 +32,8 @@ signed.
 | The agent holds a function-call key that can call only `propose_spend` and `execute` on the vault, with a 1 NEAR gas allowance | [create-agent-key.ts:25](scripts/src/create-agent-key.ts#L25) |
 | A sandbox test proves that key can't reach owner methods, move NEAR, attach a deposit or call another contract | [access_control.rs:117](tests/integration/tests/access_control.rs#L117) |
 | The vault's full-access key is removed before submission, so its code can't be replaced | Planned for 13 Nov, see [SECURITY.md](SECURITY.md) |
+
+![The Agent tab: the agent's single key, limited to propose_spend and execute, and the Sputnik DAO guardian](docs/screenshots/vault-agent.png)
 
 ## Contract design
 
@@ -65,6 +71,6 @@ a call to the vault and votes it through; a live veto took 23 seconds.
 | --- | --- |
 | `near-workspaces` sandbox tests deploy the real wasm with a mock signer | [common/mod.rs:155](tests/integration/tests/common/mod.rs#L155) |
 | The keyless demo runs the same contract on a local sandbox | [sandbox.rs:32](tests/integration/examples/sandbox.rs#L32), [sandbox.ts:28](agent/src/sandbox.ts#L28) |
-| The agent signs its NEAR transaction locally, so a timeout is looked up by hash, never resent | [vault.ts:106-128](agent/src/vault.ts#L106-L128) |
+| The agent signs its NEAR transaction locally, so a timeout is looked up by hash, never resent | [sdk/src/vault.ts:165-189](sdk/src/vault.ts#L165-L189) |
 | NEAR Connect for wallet sign-in and signing in the dashboard | [wallet.ts:81](web/src/wallet.ts#L81) |
 | FastNEAR's RPC and transaction API, which the dashboard reads events from | [vault.ts:315](web/src/vault.ts#L315) |

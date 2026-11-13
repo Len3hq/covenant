@@ -1,5 +1,5 @@
 //! Bitcoin adapter: P2WPKH vault inputs, SIGHASH_ALL, allow-listed outputs, change to the vault.
-//! See docs/SPEC.md, "Bitcoin adapter spec", and corrections C1 and C2 in docs/BUILD_PLAN.md.
+//! Its rules and their named tests are listed in SECURITY.md.
 
 use covenant_policy::{
     AssetId, ChainKind, CovenantError, ParsedTx, Payment, Policy, SignPayload, TxMeta,

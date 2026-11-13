@@ -1,5 +1,5 @@
 //! Solana adapter: a legacy message from the vault alone, that advances a durable nonce and then
-//! only moves SOL or one SPL token to listed payees. See docs/SPEC.md, "Solana adapter spec".
+//! only moves SOL or one SPL token to listed payees.
 //!
 //! Ed25519 signs the message itself, so the vault asks the signer to sign exactly the bytes checked
 //! here. There's no hash a caller could swap.

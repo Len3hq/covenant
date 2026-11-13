@@ -4,8 +4,9 @@ Instructions for AI agents and new contributors.
 
 ## Read first
 
-- [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md): what to do next, in order, and the spec corrections.
-- [docs/SPEC.md](docs/SPEC.md): the detailed behaviour of every component.
+- [docs/HOW_COVENANT_WORKS.md](docs/HOW_COVENANT_WORKS.md): what Covenant is and how a payment flows, from zero.
+- [SECURITY.md](SECURITY.md): the trust model, its limits, and the named test behind each claim.
+- [docs/HOSTED.md](docs/HOSTED.md): the hosted connector and its OutLayer enclave.
 - [docs/SPIKE.md](docs/SPIKE.md): measured behaviour of the live MPC signer.
 
 ## Commands
@@ -23,7 +24,7 @@ Instructions for AI agents and new contributors.
 | Publish the hosted connector to Railway | `make deploy-connector` (settings in hosted/connector/README.md) |
 | Build the SDK and MCP server | `pnpm --filter "@len3hq/covenant-mcp..." build` (outputs in `sdk/dist`, `mcp/dist`) |
 | Check the npm packages install and run | `node scripts/pack-smoke.mjs` |
-| Publish the SDK and MCP server to npm | Push a tag `vX.Y.Z` matching both versions (needs `NPM_TOKEN`; see docs/RUNBOOK.md) |
+| Publish the SDK and MCP server to npm | Push a tag `vX.Y.Z` matching both versions (needs the `NPM_TOKEN` repository secret; the Release workflow tests, packs and publishes both) |
 | Run the dashboard | `pnpm --filter @covenant/web dev`, then add `?vault=<account>` or `?create` |
 | Update the live policy | `make set-policy` (needs the owner's key) |
 | Veto a queued spend as owner | `make veto ID=<id>` |

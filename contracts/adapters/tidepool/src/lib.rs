@@ -1,6 +1,6 @@
 //! Tidepool adapter: checks a swap quote signed by a 1Click-style service, so the vault can pay a
-//! deposit address that the service will swap and deliver on another chain. See
-//! docs/NEXT_PHASES.md, "Phase 2".
+//! deposit address that the service will swap and deliver on another chain. Its limits are in
+//! SECURITY.md, "Swap delivery is trusted to Tidepool".
 //!
 //! The quote's signature follows 1Click's scheme: Ed25519, by the maker key, over the UTF-8 text of
 //! `base58(sha256(body))`. `body` is one JSON object holding the chosen request and quote fields and

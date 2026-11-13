@@ -69,7 +69,7 @@ both ([EVIDENCE.md](EVIDENCE.md)).
 - **A freeze can't recall a signature.** It stops new `sign` calls. A signature already requested
   can still land, and a partly failed join still publishes the signatures it produced
   ([SPIKE.md](docs/SPIKE.md)). The contract keeps a spend's reservation when signing fails during a
-  freeze, so the budget stays charged (C11).
+  freeze, so the budget stays charged.
 - **The contract signs, but doesn't broadcast.** It can't make a signed payment reach the chain, or
   guarantee that a queued Bitcoin spend's coins are still unspent when it's signed.
 - **Fees are charged at their maximum.** An EVM spend is charged its gas limit times its maximum fee
@@ -91,6 +91,26 @@ both ([EVIDENCE.md](EVIDENCE.md)).
   Losses are bounded by the vault's caps and by Tidepool's own limits per swap. The maker key is
   pinned in the policy, so the owner must update it if Tidepool rotates it.
 - **Unaudited.** For testnets only.
+
+## Before any mainnet use
+
+All of these must be done first. This list is a starting point, not a full security review.
+
+- [ ] Get an independent audit of the contract and fix what it finds.
+- [ ] Move `owner` and `guardian` to multisigs, with each signer on a hardware wallet.
+- [ ] Create new mainnet accounts and keys. Reuse no testnet key.
+- [ ] Hold server secrets in a secrets manager, not a `.env` file or the encrypted backup.
+- [ ] Decide who may upgrade the contract, and how, before removing or handing over its full-access key.
+- [ ] Configure mainnet values, and verify each one against its official source: MPC signer, chain IDs,
+      token addresses, RPC URLs and Bitcoin API.
+- [ ] Remove the hardcoded testnet address prefix in [vault.ts](web/src/vault.ts) and pass `bc` to
+      `p2wpkhAddress` in [keys.ts](scripts/src/keys.ts).
+- [ ] Rewrite the policy with deliberately low caps, and raise them only after the system has run safely.
+- [ ] Add monitoring and alerts for frozen state, queued spends, low balances and failed signatures.
+- [ ] Write an incident runbook: who freezes the vault, how funds are recovered and how keys are rotated.
+- [ ] Rerun the full test suite and the attack scenarios against the mainnet configuration, using small
+      amounts.
+- [ ] Update this file, which currently says testnets only.
 
 ## Invariant to test map
 

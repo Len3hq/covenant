@@ -8,7 +8,7 @@ Filled in from real testnet runs.
 | Bitcoin testnet4 vault address | [`tb1qddd2cgvedtlfgvgvx6f93rt9te77zsu9ccmcw9`](https://mempool.space/testnet4/address/tb1qddd2cgvedtlfgvgvx6f93rt9te77zsu9ccmcw9) |
 | Base Sepolia vault address | [`0xd913a8c28efdb2f30563e063b5fac5abd6ec9361`](https://sepolia.basescan.org/address/0xd913a8c28efdb2f30563e063b5fac5abd6ec9361) |
 | Solana devnet vault address | [`GnSDBdzbso6EgokmsndtcYbDdH7Vg3kczwf1Ro4mZA6T`](https://explorer.solana.com/address/GnSDBdzbso6EgokmsndtcYbDdH7Vg3kczwf1Ro4mZA6T?cluster=devnet) |
-| Named test count | Pending |
+| Named test count | 260 Rust tests (unit, property, sandbox and attack), counted with `cargo test --workspace -- --list`, plus the TypeScript suites (`pnpm -r test`) |
 
 | Outcome | Chain | NEAR receipt | Chain explorer |
 | --- | --- | --- | --- |

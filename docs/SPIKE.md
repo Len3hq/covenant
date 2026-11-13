@@ -33,7 +33,7 @@ The [MPC docs](https://github.com/near/mpc/blob/main/crates/contract/README.md) 
 - **Treat a failed `sign` as an ordinary callback result.** A failure didn't revert the joined call. The callback still ran, and it saw that result as failed, so `on_signed` can release the reservation and return `SignFailed`.
 - **Expect partial failure.** In [59WQU9aW…](https://testnet.nearblocks.io/txns/59WQU9aWdzPnvvHPUZoUZ7tABpZZwnfvzJL6ZkifnnKZ), one bad payload failed while the other was signed. That signature was still published even though the spend as a whole failed.
 
-Partial failure doesn't break the caps. SIGHASH_ALL ties each Bitcoin signature to the whole transaction, which also needs every other input's signature, and getting those takes a new proposal with its own reservation. SECURITY.md should say this alongside correction C11.
+Partial failure doesn't break the caps. SIGHASH_ALL ties each Bitcoin signature to the whole transaction, which also needs every other input's signature, and getting those takes a new proposal with its own reservation. SECURITY.md says so under "Limits to know".
 
 ## Response shape
 

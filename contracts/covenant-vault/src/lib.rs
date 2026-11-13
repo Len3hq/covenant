@@ -1,6 +1,6 @@
 //! The vault contract. Adapters turn a raw transaction into payments and signing hashes, the
 //! policy crate decides, and this contract orchestrates: it reserves budget, queues or signs,
-//! and records. See docs/SPEC.md, "Vault contract spec".
+//! and records. See SECURITY.md and docs/HOW_COVENANT_WORKS.md.
 
 use covenant_adapter_bitcoin::BitcoinVault;
 use covenant_adapter_tidepool::{SignedQuote, VaultAddresses};

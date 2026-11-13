@@ -1,7 +1,7 @@
 # How Covenant works, from zero
 
 This explains Covenant to someone new to it. No crypto or NEAR background is assumed. The other docs
-([SPEC.md](SPEC.md), [SECURITY.md](../SECURITY.md)) go deeper once this makes sense.
+([SECURITY.md](../SECURITY.md), [NEAR_FEATURES.md](../NEAR_FEATURES.md), [HOSTED.md](HOSTED.md)) go deeper once this makes sense.
 
 ## 1. The problem in one paragraph
 
@@ -96,6 +96,10 @@ Plus:
 Amounts are always whole numbers in the smallest unit (sats, wei, USDC base units), never decimals,
 so there's no rounding to exploit.
 
+The dashboard's **Rules** tab reads the policy straight from the contract:
+
+![The Rules tab: four payees on Bitcoin, Base and Solana; anyone else is refused](screenshots/vault-rules.png)
+
 ### 3.5 Roles
 
 | Who | What they can do |
@@ -169,6 +173,10 @@ splitting one big payment into many small outputs, hiding money in the fee, send
 stranger, using the wrong chain, using exotic transaction types, and racing many proposals at once
 to slip past the daily cap.
 
+Each refusal is recorded on chain with its reason. The dashboard's **Activity** tab lists them:
+
+![The Activity tab: an empty veto queue, then the decision log with refused payments marked OutputNotWhitelisted](screenshots/vault-activity.png)
+
 ## 6. What a hijacked agent can still do
 
 Honest limits, so you can explain them to others:
@@ -200,6 +208,8 @@ testnet-only.
 | **Dashboard** | A landing page, My vaults, a five-step create wizard, and each vault's page: overview, activity, rules (with a form to change them), agent and funding | [web](../web), [live](https://covenant.len3.xyz) |
 | **Tests** | Unit, property, sandbox and attack tests. Every security claim maps to a named test | [tests](../tests), [SECURITY.md](../SECURITY.md) |
 | **Evidence** | Real testnet transactions: payments on Bitcoin testnet4 and Base Sepolia, refused attacks, vetoes, freezes, DAO votes | [EVIDENCE.md](../EVIDENCE.md) |
+
+![The live demo vault's Overview tab: 12 payments signed, 6 refused, and balances on each chain against the 24-hour limits](screenshots/vault-overview.png)
 
 ## 8. Glossary
 
