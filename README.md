@@ -5,6 +5,9 @@ Bitcoin, EVM chains and Solana through Chain Signatures, and it signs a spend on
 transaction itself and checking it against one policy. The agent can ask for anything. The contract
 decides what gets signed.
 
+**Demo video:** [on X](https://x.com/frankieetchy/status/2121314676550123822). Live dashboard, on testnet:
+https://covenant.len3.xyz
+
 ![The Covenant dashboard: the live demo vault's Activity tab, where the contract refused a payment to an address that isn't a payee](docs/screenshots/vault-activity.png)
 
 New to it? [docs/HOW_COVENANT_WORKS.md](docs/HOW_COVENANT_WORKS.md) explains Covenant from zero, with no
