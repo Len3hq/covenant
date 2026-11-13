@@ -15,7 +15,7 @@ get a signature for the vault's Bitcoin and EVM addresses, and it computes every
 | Agent | `agent.len3hq.testnet`, function-call key | Call `propose_spend` and `execute` | Change policy, freeze, veto, move NEAR, call another contract, attach a deposit (`agent_key_cannot_call_set_policy`) |
 | Guardian | `covenant-guardian.sputnikv2.testnet`, a Sputnik DAO | Veto and freeze, by a council vote | Unfreeze, set policy, replace itself (`guardian_can_freeze_not_unfreeze`, `only_the_owner_can_replace_the_guardian`) |
 | Owner | `owner.len3hq.testnet` | Set policy, veto, freeze, unfreeze, replace the guardian | Spend directly: it must go through the same checks |
-| Vault account | `covenant.len3hq.testnet` | Hold the contract | Nothing else, once its full-access key is removed (planned for 13 Nov) |
+| Vault account | `covenant.len3hq.testnet` | Hold the contract. This first demo vault was deployed directly and still has one full-access key, which can redeploy its code | Vaults made by the factory have no keys at all (below) |
 
 ### Vaults made by the factory
 
@@ -38,8 +38,8 @@ Anyone can create their own vault at `<name>.<factory>` from the dashboard. The 
   an attacker "Acme". The dashboard says whether a vault is a standard one, but that says nothing about
   whether its owner is honest.
 
-The factory's own full-access key is a remaining trust point until it's removed, as with the vault's
-key: its holder could change what *new* vaults get, but not vaults that already exist.
+The factory account still has a full-access key. Its holder could change what *new* vaults get, but
+not vaults that already exist.
 
 ### What a hijacked agent can still do
 
@@ -59,8 +59,10 @@ both ([EVIDENCE.md](EVIDENCE.md)).
   it.
 - **The owner's key.** It's one plain account. Whoever holds it can change every limit, so a real
   deployment needs a multisig.
-- **The vault's full-access key, until it's removed.** Its holder could deploy different code.
-  Removal is planned for 13 Nov, and the transaction will be listed here.
+- **The first demo vault's full-access key.** `covenant.len3hq.testnet` was deployed directly and
+  keeps one, so its holder could deploy different code. The dashboard labels it "Not made by the
+  factory" and warns about the key. Vaults made by the factory, such as `guava.vaults-v3.len3hq.testnet`,
+  have no keys.
 - **The adapters' parsing.** They are the reason a hash can't hide a different payment, so every
   rule has a named test and the parsers have property tests.
 

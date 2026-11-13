@@ -31,7 +31,7 @@ The dashboard's **Fund** tab shows the three addresses, all derived from the vau
 | --- | --- |
 | The agent holds a function-call key that can call only `propose_spend` and `execute` on the vault, with a 1 NEAR gas allowance | [create-agent-key.ts:25](scripts/src/create-agent-key.ts#L25) |
 | A sandbox test proves that key can't reach owner methods, move NEAR, attach a deposit or call another contract | [access_control.rs:117](tests/integration/tests/access_control.rs#L117) |
-| The vault's full-access key is removed before submission, so its code can't be replaced | Planned for 13 Nov, see [SECURITY.md](SECURITY.md) |
+| A vault made by the factory has no access keys, so nobody can replace its code. The first demo vault, deployed directly, keeps its deploy key, and the dashboard says so | [factory.rs:151](tests/integration/tests/factory.rs#L151), [SECURITY.md](SECURITY.md) |
 
 ![The Agent tab: the agent's single key, limited to propose_spend and execute, and the Sputnik DAO guardian](docs/screenshots/vault-agent.png)
 

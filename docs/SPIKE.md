@@ -1,8 +1,8 @@
-# M0 signing spike
+# MPC signing spike
 
 A contract can request real signatures from the testnet MPC network, including several in one call, and all 21 returned signatures verified against the expected derived key. Run on 3 Nov 2026 against `v1.signer-prod.testnet` version 3.18.0.
 
-The spike contract was deployed at `spike.len3hq.testnet`. Both it and its source, `tests/spike`, were deleted at M3, and the transactions below remain on chain. Each case ran once, so treat the timings as rough, not as a load test.
+The spike contract was deployed at `spike.len3hq.testnet`. Both it and its source, `tests/spike`, were deleted once the vault itself signed, and the transactions below remain on chain. Each case ran once, so treat the timings as rough, not as a load test.
 
 ## Results
 
@@ -29,7 +29,7 @@ The [MPC docs](https://github.com/near/mpc/blob/main/crates/contract/README.md) 
 ## What the vault should do
 
 - **Attach 30 Tgas per `sign`.** That's the lowest value we ran with a full 8-signature join, and it leaves room above the 15 Tgas minimum if the requirement rises.
-- **Budget for parsing.** Three inputs at 30 Tgas each, plus a 10 Tgas callback, reserve 100 Tgas and leave up to 200 Tgas of the 300 Tgas limit for parsing and policy. M2 measures how much parsing really needs.
+- **Budget for parsing.** Three inputs at 30 Tgas each, plus a 10 Tgas callback, reserve 100 Tgas and leave up to 200 Tgas of the 300 Tgas limit for parsing and policy. The gas table in the README has the measured numbers.
 - **Treat a failed `sign` as an ordinary callback result.** A failure didn't revert the joined call. The callback still ran, and it saw that result as failed, so `on_signed` can release the reservation and return `SignFailed`.
 - **Expect partial failure.** In [59WQU9aW…](https://testnet.nearblocks.io/txns/59WQU9aWdzPnvvHPUZoUZ7tABpZZwnfvzJL6ZkifnnKZ), one bad payload failed while the other was signed. That signature was still published even though the spend as a whole failed.
 
@@ -53,10 +53,10 @@ Partial failure doesn't break the caps. SIGHASH_ALL ties each Bitcoin signature 
 | `domain_id` | Protocol | Purpose |
 | --- | --- | --- |
 | 0 | CaitSith (secp256k1) | Sign: Bitcoin and EVM |
-| 1 | Frost (Ed25519) | Sign: Solana stretch |
+| 1 | Frost (Ed25519) | Sign: Solana |
 | 2 | Confidential key derivation | Not used |
 | 3 | CaitSith | Foreign transaction verification, not used |
 
 ## Not covered
 
-This spike signed test hashes. It didn't broadcast anything to Bitcoin or Base. Those are gates 1 and 2.
+This spike signed test hashes. It didn't broadcast anything to Bitcoin or Base. The live payments in [EVIDENCE.md](../EVIDENCE.md) do.

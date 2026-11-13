@@ -201,8 +201,8 @@ fn sighashes(tx: &Unsigned, amounts: &[u64], pubkey_hash: &[u8; 20]) -> Vec<[u8;
 /// Finds the output an input spends, after proving `prev_tx` is the transaction it names.
 ///
 /// A serialized outpoint holds the txid in the same byte order the hash produces, so the two
-/// compare directly (C1). A witness-serialized prev tx is refused because it can't hash to its
-/// txid (C2); the agent strips witness data first.
+/// compare directly. A witness-serialized prev tx is refused because it can't hash to its
+/// txid; the agent strips witness data first.
 fn spent_output<'a>(prev_tx: &'a [u8], outpoint: &[u8]) -> Result<Output<'a>, CovenantError> {
     if prev_tx.get(4) == Some(&0) {
         return Err(CovenantError::MalformedTx);
@@ -714,7 +714,7 @@ mod tests {
             .unwrap();
         let prev = hex::decode(text("non_witness_hex")).unwrap();
 
-        // A txid displays reversed, and the outpoint holds the raw hash (C1).
+        // A txid displays reversed, and the outpoint holds the raw hash.
         let mut txid: [u8; 32] = hex::decode(text("txid")).unwrap().try_into().unwrap();
         txid.reverse();
         assert_eq!(double_sha256(&prev), txid);
@@ -726,7 +726,7 @@ mod tests {
         let parsed = parse(&tx, &meta(&[&prev]), &policy(), &vault).unwrap();
         assert_eq!(parsed.fee, 1_000);
 
-        // What the explorer API returns unmodified is refused (C2).
+        // What the explorer API returns unmodified is refused.
         let witness = hex::decode(text("witness_hex")).unwrap();
         assert_eq!(
             parse(&tx, &meta(&[&witness]), &policy(), &vault),

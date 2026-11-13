@@ -235,8 +235,7 @@ RPC, FastNear and drpc NEAR RPC, and Railway (hosting the dashboard and connecto
 ## Hackathon
 
 All code was written during NEAR HACKATHON: the first commit is from 2 November 2026, and there is no
-pre-hackathon code, so there is no `pre-hackathon` tag. The tag `hackathon-submission` marks the
-submitted commit.
+pre-hackathon code, so there is no `pre-hackathon` tag, and the whole history is the hackathon's work.
 
 ## License
 

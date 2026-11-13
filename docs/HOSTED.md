@@ -1,6 +1,6 @@
-# Hosted connector (design)
+# Hosted connector
 
-Status: live on testnet (11 Nov 2026).
+Live on testnet since 11 Nov 2026.
 
 - Key holder: OutLayer testnet project `keyholder.len3hq.testnet/covenant-key-holder`, version
   `db76a6636deb65f1c5899f117f3c63abe4fcf9266a2853b3cdfffa955a7c1460`. Its public key, the access key of
@@ -94,17 +94,17 @@ replacing the agent or freezing the vault, as today.
 - Whoever holds Covenant's OutLayer payment key can ask the enclave to sign `propose_spend` for a vault
   with a live grant. The contract still applies that vault's rules, so the worst case is payments to
   listed payees up to the owner's caps, plus queued payments the owner can veto.
-- Hosted vaults should default to stricter rules: new payees held, lower caps. Not built yet: today a
-  hosted vault takes the same form as any other.
+- A hosted vault is created with the same form as any other, so its owner picks its rules. Holding
+  new payees for veto and keeping caps low is the safer choice for a hosted agent.
 - On mainnet this may count as custody in some places. Testnet only for now.
 
-## Open points
+## Design choices
 
 1. **One key or one per user.** OutLayer derives a key from the project, the path and the caller, and
    the caller over HTTPS is the payment key's owner. With one payment key, every hosted agent account
    carries the same public key. Each account's key can still only call its own vault, but one key
    serves them all. A key per user would need a payment key per user. The grant is what keeps one
-   vault's owner from driving another's, so one shared key is the proposal.
+   vault's owner from driving another's, so one shared key is what's deployed.
 2. **Network.** The key holder runs on OutLayer testnet as `keyholder.len3hq.testnet`, paid in its
    free test USDC, like the vaults on NEAR testnet. Mainnet would need a mainnet project and real USDC.
 3. **Deploying.** `outlayer login` needs a full-access key for the project's owner account.

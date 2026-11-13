@@ -615,7 +615,7 @@ impl CovenantVault {
 
         self.queue.remove(&id.0);
         // The spend's own reservation must not count against it, and it restarts at signing time so
-        // it stays on the ledger for a full 24 h after the money moves (C6).
+        // it stays on the ledger for a full 24 h after the money moves.
         self.release_all(&pending.charges, &pending.unlisted, pending.queued_at.0);
         let recheck = match &pending.swap {
             None => covenant_policy::recheck_parsed(pending.chain, &parsed, &self.policy),
@@ -1688,7 +1688,7 @@ mod tests {
                 .sum()
         }
 
-        /// C6, in time only the mock can skip: a reservation expires while its spend waits, later
+        /// In time only the mock can skip: a reservation expires while its spend waits, later
         /// spends use the budget it held, and `execute` must not take the cap past its limit.
         #[test]
         fn execute_after_long_delay_respects_daily_cap() {
