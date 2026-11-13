@@ -36,8 +36,17 @@ const text = (value: unknown) => ({
  * The vault decides every payment, so these tools need no guard of their own: a fooled assistant
  * can ask for anything, and the vault refuses what its policy doesn't allow.
  */
-export function createServer(wallet: Wallet): McpServer {
-  const server = new McpServer({ name: "covenant", version: PACKAGE_VERSION });
+export function createServer(wallet: Wallet, options: { vault?: string } = {}): McpServer {
+  // Naming the vault lets an assistant that holds several of them, one connector each, tell which
+  // one these tools act on.
+  const server = new McpServer(
+    { name: "covenant", version: PACKAGE_VERSION },
+    options.vault
+      ? {
+          instructions: `These tools act on one Covenant vault: ${options.vault}. Every balance, address, payee and payment here is that vault's. Another vault is reached through its own connector.`,
+        }
+      : {},
+  );
 
   server.registerTool(
     "pay",

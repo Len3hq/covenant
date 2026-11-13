@@ -3,9 +3,9 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { describe, expect, it, vi } from "vitest";
 import { createServer, type Wallet } from "./server.js";
 
-async function connect(wallet: Partial<Wallet>) {
+async function connect(wallet: Partial<Wallet>, vault?: string) {
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
-  await createServer(wallet as Wallet).connect(serverSide);
+  await createServer(wallet as Wallet, vault ? { vault } : {}).connect(serverSide);
   const client = new Client({ name: "test", version: "0" });
   await client.connect(clientSide);
   return client;
@@ -15,6 +15,11 @@ const body = (result: Awaited<ReturnType<Client["callTool"]>>) =>
   JSON.parse((result.content as { text: string }[])[0]?.text ?? "null") as unknown;
 
 describe("the Covenant MCP server", () => {
+  it("tells the assistant which vault its tools act on", async () => {
+    const client = await connect({}, "acme.vaults-v3.len3hq.testnet");
+    expect(client.getInstructions()).toContain("acme.vaults-v3.len3hq.testnet");
+  });
+
   it("offers the vault's tools", async () => {
     const client = await connect({});
     const { tools } = await client.listTools();

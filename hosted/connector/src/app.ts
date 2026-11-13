@@ -137,7 +137,7 @@ export function createApp(options: AppOptions) {
       }
       options.onGrant?.(terms, grant);
       const wallet = options.wallet(terms, grant, await options.keyHolder.publicKey());
-      const server = createServer(wallet);
+      const server = createServer(wallet, { vault: terms.vault });
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
       res.on("close", () => {
         void transport.close();
@@ -146,6 +146,10 @@ export function createApp(options: AppOptions) {
       await server.connect(transport);
       await transport.handleRequest(req, res, req.body);
     } catch (error) {
+      // An app shows its user little of a refusal, so the reason goes to the connector's log too.
+      console.error(
+        JSON.stringify({ step: "mcp_refused", address: vault ?? "shared", error: error instanceof Error ? error.message : String(error) }),
+      );
       if (!res.headersSent) {
         res.status(403).json({
           jsonrpc: "2.0",

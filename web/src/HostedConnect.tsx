@@ -17,35 +17,48 @@ export const HOSTED_TABS: { id: HostedTab; label: string }[] = [
   { id: "other", label: "Other apps" },
 ];
 
+/**
+ * The name an app files a vault's connector under. Each vault gets its own, from the first part of
+ * its account name, so adding a second vault doesn't collide with, overwrite or reuse the sign-in
+ * of the first: `covenant-acme` for `acme.vaults-v3.len3hq.testnet`.
+ */
+export function serverNameFor(url: string): string {
+  const vault = /\/v\/([^/]+)\/mcp\/?$/.exec(url)?.[1];
+  const label = vault?.split(".")[0];
+  if (!label) return "covenant";
+  // The docs show `<vault>` in place of a name; that stays a placeholder.
+  return /^[a-z0-9_-]+$/.test(label) ? `covenant-${label}` : "covenant-<vault>";
+}
+
 /** Where the connector goes in each app, and what to paste. */
 export function hostedSnippetFor(tab: HostedTab, url: string): { steps: string; text: string } {
+  const name = serverNameFor(url);
+  const signIn = `Until you sign in, the app lists ${name} but its tools can't reach the vault.`;
   switch (tab) {
     case "claude":
       return {
-        steps:
-          "On claude.ai or Claude Desktop: Settings → Connectors → Add custom connector. Name it Covenant, paste the URL, and press Connect. It then works on Claude's phone apps too.",
+        steps: `On claude.ai or Claude Desktop: Settings → Connectors → Add custom connector. Name it ${name}, paste the URL, and press Connect. It then works on Claude's phone apps too. Add each vault as its own connector, with its own URL.`,
         text: url,
       };
     case "chatgpt":
       return {
-        steps:
-          "In ChatGPT's settings, turn on developer mode for connectors, then create a connector with this URL and OAuth sign-in. The menu names change between versions.",
+        steps: `In ChatGPT's settings, turn on developer mode for connectors, then create a connector named ${name} with this URL and OAuth sign-in. The menu names change between versions.`,
         text: url,
       };
     case "claude-code":
       return {
-        steps: "Run this in a terminal, then start claude, run /mcp, pick covenant and choose Authenticate.",
-        text: `claude mcp add --transport http covenant ${url}`,
+        steps: `Run this in a terminal, then start claude, run /mcp, pick ${name} and choose Authenticate. ${signIn}`,
+        text: `claude mcp add --transport http ${name} ${url}`,
       };
     case "cursor":
       return {
-        steps: "Add this to ~/.cursor/mcp.json, then open Cursor's MCP settings and press Login next to covenant.",
-        text: JSON.stringify({ mcpServers: { covenant: { url } } }, null, 2),
+        steps: `Add this to ~/.cursor/mcp.json, alongside any other vaults, then open Cursor's MCP settings and press Login next to ${name}. ${signIn}`,
+        text: JSON.stringify({ mcpServers: { [name]: { url } } }, null, 2),
       };
     case "vscode":
       return {
-        steps: "Add this to .vscode/mcp.json in your project, then start the server from that file and sign in when asked.",
-        text: JSON.stringify({ servers: { covenant: { type: "http", url } } }, null, 2),
+        steps: `Add this to .vscode/mcp.json in your project, alongside any other vaults, then start ${name} from that file and sign in when asked. ${signIn}`,
+        text: JSON.stringify({ servers: { [name]: { type: "http", url } } }, null, 2),
       };
     case "other":
       return {

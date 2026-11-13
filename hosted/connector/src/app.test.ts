@@ -163,6 +163,10 @@ describe("the hosted connector", () => {
     expect(lastVaultParam).toBe(terms.vault);
     const called = await answer(await rpc(token, "tools/call", { name: "get_addresses", arguments: {} }, path));
     expect(JSON.parse(called.result?.content?.[0]?.text ?? "{}")).toEqual(addresses);
+    const init = await answer(
+      await rpc(token, "initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "0" } }, path),
+    );
+    expect(JSON.stringify(init)).toContain(`one Covenant vault: ${terms.vault}`);
     const elsewhere = await rpc(token, "tools/list", {}, "/v/other.vaults-v3.len3hq.testnet/mcp");
     expect(elsewhere.status).toBe(403);
     expect(((await elsewhere.json()) as { error: { message: string } }).error.message).toContain("this address is for other.vaults-v3");

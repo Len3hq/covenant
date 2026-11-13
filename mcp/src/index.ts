@@ -63,7 +63,7 @@ const wallet = Covenant.connect({
   spendsFile: spendsFile(vault, process.env.SPENDS_FILE),
 });
 
-await createServer(wallet).connect(new StdioServerTransport());
+await createServer(wallet, { vault }).connect(new StdioServerTransport());
 
 // A held payment goes through unless vetoed: once its wait ends, send it, for as long as the app
 // keeps this server running. The vault checks it against its rules again first.
