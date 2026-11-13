@@ -35,6 +35,7 @@ restart signs nobody out. A token lasts as long as its grant.
 | `CONNECTOR_SECRET` | 32 random bytes, hex: `openssl rand -hex 32`. Changing it signs everyone out |
 | `OUTLAYER_PROJECT` | `keyholder.len3hq.testnet/covenant-key-holder` |
 | `OUTLAYER_PAYMENT_KEY` | The OutLayer payment key that pays for each signature |
+| `AGENT_PUBLIC_KEY` | The key holder's public key, from `/public-key`. Optional but recommended: the enclave takes up to a minute to tell it, and the connector serves nothing until it knows it. Without this, it's asked once and saved to `DATA_DIR` |
 | `OUTLAYER_API_URL` | Defaults to OutLayer testnet, `https://testnet-api.outlayer.ai` |
 | `NEAR_RPC_URL` | Defaults to FastNear's testnet RPC |
 | `DATA_DIR` | Where each vault's spends file lives; a Railway volume at `/data` |

@@ -7,7 +7,7 @@ import { ConnectorAuth, Sealer } from "./auth.js";
 import { rpcChainView, type Grant, type Terms } from "./grant.js";
 import { GrantStore } from "./grants.js";
 import { nonceKeeper, NonceStore, web3NonceCreator } from "./nonces.js";
-import { localKeyHolder, outlayerKeyHolder, type KeyHolder } from "./keyholder.js";
+import { localKeyHolder, outlayerKeyHolder, withKnownPublicKey, type KeyHolder } from "./keyholder.js";
 
 const env = (name: string) => {
   const value = process.env[name];
@@ -23,11 +23,19 @@ mkdirSync(dataDir, { recursive: true });
 
 const keyHolder: KeyHolder = process.env.LOCAL_AGENT_KEY
   ? localKeyHolder(process.env.LOCAL_AGENT_KEY)
-  : outlayerKeyHolder({
-      apiUrl: process.env.OUTLAYER_API_URL ?? "https://testnet-api.outlayer.ai",
-      project: env("OUTLAYER_PROJECT"),
-      paymentKey: env("OUTLAYER_PAYMENT_KEY"),
-    });
+  : withKnownPublicKey(
+      outlayerKeyHolder({
+        apiUrl: process.env.OUTLAYER_API_URL ?? "https://testnet-api.outlayer.ai",
+        project: env("OUTLAYER_PROJECT"),
+        paymentKey: env("OUTLAYER_PAYMENT_KEY"),
+      }),
+      { known: process.env.AGENT_PUBLIC_KEY, file: join(dataDir, "agent-public-key") },
+    );
+// Learn the public key now, not on the first request, so no one waits on the enclave to connect.
+keyHolder
+  .publicKey()
+  .then((key) => console.error(JSON.stringify({ step: "public_key", key })))
+  .catch((error: unknown) => console.error(JSON.stringify({ step: "public_key_failed", error: String(error) })));
 if (process.env.LOCAL_AGENT_KEY) console.error("LOCAL_AGENT_KEY is set: signing in this process, not the enclave. Development only.");
 
 const grants = new GrantStore(join(dataDir, "grants.json"));

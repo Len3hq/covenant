@@ -1,5 +1,6 @@
 import { localRemoteSigner, type AgentCall, type RemoteSigner } from "@len3hq/covenant-sdk";
 import { KeyPair, type KeyPairString } from "near-api-js";
+import { readFileSync, writeFileSync } from "node:fs";
 import type { Grant } from "./grant.js";
 
 /** Where hosted agents' key lives. Only its public key ever reaches this process. */
@@ -25,11 +26,12 @@ export function outlayerKeyHolder(options: {
   fetcher?: typeof fetch;
 }): KeyHolder {
   const fetcher = options.fetcher ?? fetch;
-  const call = async (input: object): Promise<Record<string, unknown>> => {
+  const call = async (input: object, timeoutMs?: number): Promise<Record<string, unknown>> => {
     const response = await fetcher(`${options.apiUrl}/call/${options.project}`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-payment-key": options.paymentKey },
       body: JSON.stringify({ input }),
+      ...(timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {}),
     });
     const answer = (await response.json().catch(() => ({}))) as CallAnswer;
     if (!response.ok || answer.status !== "completed") {
@@ -43,7 +45,8 @@ export function outlayerKeyHolder(options: {
   return {
     publicKey() {
       // Asked once, since it never changes; a failure isn't kept, so the next call asks again.
-      publicKey ??= call({ operation: "public_key" })
+      // Bounded, so a stuck enclave fails fast instead of holding every waiting request for a minute.
+      publicKey ??= call({ operation: "public_key" }, 30_000)
         .then((output) => String(output.public_key))
         .catch((error: unknown) => {
           publicKey = undefined;
@@ -60,6 +63,50 @@ export function outlayerKeyHolder(options: {
         },
       };
     },
+  };
+}
+
+/**
+ * The key holder, with its public key known ahead of time. Asking the enclave for it takes from a
+ * few seconds to over a minute, and fails now and then; until it answers, the connector can serve
+ * nothing. The key never changes, so it comes from `known` (the AGENT_PUBLIC_KEY setting) or the
+ * file it was saved to after the first answer, and the enclave is asked only when neither has it.
+ */
+export function withKnownPublicKey(
+  holder: KeyHolder,
+  options: { known?: string; file: string; read?: (file: string) => string; write?: (file: string, value: string) => void },
+): KeyHolder {
+  const read = options.read ?? ((file: string) => readFileSync(file, "utf8"));
+  const write = options.write ?? ((file: string, value: string) => writeFileSync(file, value));
+  const valid = (key: string | undefined) => (key && /^ed25519:[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(key) ? key : undefined);
+  let saved: string | undefined;
+  try {
+    saved = valid(read(options.file).trim());
+  } catch {
+    // Not saved yet.
+  }
+  const known = valid(options.known) ?? saved;
+  let asked: Promise<string> | undefined;
+  return {
+    publicKey() {
+      if (known) return Promise.resolve(known);
+      asked ??= holder.publicKey().then(
+        (key) => {
+          try {
+            write(options.file, key);
+          } catch (error) {
+            console.error(JSON.stringify({ step: "public_key_not_saved", error: String(error) }));
+          }
+          return key;
+        },
+        (error: unknown) => {
+          asked = undefined;
+          throw error;
+        },
+      );
+      return asked;
+    },
+    signer: (grant, key) => holder.signer(grant, key),
   };
 }
 
