@@ -350,7 +350,7 @@ export function Docs() {
           <Code>{MCP_VSCODE}</Code>
           <p>
             It records payments in <code>~/.covenant/</code>, so none is paid twice; set <code>SPENDS_FILE</code> to keep
-            them elsewhere. For Solana, add <code>SOL_NONCE_ACCOUNTS</code> from <code>make sol-nonce</code>.{" "}
+            them elsewhere. For Solana, add <code>SOL_NONCE_ACCOUNTS</code> from <code>make sol-nonce</code>, run in a clone of the repo.{" "}
             <code>NEAR_RPC_URL</code> and <code>SOL_RPC_URL</code> choose other endpoints. To check it works, ask your
             assistant "what are my vault's addresses?".
           </p>
