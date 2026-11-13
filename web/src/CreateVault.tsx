@@ -35,8 +35,6 @@ function HostedNextSteps({ vault, connector }: { vault: string; connector: strin
 }
 
 function NextSteps({ vault, agent, secret }: { vault: string; agent: string; secret?: string }) {
-  // One settings file per vault, so the repo's scripts never mix two vaults' nonce accounts.
-  const envFile = `.env.${vault.split(".")[0]}`;
   return (
     <section className="card created">
       <h2>✓ {vault} is live</h2>
@@ -57,14 +55,12 @@ function NextSteps({ vault, agent, secret }: { vault: string; agent: string; sec
       </ol>
       <p className="muted small">
         Only for Solana payments: the vault needs a durable nonce account, so a payment held for a veto can still land
-        afterwards. This step still needs a clone of the repo. Make a settings file with{" "}
-        <code>VAULT_ACCOUNT_ID={vault}</code> in it, then create the account:
+        afterwards. Create one from a terminal:
       </p>
-      <pre className="mono">{`cp .env.example ${envFile}\nmake sol-nonce ENV_FILE=${envFile}`}</pre>
+      <pre className="mono">{`VAULT_ACCOUNT_ID=${vault} npx -y @len3hq/covenant-mcp@latest sol-nonce`}</pre>
       <p className="muted small">
-        The first run asks you to send a little devnet SOL to a funder address it makes, then to run it again. Then
-        add the <code>SOL_NONCE_ACCOUNTS</code> it writes to that file to the <code>env</code> of your app's Covenant
-        config.
+        The first run asks you to send a little devnet SOL to a funder address it makes, then to run it again. Then add
+        the <code>SOL_NONCE_ACCOUNTS</code> it prints to the <code>env</code> of your app's Covenant config.
       </p>
     </section>
   );

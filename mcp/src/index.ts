@@ -4,6 +4,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { Covenant, startAutoExecute } from "@len3hq/covenant-sdk";
 import { createRequire } from "node:module";
 import { createServer } from "./server.js";
+import { runSolNonce } from "./solNonce.js";
 import { spendsFile } from "./spends.js";
 
 const { version } = createRequire(import.meta.url)("../package.json") as { version: string };
@@ -20,6 +21,10 @@ Settings, as environment variables:
   AUTO_EXECUTE        optional; "off" stops it sending held payments by itself once their
                       wait ends. On by default, while the server runs.
 
+For Solana payments, create a durable nonce account the vault controls, once, then add the
+SOL_NONCE_ACCOUNTS it prints to the same settings:
+  VAULT_ACCOUNT_ID=<vault> npx -y @len3hq/covenant-mcp@latest sol-nonce
+
 Claude Desktop, Cursor and other MCP apps: "command": "npx", "args": ["-y", "@len3hq/covenant-mcp"].
 Docs: https://covenant.len3.xyz/?docs#mcp`;
 
@@ -31,6 +36,9 @@ if (flag === "--version" || flag === "-v") {
 if (flag === "--help" || flag === "-h") {
   console.log(HELP);
   process.exit(0);
+}
+if (flag === "sol-nonce") {
+  process.exit(await runSolNonce({ env: process.env }));
 }
 
 function requireEnv(name: string): string {
@@ -55,7 +63,7 @@ const wallet = Covenant.connect({
   agentKey: requireEnv("AGENT_PRIVATE_KEY"),
   ...(process.env.NEAR_RPC_URL ? { nearRpcUrl: process.env.NEAR_RPC_URL } : {}),
   ...(process.env.SOL_RPC_URL ? { solRpcUrl: process.env.SOL_RPC_URL } : {}),
-  // Comma-separated durable nonce accounts from `make sol-nonce`. Solana payments need at least one.
+  // Comma-separated durable nonce accounts from `covenant-mcp sol-nonce`. Solana payments need at least one.
   solNonceAccounts: (process.env.SOL_NONCE_ACCOUNTS ?? "")
     .split(",")
     .map((account) => account.trim())

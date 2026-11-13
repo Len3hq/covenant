@@ -1,7 +1,7 @@
 // Packs the SDK and MCP server as npm would publish them, installs both tarballs into an empty
 // folder, and checks the installed `covenant-mcp`: --version, then an MCP handshake that lists the
 // tools. Usage: `node scripts/pack-smoke.mjs`. Needs network access to install dependencies.
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -19,6 +19,13 @@ const bin = join(app, "node_modules", ".bin", "covenant-mcp");
 
 const version = run(bin, ["--version"], app).trim();
 console.log(`covenant-mcp --version: ${version}`);
+
+// `sol-nonce` with no vault named answers with how to name one, before touching any network.
+const nonceHelp = spawnSync(bin, ["sol-nonce"], { cwd: app, encoding: "utf8", env: { PATH: process.env.PATH } });
+if (nonceHelp.status !== 1 || !nonceHelp.stdout.includes("Set VAULT_ACCOUNT_ID")) {
+  throw new Error(`covenant-mcp sol-nonce answered ${nonceHelp.status}: ${nonceHelp.stdout}${nonceHelp.stderr}`);
+}
+console.log("covenant-mcp sol-nonce: asks for VAULT_ACCOUNT_ID");
 
 // Any well-formed key will do: listing tools never signs or reads the chain.
 const key = run("node", ["-e", "import('near-api-js').then(({KeyPair}) => console.log(KeyPair.fromRandom('ed25519').toString()))"], app).trim();

@@ -23,3 +23,4 @@ export * from "./evm/pay.js";
 export * from "./solana/message.js";
 export * from "./solana/pay.js";
 export { SolanaRpc, type NonceState } from "./solana/rpc.js";
+export * from "./solana/nonce.js";

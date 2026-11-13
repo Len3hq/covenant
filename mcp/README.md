@@ -64,7 +64,10 @@ Optional settings:
 
 - `SPENDS_FILE`: where payments are recorded, so none is paid twice. The default is
   `~/.covenant/<vault>-spends.json`.
-- `SOL_NONCE_ACCOUNTS`: needed for Solana payments.
+- `SOL_NONCE_ACCOUNTS`: needed for Solana payments. Create one, once, with
+  `VAULT_ACCOUNT_ID=<vault> npx -y @len3hq/covenant-mcp@latest sol-nonce`: the first run makes a funder key in
+  `~/.covenant/sol-funder.json` and asks you to send it a little devnet SOL for the rent; the second
+  creates the account, with the vault as its authority, and prints the value to add.
 - `NEAR_RPC_URL` and `SOL_RPC_URL`: other RPC endpoints.
 - `AUTO_EXECUTE`: `off` stops the server sending held payments by itself once their wait ends. It's
   on by default, for as long as your app keeps the server running.

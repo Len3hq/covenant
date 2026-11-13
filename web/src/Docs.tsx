@@ -9,7 +9,7 @@ const wallet = Covenant.connect({
   vault: "acme.${FACTORY_ID}",
   agentAccount: "agent.you.testnet",
   agentKey: process.env.AGENT_PRIVATE_KEY!, // the restricted key, never a full-access one
-  solNonceAccounts: ["<from make sol-nonce>"], // only for Solana payments
+  solNonceAccounts: ["<from covenant-mcp sol-nonce>"], // only for Solana payments
 });
 
 const result = await wallet.pay({
@@ -350,7 +350,8 @@ export function Docs() {
           <Code>{MCP_VSCODE}</Code>
           <p>
             It records payments in <code>~/.covenant/</code>, so none is paid twice; set <code>SPENDS_FILE</code> to keep
-            them elsewhere. For Solana, add <code>SOL_NONCE_ACCOUNTS</code> from <code>make sol-nonce</code>, run in a clone of the repo.{" "}
+            them elsewhere. For Solana, run <code>VAULT_ACCOUNT_ID=&lt;vault&gt; npx -y @len3hq/covenant-mcp@latest sol-nonce</code> once and add the{" "}
+            <code>SOL_NONCE_ACCOUNTS</code> it prints.{" "}
             <code>NEAR_RPC_URL</code> and <code>SOL_RPC_URL</code> choose other endpoints. To check it works, ask your
             assistant "what are my vault's addresses?".
           </p>

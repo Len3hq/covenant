@@ -1,6 +1,6 @@
 {
   "name": "@len3hq/covenant-mcp",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "An MCP server that gives any AI assistant a Covenant vault to pay from.",
   "license": "Apache-2.0",
   "keywords": [
@@ -53,6 +53,7 @@
   "dependencies": {
     "@len3hq/covenant-sdk": "workspace:^",
     "@modelcontextprotocol/sdk": "^1.32.2",
+    "@scure/base": "^2.4.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {
