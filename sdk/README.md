@@ -17,4 +17,4 @@ await wallet.pay({ asset: "BTC", to: "<Solana address>", amount: 20_000n, refere
 Each payment ends `broadcast`, `queued` (held for a veto) or `rejected`, with the rule it broke. The
 same `reference` never pays twice. It works on testnet only.
 
-More in the [docs](https://dashboard-production-65f1.up.railway.app/?docs#sdk).
+More in the [docs](https://covenant.len3.xyz/?docs#sdk).

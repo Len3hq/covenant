@@ -111,7 +111,7 @@ a secret**.
 - [ ] Use a NEAR RPC that allows browser requests for `VITE_NEAR_RPC_URL`. `rpc.testnet.near.org` doesn't,
       so the default is `rpc.testnet.fastnear.com`.
 - [ ] Set `VITE_NEAR_RPC_URL`, `VITE_VAULT_ACCOUNT_ID`, `VITE_BTC_API_URL`, `VITE_EVM_RPC_URL` and `VITE_NEAR_TX_API_URL`.
-- [x] Hosted on Railway at https://dashboard-production-65f1.up.railway.app (project `covenant` in the "realist's Projects" workspace, service
+- [x] Hosted on Railway at https://covenant.len3.xyz (project `covenant` in the "realist's Projects" workspace, service
       `dashboard`). `make deploy-dashboard` uploads this folder, minus everything in `.railwayignore`, and
       builds [web/deploy/Dockerfile](../web/deploy/Dockerfile), which serves the static build with Caddy.
       The service variable `RAILWAY_DOCKERFILE_PATH` points at that Dockerfile, because Railway otherwise

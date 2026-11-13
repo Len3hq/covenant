@@ -325,7 +325,7 @@ railway variables --service dashboard --set VITE_FACTORY_ACCOUNT_ID=<new factory
 make deploy-dashboard
 ```
 
-Open https://dashboard-production-65f1.up.railway.app/?create. Expect the hint under "Vault name" to
+Open https://covenant.len3.xyz/?create. Expect the hint under "Vault name" to
 end in the new factory.
 
 **T25. The live vault's page shows the new parts.** Open the dashboard with no `?vault`, which shows

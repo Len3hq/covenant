@@ -22,11 +22,11 @@ decides what gets signed.
 
 ## Live dashboard
 
-https://dashboard-production-65f1.up.railway.app shows the testnet vault: every payment it signed or refused, and why.
+https://covenant.len3.xyz: create your own vault, or open the live demo vault to see every payment it signed or refused, and why.
 
 ## Your own vault
 
-Connect a NEAR testnet wallet on the [dashboard](https://dashboard-production-65f1.up.railway.app) and
+Connect a NEAR testnet wallet on the [dashboard](https://covenant.len3.xyz) and
 press **Create**. A five-step wizard sets the name, the agent, who it may pay, the limits (presets or
 your own) and a review. The factory gives you a separate vault with its own Bitcoin, Base and Solana
 addresses; you own it, its code can't be changed by anyone, and we hold no keys or funds.
@@ -55,7 +55,7 @@ Any vault can be viewed at `?vault=<account>`. Testnet only, and unaudited.
   reference twice. A `signer` can hold the key elsewhere, such as an enclave.
 
 Whichever you use, the vault decides every payment. The
-[docs](https://dashboard-production-65f1.up.railway.app/?docs) cover each step, every AI app, every
+[docs](https://covenant.len3.xyz/?docs) cover each step, every AI app, every
 error and common problems.
 
 ## Quick start

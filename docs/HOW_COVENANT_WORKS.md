@@ -197,7 +197,7 @@ testnet-only.
 | **MCP server** | Gives Claude, Cursor or any MCP client tools like `pay`, `list_payees`, `get_balances`. The assistant can ask; the vault decides | [mcp](../mcp) |
 | **Hosted connector** | The same tools over the web, for Claude, ChatGPT or any app that adds a server by URL. Signing in means the vault's owner signing a "grant" with their wallet | [hosted/connector](../hosted/connector) |
 | **Key holder** | Keeps hosted agents' key inside an Intel TDX enclave on OutLayer, where nobody can read it, and signs only vault calls a live grant covers | [hosted/enclave](../hosted/enclave), [HOSTED.md](HOSTED.md) |
-| **Dashboard** | A landing page, My vaults, a five-step create wizard, and each vault's page: overview, activity, rules (with a form to change them), agent and funding | [web](../web), [live](https://dashboard-production-65f1.up.railway.app) |
+| **Dashboard** | A landing page, My vaults, a five-step create wizard, and each vault's page: overview, activity, rules (with a form to change them), agent and funding | [web](../web), [live](https://covenant.len3.xyz) |
 | **Tests** | Unit, property, sandbox and attack tests. Every security claim maps to a named test | [tests](../tests), [SECURITY.md](../SECURITY.md) |
 | **Evidence** | Real testnet transactions: payments on Bitcoin testnet4 and Base Sepolia, refused attacks, vetoes, freezes, DAO votes | [EVIDENCE.md](../EVIDENCE.md) |
 

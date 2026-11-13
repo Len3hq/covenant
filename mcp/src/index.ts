@@ -21,7 +21,7 @@ Settings, as environment variables:
                       wait ends. On by default, while the server runs.
 
 Claude Desktop, Cursor and other MCP apps: "command": "npx", "args": ["-y", "@len3hq/covenant-mcp"].
-Docs: https://dashboard-production-65f1.up.railway.app/?docs#mcp`;
+Docs: https://covenant.len3.xyz/?docs#mcp`;
 
 const flag = process.argv[2];
 if (flag === "--version" || flag === "-v") {

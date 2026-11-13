@@ -10,11 +10,11 @@ testnet swaps.
 
 ## Set up
 
-You need a vault and an agent key. The [dashboard](https://dashboard-production-65f1.up.railway.app/?create)
+You need a vault and an agent key. The [dashboard](https://covenant.len3.xyz/?create)
 makes both: choose "I'll run it" as the agent, and it shows the key once, with these settings filled in.
 
 Rather not hold a key? Create the vault with a **Hosted** agent instead, and add the hosted connector to
-your app by URL. Nothing to install; see the [docs](https://dashboard-production-65f1.up.railway.app/?docs#hosted).
+your app by URL. Nothing to install; see the [docs](https://covenant.len3.xyz/?docs#hosted).
 
 **Claude Desktop** (`claude_desktop_config.json`) or **Cursor** (`~/.cursor/mcp.json`):
 
@@ -85,4 +85,4 @@ Run `npx @len3hq/covenant-mcp --help` to see them all.
 | `list_queue` | Lists payments held for a veto |
 | `execute_queued` | Signs a held payment once its window has passed |
 
-More in the [docs](https://dashboard-production-65f1.up.railway.app/?docs#mcp).
+More in the [docs](https://covenant.len3.xyz/?docs#mcp).

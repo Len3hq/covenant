@@ -24,7 +24,7 @@ restart signs nobody out. A token lasts as long as its grant.
 | Variable | |
 | --- | --- |
 | `PUBLIC_URL` | This service's public URL, such as `https://connector-production-xxxx.up.railway.app` |
-| `DASHBOARD_URL` | The dashboard, such as `https://dashboard-production-65f1.up.railway.app/` |
+| `DASHBOARD_URL` | The dashboard, such as `https://covenant.len3.xyz/` |
 | `CONNECTOR_SECRET` | 32 random bytes, hex: `openssl rand -hex 32`. Changing it signs everyone out |
 | `OUTLAYER_PROJECT` | `keyholder.len3hq.testnet/covenant-key-holder` |
 | `OUTLAYER_PAYMENT_KEY` | The OutLayer payment key that pays for each signature |
