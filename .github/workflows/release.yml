@@ -45,5 +45,5 @@ jobs:
           for pkg in sdk mcp; do
             (cd "$pkg" && pnpm pack --pack-destination ../release)
           done
-          npm publish release/len3hq-covenant-sdk-*.tgz --access public --provenance
-          npm publish release/len3hq-covenant-mcp-*.tgz --access public --provenance
+          npm publish ./release/len3hq-covenant-sdk-*.tgz --access public --provenance
+          npm publish ./release/len3hq-covenant-mcp-*.tgz --access public --provenance
