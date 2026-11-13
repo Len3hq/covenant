@@ -41,9 +41,10 @@ export interface ConnectOptions {
   solUsdcMint?: string;
   /**
    * Durable nonce accounts whose authority is the vault, from `make sol-nonce`. Solana payments need
-   * at least one, and each unfinished payment holds one.
+   * at least one, and each unfinished payment holds one. A function is read at each payment, so
+   * accounts created after connecting are used too.
    */
-  solNonceAccounts?: string[];
+  solNonceAccounts?: string[] | (() => string[]);
 }
 
 export interface ChainReads {
@@ -75,10 +76,14 @@ export function connectTestnet(options: ConnectOptions) {
   const evmAddress = async () => (await vault.evmAddress()) as Address;
   const solRpc = new SolanaRpc(options.solRpcUrl ?? TESTNET.solRpcUrl);
   const solUsdcMint = base58.decode(options.solUsdcMint ?? TESTNET.solUsdcMint);
+  const nonces = options.solNonceAccounts;
   const solana: SolanaDeps = {
     rpc: solRpc,
     vaultKey: () => vault.solPubkey(),
-    nonceAccounts: options.solNonceAccounts ?? [],
+    // A getter, so each payment, which copies these deps, sees the accounts as they are then.
+    get nonceAccounts() {
+      return typeof nonces === "function" ? nonces() : (nonces ?? []);
+    },
     usdcMint: solUsdcMint,
   };
   const solAddress = async () => base58.encode(await vault.solPubkey());

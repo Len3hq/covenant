@@ -6,6 +6,7 @@ import { createApp } from "./app.js";
 import { ConnectorAuth, Sealer } from "./auth.js";
 import { rpcChainView, type Grant, type Terms } from "./grant.js";
 import { GrantStore } from "./grants.js";
+import { nonceKeeper, NonceStore, web3NonceCreator } from "./nonces.js";
 import { localKeyHolder, outlayerKeyHolder, type KeyHolder } from "./keyholder.js";
 
 const env = (name: string) => {
@@ -30,6 +31,14 @@ const keyHolder: KeyHolder = process.env.LOCAL_AGENT_KEY
 if (process.env.LOCAL_AGENT_KEY) console.error("LOCAL_AGENT_KEY is set: signing in this process, not the enclave. Development only.");
 
 const grants = new GrantStore(join(dataDir, "grants.json"));
+const solRpcUrl = process.env.SOL_RPC_URL ?? "https://api.devnet.solana.com";
+// Solana payments need durable nonce accounts the vault controls. With a funder key, the connector
+// creates two for each hosted vault the first time it's used; the funder only pays their rent.
+const nonces = new NonceStore(dataDir);
+const ensureNonces = process.env.SOL_FUNDER_KEY
+  ? nonceKeeper({ store: nonces, create: web3NonceCreator(solRpcUrl, process.env.SOL_FUNDER_KEY) })
+  : null;
+if (!ensureNonces) console.error("SOL_FUNDER_KEY isn't set: hosted vaults get no nonce accounts, so they can't pay on Solana.");
 const wallets = new Map<string, Covenant>();
 
 /**
@@ -48,9 +57,17 @@ function walletFor(terms: Terms, grant: Grant, publicKey: string): Covenant {
         sign: (call) => keyHolder.signer(grants.forVault(terms.vault)?.grant ?? grant, publicKey).sign(call),
       },
       nearRpcUrl,
+      solRpcUrl,
+      solNonceAccounts: () => nonces.list(terms.vault),
       spendsFile: join(dataDir, `${terms.vault}-spends.json`),
     });
     wallets.set(terms.vault, wallet);
+  }
+  if (ensureNonces) {
+    const created = wallet;
+    void ensureNonces(terms.vault, async () => (await created.addresses()).solana).catch((error: unknown) =>
+      console.error(JSON.stringify({ step: "nonce_failed", vault: terms.vault, error: String(error) })),
+    );
   }
   return wallet;
 }

@@ -39,6 +39,8 @@ restart signs nobody out. A token lasts as long as its grant.
 | `NEAR_RPC_URL` | Defaults to FastNear's testnet RPC |
 | `DATA_DIR` | Where each vault's spends file lives; a Railway volume at `/data` |
 | `DEV_DASHBOARD_ORIGINS` | Extra dashboard origins that may hand over a grant, comma-separated, such as `http://localhost:5199` for a local dashboard |
+| `SOL_FUNDER_KEY` | A devnet Solana key that pays the rent of each hosted vault's two nonce accounts, about 0.0015 SOL each. It holds no power over them: their authority is the vault. Without it, hosted vaults can't pay on Solana |
+| `SOL_RPC_URL` | Defaults to `https://api.devnet.solana.com` |
 | `AUTO_EXECUTE` | `off` stops the connector sending held payments when their wait ends. On by default |
 | `LOCAL_AGENT_KEY` | Development only: sign in this process instead of the enclave |
 

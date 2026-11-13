@@ -66,6 +66,13 @@ volume, and every 30 seconds sends the held payments it made whose wait is over,
 enclave. The vault checks each against its rules again, and the enclave checks the grant again.
 `AUTO_EXECUTE=off` turns it off.
 
+## Solana
+
+A Solana payment held for a veto needs a durable nonce account the vault controls, so it can still
+land after the wait. The connector creates two for each hosted vault the first time it's used,
+paying their rent from `SOL_FUNDER_KEY`; their authority is the vault's own Solana address, so the
+funder has no power over them. The vault still needs a little SOL of its own for fees.
+
 ## Grants
 
 The connector would otherwise be able to drive the agent key of every hosted vault. A grant limits
