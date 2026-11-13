@@ -416,7 +416,14 @@ function VerdictCard({
 
 function Flow({ entry }: { entry: Activity | undefined }) {
   const verdict = entry ? verdictOf(entry) : "idle";
-  const chain = entry?.chain === "Evm" ? "Base Sepolia" : entry?.chain === "Bitcoin" ? "Bitcoin testnet4" : "Bitcoin · Base";
+  const chain =
+    entry?.chain === "Evm"
+      ? "Base Sepolia"
+      : entry?.chain === "Bitcoin"
+        ? "Bitcoin testnet4"
+        : entry?.chain === "Solana"
+          ? "Solana devnet"
+          : "Bitcoin · Base · Solana";
   const stop =
     verdict === "blocked" ? "Refused by policy" : verdict === "queued" ? "Held for veto" : verdict === "vetoed" ? "Vetoed" : null;
   return (
@@ -464,7 +471,7 @@ function FlowEdge({ index, broken, downstream }: { index: number; broken?: strin
 }
 
 const FILTERS = ["All", "Blocked", "Signed"] as const;
-const CHAINS = ["All", "Bitcoin", "Evm"] as const;
+const CHAINS = ["All", "Bitcoin", "Evm", "Solana"] as const;
 
 function Feed({
   activity,

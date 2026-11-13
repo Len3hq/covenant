@@ -300,3 +300,10 @@ describe("the veto queue's header", () => {
     expect(html).toContain("Waits: 2 minutes for large payments, 10 minutes for new addresses");
   });
 });
+
+describe("the decision log's chain filter", () => {
+  it("offers Solana beside Bitcoin and Base", () => {
+    const html = renderToString(<Dashboard accountId="v" status={{ kind: "ready", vault }} />);
+    for (const chain of [">Bitcoin<", ">Base<", ">Solana<"]) expect(html).toContain(chain);
+  });
+});
