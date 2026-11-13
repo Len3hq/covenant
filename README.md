@@ -5,13 +5,74 @@ Bitcoin, EVM chains and Solana through Chain Signatures, and it signs a spend on
 transaction itself and checking it against one policy. The agent can ask for anything. The contract
 decides what gets signed.
 
-> **Status: in active build.** The vault on NEAR testnet now parses, checks and signs real spends,
-> with confirmed payments on Bitcoin testnet4 and Base Sepolia ([EVIDENCE.md](EVIDENCE.md)). Live payments now
-> include USDC, sent with the agent's restricted key. Large spends wait in a veto queue, which the
-> owner or guardian DAO can clear, and an LLM agent can now drive payments through the contract. Solana
-> (SOL and SPL USDC, signed with Ed25519) is live on the testnet vault, which has refused a Solana attack
-> and paid on Solana devnet. Progress
-> is tracked in [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md).
+## The problem
+
+An AI agent that pays bills needs a key that can move money. If that key sits with the agent, anything
+that misleads the agent can spend it: a poisoned invoice, a prompt injection in an email, or a bug.
+Rules written in the agent's prompt or code don't help, because the agent is the part that has been
+fooled. Covenant puts the rules on chain instead. The agent can only ask the vault to pay. The vault
+contract reads the transaction itself, checks it against the owner's rules, and only then asks NEAR's
+MPC network to sign it. A misled agent gets a refusal, not a payment.
+
+Covenant runs on NEAR testnet, Bitcoin testnet4, Base Sepolia and Solana devnet. It is unaudited.
+
+## Try it
+
+Each step says what to do and what you should see.
+
+### 1. The keyless demo, on a fresh clone
+
+Needs Rust (via rustup), Node 22, pnpm 11 and gitleaks (for `make check` only). No keys, no `.env` edits.
+The first run compiles cargo-near and the contracts, which takes several minutes; after that the
+scenarios themselves take about 10 seconds.
+
+```sh
+git clone https://github.com/Len3hq/covenant && cd covenant
+make setup   # installs cargo-near and the JS dependencies, copies .env.example to .env
+make demo    # builds the contracts, starts a local NEAR sandbox and runs three scenarios
+```
+
+`make demo` deploys the real vault contract to a local sandbox, with a mock MPC signer and simulated
+chains, then replays an agent's recorded tool calls. You should see:
+
+- **pay**: `PASS: 2 of 2 payments signed`. A BTC payment and a USDC payment to known payees.
+- **attack**: `PASS: the contract refused both attacks: OutputNotWhitelisted and CalldataNotAllowed`.
+  A poisoned invoice tells the agent to send 600,000 sats to a stranger and to approve unlimited USDC
+  to another address. The agent tries both, and the contract refuses both.
+- **queue**: `PASS: 1 spend queued for the veto window, 0 signed`. A payment above the threshold waits,
+  the owner vetoes it, and its budget is returned.
+- Last line: `All scenarios passed in … s`.
+
+`make test` runs the Rust, sandbox and TypeScript tests. `make check` runs everything CI runs.
+
+### 2. The live dashboard, no install
+
+1. Open https://covenant.len3.xyz and press **See the live demo vault**. You should see the vault's
+   Bitcoin, Base and Solana addresses, its balances, and the **Activity** tab listing every payment the
+   contract signed or refused on testnet, with the reason for each refusal.
+2. Connect a NEAR testnet wallet (such as Meteor or Intear; [get testnet NEAR](https://docs.near.org/getting-started/faucet#external-faucet))
+   and press **Create**. A five-step wizard sets the name, the agent, who it may pay and the limits.
+   Your wallet signs twice: once to create the vault, once to add the agent's key. You should then see
+   your new vault's page with its own addresses; **My vaults** lists it.
+3. On its **Rules** tab, change a limit. You should see each change listed before your wallet signs.
+   **Freeze** stops all payments at once.
+
+### 3. Your own agent paying from your vault
+
+- **From Claude, ChatGPT, Cursor or VS Code, by URL:** create the vault and pick **Hosted** for
+  its agent. The page that follows, and later the vault's **Agent** tab, shows the vault's own MCP
+  address and the steps for each app. Adding it sends you back
+  to the dashboard to sign a grant (a message, not a transaction). Then ask the app to "list my
+  payees" or "pay my first payee 1000 sats". You should see the payment on the vault's **Activity** tab,
+  signed, refused or held, with a link to the chain explorer. Details: [docs/HOSTED.md](docs/HOSTED.md).
+- **With the MCP server, run yourself:** `npx -y @len3hq/covenant-mcp@latest --help` lists the settings.
+  The dashboard's **Agent** tab gives the full config for your vault ([mcp/](mcp/)).
+- **From code:** `npm install @len3hq/covenant-sdk`, then `Covenant.connect(...)` and
+  `wallet.pay({ asset, to, amount, reference })` ([sdk/](sdk/)).
+
+Payments on testnet need the vault funded: each vault's **Fund** tab has its addresses and faucet links.
+Payments that went through on real test networks are listed with explorer links in
+[EVIDENCE.md](EVIDENCE.md).
 
 ## How a spend works
 
@@ -19,10 +80,6 @@ decides what gets signed.
 2. The contract parses the raw bytes with a per-chain adapter and computes the signing hash itself. It never accepts a hash from the caller. On Solana, Ed25519 signs the checked message itself.
 3. The policy checks caps, payees, tokens, fees and chain ID. A Solana message must come from the vault alone and advance a durable nonce, so a payment held for a veto can still land.
 4. Rejected spends are logged, large ones wait out a veto window, and the rest go to the MPC signer.
-
-## Live dashboard
-
-https://covenant.len3.xyz: create your own vault, or open the live demo vault to see every payment it signed or refused, and why.
 
 ## Your own vault
 
@@ -58,21 +115,14 @@ Whichever you use, the vault decides every payment. The
 [docs](https://covenant.len3.xyz/?docs) cover each step, every AI app, every
 error and common problems.
 
-## Quick start
+## Running against testnet
 
-Requires Rust (via rustup), Node 22, pnpm 11 and gitleaks. Testnet commands also need the
+`make demo LIVE=1` runs the same scenarios against a testnet vault with the agent's key in `.env`, and
+`LLM=1` drives them with a real model instead of the recorded tool calls. A real model may ignore the
+poisoned invoice; the attack then passes as long as no attacker is paid, since the recorded calls
+already test both refusals. `make help` lists every target, and [AGENTS.md](AGENTS.md) lists the
+commands for deploying, paying and administering a vault. Testnet commands need the
 [NEAR CLI](https://github.com/near/near-cli-rs).
-
-```sh
-make setup   # install cargo-near and JS dependencies, create .env
-make test    # build the wasm, then run Rust, sandbox and TypeScript tests
-make help    # list every target
-```
-
-`make demo` runs all three scenarios on a local sandbox with no keys: the real contract, a mock signer
-and simulated chains. Add `LIVE=1` to run on testnet with the agent's key, and `LLM=1` to use a real
-model instead of the saved tool calls. A real model may ignore the poisoned invoice; the attack then
-passes as long as no attacker is paid, since the saved calls already test both refusals.
 
 ## Gas
 
@@ -122,6 +172,37 @@ recorded on NEAR. The two projects are independent and share no code.
 | [docs](docs) | Build plan and spec |
 
 See also [AGENTS.md](AGENTS.md), [SECURITY.md](SECURITY.md), [NEAR_FEATURES.md](NEAR_FEATURES.md) and [EVIDENCE.md](EVIDENCE.md).
+
+## Built with
+
+No starter template or boilerplate repository was used: the monorepo was set up by hand in the first
+commit. One file is copied: [hosted/enclave/wit/signing-keys.wit](hosted/enclave/wit/signing-keys.wit),
+OutLayer's interface for keys held in its enclaves. The code was written with Claude Code, and commits
+say so in a `Co-Authored-By` line.
+
+Services used: NEAR Chain Signatures (the MPC signer `v1.signer-prod.testnet`), NEAR global contracts
+(for the vault factory), [OutLayer](https://outlayer.ai) Intel TDX enclaves (for hosted agents' keys),
+Tidepool's testnet swap quotes, the mempool.space testnet4 API, Base Sepolia and Solana devnet public
+RPC, FastNear and drpc NEAR RPC, and Railway (hosting the dashboard and connector).
+
+| Part | Libraries |
+| --- | --- |
+| Contracts (`contracts/`) | `near-sdk`, `hex`, `ed25519-dalek`; unit tests: `proptest` |
+| Sandbox and attack tests (`tests/`) | `near-workspaces`, `tokio`, `anyhow`, `serde_json`, `sha2`, `ripemd`, `ed25519-dalek`, `bs58`, `base64` |
+| Enclave key holder (`hosted/enclave`) | `wit-bindgen`, `serde`, `serde_json`, `borsh`, `sha2`, `bs58`, `base64`, `ed25519-dalek`, `wasi-http-client` |
+| SDK (`sdk/`) | `near-api-js`, `viem`, `bitcoinjs-lib`, `@noble/curves`, `@noble/hashes`, `@scure/base`, `zod` |
+| MCP server (`mcp/`) | `@modelcontextprotocol/sdk`, `zod`, the SDK |
+| Hosted connector (`hosted/connector`) | `express`, `@modelcontextprotocol/sdk`, `near-api-js`, `@solana/web3.js`, `@noble/*`, `@scure/base`, `zod` |
+| Dashboard (`web/`) | `react`, `react-dom`, `vite`, `@hot-labs/near-connect` (wallets), `@noble/*`, `@scure/base`, Fontsource fonts (Mona Sans, Space Grotesk, JetBrains Mono) |
+| Demo agent (`agent/`) | `@anthropic-ai/sdk` for Claude models, or any OpenAI-compatible API, for `LLM=1`; `near-api-js`, `viem`, `bitcoinjs-lib`, `zod` |
+| Scripts (`scripts/`) | `@noble/*`, `@scure/base`, `bitcoinjs-lib`, `viem`, `@solana/web3.js` |
+| Tooling | `cargo-near`, TypeScript, ESLint, `typescript-eslint`, Vitest, pnpm, gitleaks |
+
+## Hackathon
+
+All code was written during NEAR HACKATHON: the first commit is from 2 November 2026, and there is no
+pre-hackathon code, so there is no `pre-hackathon` tag. The tag `hackathon-submission` marks the
+submitted commit.
 
 ## License
 
