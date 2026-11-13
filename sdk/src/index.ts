@@ -1,6 +1,7 @@
 // The simple way in.
 export { Covenant, quoteDeadline, tidepoolChain } from "./covenant.js";
-export type { Balances, CovenantOptions, Payee, PayRequest, Payment } from "./covenant.js";
+export type { Balances, CovenantOptions, DueResult, Payee, PayRequest, Payment } from "./covenant.js";
+export { startAutoExecute, type AutoExecuteOptions } from "./autoexecute.js";
 export { ASSETS, type Asset } from "./payments.js";
 export { TESTNET } from "./testnet.js";
 

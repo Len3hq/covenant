@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Runs the Covenant MCP server over stdio. Logs go to stderr, because stdout carries the protocol.
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { Covenant } from "@len3hq/covenant-sdk";
+import { Covenant, startAutoExecute } from "@len3hq/covenant-sdk";
 import { createRequire } from "node:module";
 import { createServer } from "./server.js";
 import { spendsFile } from "./spends.js";
@@ -17,6 +17,8 @@ Settings, as environment variables:
   SPENDS_FILE         optional; where payments are recorded so none is paid twice
                       (default ~/.covenant/<vault>-spends.json)
   NEAR_RPC_URL, SOL_RPC_URL, SOL_NONCE_ACCOUNTS   optional
+  AUTO_EXECUTE        optional; "off" stops it sending held payments by itself once their
+                      wait ends. On by default, while the server runs.
 
 Claude Desktop, Cursor and other MCP apps: "command": "npx", "args": ["-y", "@len3hq/covenant-mcp"].
 Docs: https://dashboard-production-65f1.up.railway.app/?docs#mcp`;
@@ -62,3 +64,11 @@ const wallet = Covenant.connect({
 });
 
 await createServer(wallet).connect(new StdioServerTransport());
+
+// A held payment goes through unless vetoed: once its wait ends, send it, for as long as the app
+// keeps this server running. The vault checks it against its rules again first.
+if (process.env.AUTO_EXECUTE !== "off") {
+  startAutoExecute(wallet, {
+    onResult: (result) => console.error(JSON.stringify({ step: "auto_execute", ...result }, (_, v: unknown) => (typeof v === "bigint" ? `${v}` : v))),
+  });
+}

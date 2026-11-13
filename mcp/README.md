@@ -66,6 +66,8 @@ Optional settings:
   `~/.covenant/<vault>-spends.json`.
 - `SOL_NONCE_ACCOUNTS`: needed for Solana payments.
 - `NEAR_RPC_URL` and `SOL_RPC_URL`: other RPC endpoints.
+- `AUTO_EXECUTE`: `off` stops the server sending held payments by itself once their wait ends. It's
+  on by default, for as long as your app keeps the server running.
 
 Run `npx @len3hq/covenant-mcp --help` to see them all.
 

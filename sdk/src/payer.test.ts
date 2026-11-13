@@ -265,3 +265,28 @@ describe("SpendStore.heldCoins", () => {
     expect(store.heldCoins().size).toBe(0);
   });
 });
+
+describe("SpendStore.settleGone", () => {
+  it("frees a vetoed spend's coins once it has left the vault's queue, and keeps one still queued", async () => {
+    const { Transaction } = await import("bitcoinjs-lib");
+    const tx = new Transaction();
+    tx.addInput(new Uint8Array(32).fill(1), 2);
+    tx.addOutput(new Uint8Array([0, 20, ...new Uint8Array(20)]), 1_000n);
+    const dir = mkdtempSync(join(tmpdir(), "covenant-"));
+    dirs.push(dir);
+    const store = new SpendStore(join(dir, "spends.json"));
+    const prepared: Prepared = { chain: "Bitcoin", unsignedHex: tx.toHex(), prevTxs: [], inputValues: ["1"] };
+    store.put({ key: "vetoed", id: "6", description: "", status: "queued", prepared });
+    store.put({ key: "waiting", id: "7", description: "", status: "queued", prepared: { ...prepared } });
+    expect(store.hasQueued()).toBe(true);
+
+    const gone = store.settleGone(new Set(["7"]));
+    expect(gone.map((record) => record.id)).toEqual(["6"]);
+    expect(store.get("vetoed")).toMatchObject({ status: "failed" });
+    expect(store.get("waiting")).toMatchObject({ status: "queued" });
+
+    store.settleGone(new Set());
+    expect(store.heldCoins().size).toBe(0);
+    expect(store.hasQueued()).toBe(false);
+  });
+});

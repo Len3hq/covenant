@@ -58,6 +58,13 @@ export interface CovenantOptions extends ConnectOptions {
   tidepoolMakerKey?: string;
 }
 
+/** What happened to one held payment `executeDue` tried to send. */
+export interface DueResult {
+  id: string;
+  result?: Payment;
+  error?: string;
+}
+
 export interface PayRequest {
   asset: Asset;
   /** A payee's label from the vault's policy, or an address. */
@@ -143,6 +150,7 @@ export class Covenant {
     const { asset, amount, reference } = request;
     if (typeof amount !== "bigint" || amount <= 0n) throw new Error("amount must be a positive bigint");
     if (!reference.trim()) throw new Error("reference must name what the payment is for");
+    await this.settleVetoed();
     if (request.toChain || request.toAsset) return this.paySwap(request);
     const destination = await resolvePayee(this.world.vault, request.to, asset);
     return this.payer.spend(keyOf(this.options.vault, reference), `${amount} ${asset} to ${destination}: ${reference}`, () =>
@@ -159,6 +167,40 @@ export class Covenant {
         amount,
       ),
     );
+  }
+
+  /**
+   * A payment vetoed from the dashboard leaves the vault's queue, but its record here still says
+   * queued and keeps what it reserved. Settling it first lets the next payment use those coins.
+   */
+  private async settleVetoed(): Promise<QueuedSpend[] | null> {
+    if (!this.store.hasQueued()) return null;
+    const queue = await this.world.vault.queue();
+    this.store.settleGone(new Set(queue.map((spend) => spend.id)));
+    return queue;
+  }
+
+  /**
+   * Sends every held payment this wallet made whose wait is over, so a held payment goes through
+   * unless someone vetoes it, without the agent having to come back for it. The vault checks each
+   * one against its rules again; a vetoed one has left the queue, and a freeze refuses them all.
+   */
+  async executeDue(nowMs: number = Date.now()): Promise<DueResult[]> {
+    const queue = await this.settleVetoed();
+    if (!queue) return [];
+    const now = BigInt(nowMs) * 1_000_000n;
+    const due = queue.filter(
+      (spend) => BigInt(spend.executable_at) <= now && this.store.byId(spend.id)?.status === "queued",
+    );
+    const results: DueResult[] = [];
+    for (const spend of due) {
+      try {
+        results.push({ id: spend.id, result: await this.execute(spend.id) });
+      } catch (error) {
+        results.push({ id: spend.id, error: error instanceof Error ? error.message : String(error) });
+      }
+    }
+    return results;
   }
 
   /** Signs and broadcasts a queued payment whose veto window has passed. */

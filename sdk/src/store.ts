@@ -107,6 +107,26 @@ export class SpendStore {
     );
   }
 
+  /** Whether any record still waits in the vault's queue, as far as this file knows. */
+  hasQueued(): boolean {
+    return [...this.records.values()].some((record) => record.status === "queued");
+  }
+
+  /**
+   * Settles queued records whose spend has left the vault's queue (`stillQueued` is its ids): it
+   * was vetoed, or executed elsewhere, so this file will never sign it. Until settled, it would
+   * keep holding its coins, nonce account or Base nonce, and block the payments after it.
+   */
+  settleGone(stillQueued: Set<string>): SpendRecord[] {
+    const gone = [...this.records.values()].filter(
+      (record) => record.status === "queued" && record.id !== undefined && !stillQueued.has(record.id),
+    );
+    for (const record of gone) {
+      this.put({ ...record, status: "failed", error: "it left the vault's queue unsigned here: vetoed, or executed elsewhere" });
+    }
+    return gone;
+  }
+
   /** Written to a temporary file first, so a crash can't leave half a record behind. */
   put(record: SpendRecord): void {
     this.records.set(record.key, record);
